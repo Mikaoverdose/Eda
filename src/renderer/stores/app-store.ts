@@ -1,0 +1,429 @@
+import { t } from "@shared/i18n";
+import { create } from "zustand";
+import type { GitErrorData } from "@shared/errors";
+import type { Identity } from "@shared/identity/identity";
+import type { RepositorySummary } from "@shared/repository/repository";
+import { useRepositoryStore } from "./repository-store";
+import { usePreferencesStore } from "./preferences-store";
+import { useSessionStore } from "./session-store";
+import { useLayoutStore } from "./layout-store";
+
+interface AppState {
+  identities: Identity[];
+  activeIdentity: Identity | null;
+  repositories: RepositorySummary[];
+  selectedRepositoryId: string | null;
+  openTabsByIdentity: Record<string, string[]>;
+  closedTabsByIdentity: Record<string, { id: string; index: number }[]>;
+  gitEngine: { source: string; path: string; version: string } | null;
+  error: GitErrorData | null;
+  loading: boolean;
+  switchingIdentityId: string | null;
+
+  initialize: () => Promise<void>;
+  refreshIdentities: () => Promise<void>;
+  refreshRepositories: () => Promise<void>;
+  setActiveIdentity: (id: string) => Promise<void>;
+  selectRepository: (id: string | null) => void;
+  closeTab: (id: string) => void;
+  moveTab: (id: string, index: number) => void;
+  reopenTab: () => void;
+  createIdentity: (...args: Parameters<typeof window.eda.identity.create>) => Promise<boolean>;
+  updateIdentity: (
+    id: string,
+    draft: Parameters<typeof window.eda.identity.update>[1],
+  ) => Promise<boolean>;
+  deleteIdentity: (id: string, token: string) => Promise<boolean>;
+  addRepository: () => Promise<void>;
+  dismissError: () => void;
+}
+
+let initialization: Promise<void> | null = null;
+let subscriptionsInstalled = false;
+let identityRefreshGeneration = 0;
+
+export const useAppStore = create<AppState>((set, get) => ({
+  identities: [],
+  activeIdentity: null,
+  repositories: [],
+  selectedRepositoryId: null,
+  openTabsByIdentity: {},
+  closedTabsByIdentity: {},
+  gitEngine: null,
+  error: null,
+  loading: true,
+  switchingIdentityId: null,
+
+  async initialize() {
+    if (initialization) return initialization;
+
+    initialization = (async () => {
+      const engine = await window.eda.app.getGitEngine();
+
+      if (engine.ok) set({ gitEngine: engine.value });
+      else set({ error: engine.error });
+
+      await get().refreshIdentities();
+      await get().refreshRepositories();
+      set({ loading: false });
+
+      if (!subscriptionsInstalled) {
+        subscriptionsInstalled = true;
+        window.eda.events.onFlushRequested((nonce) => {
+          void useSessionStore
+            .getState()
+            .flush()
+            .then((saved) => {
+              if (saved) void window.eda.sessions.readyToClose(nonce);
+            });
+        });
+        window.eda.events.onIdentityChanged(() => {
+          if (get().switchingIdentityId !== null) return;
+          void (async () => {
+            await get().refreshIdentities();
+            await get().refreshRepositories();
+          })();
+        });
+        window.eda.events.onSettingChanged((change) => {
+          const { activeIdentity, selectedRepositoryId } = get();
+
+          if (change.scope.kind !== "application" && change.scope.profileId !== activeIdentity?.id)
+            return;
+
+          if (change.key === "accentHue") {
+            void get().refreshIdentities();
+            return;
+          }
+
+          void usePreferencesStore.getState().load({
+            ...(activeIdentity ? { profileId: activeIdentity.id } : {}),
+            ...(selectedRepositoryId ? { repositoryId: selectedRepositoryId } : {}),
+          });
+        });
+        window.eda.events.onRepositoriesChanged(() => {
+          if (get().switchingIdentityId !== null) return;
+          void get().refreshRepositories();
+        });
+        window.eda.events.onRepositoryChanged((repositoryId, warning) => {
+          const repository = useRepositoryStore.getState();
+          if (repository.repositoryId !== repositoryId || repository.writing) return;
+          if (warning) useRepositoryStore.setState({ watchWarning: warning });
+          void repository.syncFromDisk();
+        });
+      }
+    })();
+
+    return initialization;
+  },
+
+  async refreshIdentities() {
+    const generation = ++identityRefreshGeneration;
+    const current = () => generation === identityRefreshGeneration;
+    const [list, active] = await Promise.all([
+      window.eda.identity.list(),
+      window.eda.identity.getActive(),
+    ]);
+
+    if (!current()) return;
+    if (list.ok) set({ identities: list.value });
+
+    if (active.ok) {
+      if (useSessionStore.getState().snapshot?.context.profileId !== active.value?.id) {
+        if (!(await useSessionStore.getState().load())) return;
+      }
+
+      if (!current()) return;
+      if (useSessionStore.getState().snapshot?.context.profileId !== active.value?.id) return;
+
+      const context = usePreferencesStore.getState().context;
+
+      await usePreferencesStore.getState().load(
+        active.value
+          ? {
+              profileId: active.value.id,
+              ...(context.profileId === active.value.id && context.repositoryId
+                ? { repositoryId: context.repositoryId }
+                : {}),
+            }
+          : {},
+      );
+      if (current()) set({ activeIdentity: active.value });
+    }
+  },
+
+  async refreshRepositories() {
+    const expectedIdentity = get().activeIdentity?.id;
+    const result = await window.eda.repository.list();
+
+    if (get().activeIdentity?.id !== expectedIdentity) return;
+
+    if (!result.ok) {
+      set({ error: result.error });
+      return;
+    }
+
+    const saved = useSessionStore.getState().snapshot;
+    const ownedSession = saved?.context.profileId === expectedIdentity ? saved : null;
+    const savedSelection = ownedSession
+      ? ownedSession.session.selectedRepositoryId
+      : get().selectedRepositoryId;
+    const stillPresent = result.value.some((r) => r.id === savedSelection);
+    const selectedRepositoryId = stillPresent
+      ? savedSelection
+      : ownedSession
+        ? null
+        : (result.value[0]?.id ?? null);
+
+    const identityId = get().activeIdentity?.id;
+    let openTabsByIdentity = get().openTabsByIdentity;
+
+    if (identityId !== undefined) {
+      const live = new Set(result.value.map((r) => r.id));
+      const kept = (
+        ownedSession ? ownedSession.session.tabs : (openTabsByIdentity[identityId] ?? [])
+      ).filter((id) => live.has(id));
+      const withSelection =
+        selectedRepositoryId && !kept.includes(selectedRepositoryId)
+          ? [...kept, selectedRepositoryId]
+          : kept;
+
+      openTabsByIdentity = { ...openTabsByIdentity, [identityId]: withSelection };
+    }
+
+    set({ repositories: result.value, selectedRepositoryId, openTabsByIdentity });
+    restoreLayout(selectedRepositoryId);
+  },
+
+  selectRepository(id) {
+    if (get().switchingIdentityId !== null) return;
+    if (id !== null && !get().repositories.some((repository) => repository.id === id)) return;
+    if (id !== get().selectedRepositoryId) useRepositoryStore.getState().clear();
+
+    const identityId = get().activeIdentity?.id;
+
+    if (id === null || identityId === undefined) {
+      set({ selectedRepositoryId: id });
+      saveTabs(get());
+      restoreLayout(id);
+      return;
+    }
+
+    const open = get().openTabsByIdentity[identityId] ?? [];
+
+    set({
+      selectedRepositoryId: id,
+      ...(open.includes(id)
+        ? {}
+        : { openTabsByIdentity: { ...get().openTabsByIdentity, [identityId]: [...open, id] } }),
+    });
+    saveTabs(get());
+    restoreLayout(id);
+  },
+
+  closeTab(id) {
+    if (get().switchingIdentityId !== null) return;
+
+    const identityId = get().activeIdentity?.id;
+
+    if (identityId === undefined) return;
+
+    const open = get().openTabsByIdentity[identityId] ?? [];
+    const index = open.indexOf(id);
+
+    if (index < 0) return;
+
+    const remaining = open.filter((tabId) => tabId !== id);
+    const wasSelected = get().selectedRepositoryId === id;
+    const next = remaining[Math.min(index, remaining.length - 1)] ?? null;
+
+    if (wasSelected) useRepositoryStore.getState().clear();
+
+    set({
+      openTabsByIdentity: { ...get().openTabsByIdentity, [identityId]: remaining },
+      closedTabsByIdentity: {
+        ...get().closedTabsByIdentity,
+        [identityId]: [
+          ...(get().closedTabsByIdentity[identityId] ?? []).filter((tab) => tab.id !== id),
+          { id, index },
+        ].slice(-50),
+      },
+      ...(wasSelected && { selectedRepositoryId: next }),
+    });
+    saveTabs(get());
+
+    if (wasSelected) restoreLayout(next);
+  },
+
+  moveTab(id, index) {
+    const identityId = get().activeIdentity?.id;
+
+    if (!identityId || get().switchingIdentityId !== null || !Number.isInteger(index)) return;
+
+    const tabs = [...(get().openTabsByIdentity[identityId] ?? [])];
+    const previous = tabs.indexOf(id);
+
+    if (previous < 0) return;
+
+    tabs.splice(previous, 1);
+    tabs.splice(Math.max(0, Math.min(index, tabs.length)), 0, id);
+    set({ openTabsByIdentity: { ...get().openTabsByIdentity, [identityId]: tabs } });
+    saveTabs(get());
+  },
+
+  reopenTab() {
+    const identityId = get().activeIdentity?.id;
+
+    if (!identityId || get().switchingIdentityId !== null) return;
+
+    const open = get().openTabsByIdentity[identityId] ?? [];
+    const closed = (get().closedTabsByIdentity[identityId] ?? []).filter(
+      (tab) => !open.includes(tab.id) && get().repositories.some((r) => r.id === tab.id),
+    );
+    const tab = closed.pop();
+
+    set({ closedTabsByIdentity: { ...get().closedTabsByIdentity, [identityId]: closed } });
+
+    if (!tab) return;
+
+    get().selectRepository(tab.id);
+    get().moveTab(tab.id, tab.index);
+  },
+
+  async setActiveIdentity(id) {
+    if (get().switchingIdentityId !== null) return;
+
+    identityRefreshGeneration += 1;
+    set({ switchingIdentityId: id });
+    useSessionStore.setState({ transitioning: true });
+
+    try {
+      if (!(await useSessionStore.getState().flush())) return;
+
+      const result = await window.eda.identity.setActive(id);
+
+      if (!result.ok) {
+        set({ error: result.error });
+        return;
+      }
+
+      if (result.value.session)
+        useSessionStore.setState({ snapshot: result.value.session, error: null });
+
+      useRepositoryStore.getState().clear();
+      set({ selectedRepositoryId: null });
+      await get().refreshIdentities();
+      await get().refreshRepositories();
+    } catch (error) {
+      set({
+        error: {
+          kind: "unknown",
+          operation: t("operations.switchProfile"),
+          message: String(error),
+        },
+      });
+    } finally {
+      useSessionStore.setState({ transitioning: false });
+      set({ switchingIdentityId: null });
+    }
+  },
+
+  async createIdentity(draft, options) {
+    const result = await window.eda.identity.create(draft, options);
+
+    if (!result.ok) {
+      set({ error: result.error });
+      return false;
+    }
+
+    await get().refreshIdentities();
+    await get().setActiveIdentity(result.value.id);
+
+    return get().activeIdentity?.id === result.value.id;
+  },
+
+  async updateIdentity(id, draft) {
+    if (!(await useSessionStore.getState().flush())) return false;
+
+    const result = await window.eda.identity.update(id, draft);
+
+    if (!result.ok) {
+      set({ error: result.error });
+      return false;
+    }
+
+    await get().refreshIdentities();
+
+    return true;
+  },
+
+  async deleteIdentity(id, token) {
+    if (!(await useSessionStore.getState().flush())) return false;
+
+    identityRefreshGeneration += 1;
+    set({ switchingIdentityId: id });
+    useSessionStore.setState({ transitioning: true });
+
+    try {
+      const result = await window.eda.identity.delete(id, token);
+
+      if (!result.ok) {
+        set({ error: result.error });
+        return false;
+      }
+
+      useRepositoryStore.getState().clear();
+      await get().refreshIdentities();
+      await get().refreshRepositories();
+
+      return true;
+    } finally {
+      useSessionStore.setState({ transitioning: false });
+      set({ switchingIdentityId: null });
+    }
+  },
+
+  async addRepository() {
+    const chosen = await window.eda.repository.chooseFolder();
+
+    if (!chosen.ok) {
+      set({ error: chosen.error });
+      return;
+    }
+
+    if (chosen.value === null) return;
+
+    const opened = await window.eda.repository.open(chosen.value);
+
+    if (!opened.ok) {
+      set({ error: opened.error });
+      return;
+    }
+
+    await get().refreshRepositories();
+    get().selectRepository(opened.value.id);
+  },
+
+  dismissError() {
+    set({ error: null });
+  },
+}));
+
+function saveTabs(state: AppState): void {
+  const profileId = state.activeIdentity?.id;
+
+  if (!profileId || profileId !== useSessionStore.getState().snapshot?.context.profileId) return;
+
+  useSessionStore.getState().change({
+    kind: "tabs",
+    tabs: state.openTabsByIdentity[profileId] ?? [],
+    selectedRepositoryId: state.selectedRepositoryId,
+  });
+}
+
+function restoreLayout(repositoryId: string | null): void {
+  useLayoutStore
+    .getState()
+    .restore(
+      repositoryId ? useSessionStore.getState().snapshot?.session.views[repositoryId] : undefined,
+    );
+}

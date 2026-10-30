@@ -1,0 +1,550 @@
+import assert from "node:assert/strict";
+import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { execFileSync } from "node:child_process";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { tinyPng, pngVersion } from "../fixtures/images.ts";
+
+const root = await mkdtemp(join(tmpdir(), "eda-workspace-gate-"));
+const repository = join(root, "workspace-repo");
+const config = join(root, "gitconfig");
+
+await mkdir(repository);
+await writeFile(
+  config,
+  "[user]\nname = Fixture\nemail = fixture@example.com\n[commit]\ngpgsign = false\n",
+);
+
+const env = {
+  ...process.env,
+  HOME: root,
+  USERPROFILE: root,
+  GIT_CONFIG_GLOBAL: config,
+  GIT_CONFIG_SYSTEM: process.platform === "win32" ? "NUL" : "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
+const git = (...args: string[]) =>
+  execFileSync("git", ["-C", repository, ...args], { env, encoding: "utf8", stdio: "pipe" }).trim();
+
+git("init", "-b", "main");
+await writeFile(join(repository, "file.txt"), "initial\n");
+await writeFile(join(repository, "preview.png"), pngVersion("original"));
+git("add", ".");
+git("commit", "-m", "Create repository");
+
+for (let index = 0; index < 40; index++)
+  git("commit", "--allow-empty", "-m", `History fixture ${index}`);
+
+git("checkout", "-b", "feature/clear-branch-navigation");
+await writeFile(join(repository, "feature.txt"), "feature\n");
+git("add", ".");
+git("commit", "-m", "Make branch navigation visible");
+
+const feature = git("rev-parse", "HEAD");
+
+git("tag", "-a", "v1.0", "-m", "Annotated release");
+git("update-ref", "refs/remotes/origin/feature/clear-branch-navigation", feature);
+git("checkout", "main");
+await writeFile(join(repository, "main.txt"), "main\n");
+await writeFile(
+  join(repository, "large.txt"),
+  Array.from({ length: 3_000 }, (_, i) => `preview line ${i}`).join("\n"),
+);
+
+for (let index = 0; index < 8; index++) {
+  await writeFile(
+    join(repository, `a-budget-${index}.txt`),
+    Array.from({ length: 1_800 }, (_, line) => `budget ${index} line ${line}`).join("\n"),
+  );
+}
+
+await writeFile(
+  join(repository, "zz-small.txt"),
+  Array.from({ length: 38 }, (_, line) => `selected file line ${line}`).join("\n"),
+);
+await writeFile(join(repository, "pnpm-lock.yaml"), "lockfileVersion: 9\n");
+await writeFile(join(repository, "image file.bin"), Buffer.from([0, 1, 2, 255, 0]));
+await writeFile(join(repository, "preview.png"), pngVersion("committed"));
+git("add", ".");
+git("commit", "-m", "Keep working changes beside the commit editor");
+git("update-ref", "refs/remotes/origin/main", "HEAD~1");
+git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+git("config", "remote.origin.url", repository);
+git("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*");
+git("branch", "--set-upstream-to=origin/main", "main");
+await writeFile(join(repository, "file.txt"), "staged change\n");
+git("add", "file.txt");
+await writeFile(join(repository, "main.txt"), "working change\n");
+await writeFile(join(repository, "preview.png"), pngVersion("index"));
+git("add", "preview.png");
+await writeFile(join(repository, "preview.png"), pngVersion("working"));
+await writeFile(join(repository, "added.png"), tinyPng);
+await copyFile(resolve("tests/fixtures/backgrounds/sakura.jpg"), join(repository, "photo.jpg"));
+
+const before = {
+  head: git("rev-parse", "HEAD"),
+  status: git("status", "--porcelain=v1"),
+  index: git("write-tree"),
+};
+let app: ElectronApplication | undefined;
+const errors: string[] = [];
+const launch = async () => {
+  app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
+  const page = await app.firstWindow();
+  page.setDefaultTimeout(30_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  page.on("pageerror", (error) => errors.push(error.message));
+  return page;
+};
+
+try {
+  let page = await launch();
+
+  assert.ok(app);
+
+  await page.getByRole("button", { name: "Maximize window", exact: true }).click();
+  await page.getByRole("button", { name: "Restore window", exact: true }).waitFor();
+  assert.equal(
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMaximized()),
+    true,
+  );
+
+  await page.getByRole("button", { name: "Restore window", exact: true }).click();
+  await page.getByRole("button", { name: "Maximize window", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Minimize window", exact: true }).click();
+  assert.equal(
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMinimized()),
+    true,
+  );
+
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.restore());
+  await page.getByRole("button", { name: "Get started", exact: true }).click();
+  await page.getByRole("textbox", { name: /^Profile name/ }).fill("Work");
+  await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
+  await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
+  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
+  assert.equal(
+    (await page.evaluate((path) => window.eda.repository.open(path), repository)).ok,
+    true,
+  );
+
+  await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
+  await page.getByRole("button", { name: /^workspace-repo / }).click();
+  await page.getByRole("button", { name: "Inspect branch main", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: /^Inspect branch origin\/HEAD$/ }).count(),
+    0,
+  );
+
+  const overview = page.getByLabel("Repository overview", { exact: true });
+
+  assert.match(await overview.innerText(), /Tracking origin\/main/);
+  assert.equal(
+    await overview.getByTitle("Commits ahead of the locally known upstream").innerText(),
+    "1",
+  );
+
+  await page.getByRole("button", { name: "Staged file.txt, status M", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Unstaged main.txt, status M", exact: true }).waitFor();
+
+  const graph = page.getByTestId("commit-graph");
+  const initialGraph = await graph.boundingBox();
+  const mainHeight = await graph.evaluate(
+    (element) => element.closest(".panel-split")!.getBoundingClientRect().height,
+  );
+
+  assert.ok(
+    initialGraph && Math.abs(initialGraph.height - mainHeight) <= 1,
+    "History fills the main area",
+  );
+
+  await page.getByRole("textbox", { name: "Commit title" }).fill("Preserve this draft");
+  assert.equal(await page.getByRole("heading", { name: "Diff viewer", exact: true }).count(), 0);
+
+  await page.getByRole("button", { name: "Inspect tag v1.0", exact: true }).click();
+  await page.getByText(`Commit ${feature.slice(0, 8)}`, { exact: true }).waitFor();
+
+  const filter = page.getByLabel("Filter branches and tags", { exact: true });
+
+  await filter.fill("clear-branch");
+  assert.equal(await page.getByRole("button", { name: /^Inspect branch / }).count(), 2);
+
+  await filter.fill("");
+  await page.getByRole("button", { name: "Inspect branch main", exact: true }).click();
+
+  const commitFiles = page.getByRole("region", { name: "Commit file changes", exact: true });
+
+  await commitFiles.waitFor();
+  assert.equal(await graph.isVisible(), true, "Selecting a commit keeps history visible");
+  assert.equal(await page.getByRole("textbox", { name: "Commit title" }).count(), 0);
+
+  const graphList = graph.locator("[data-virtual-list]");
+
+  await graphList.evaluate((element) => {
+    element.scrollTop = 120;
+  });
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="commit-graph"] [data-virtual-list]')?.scrollTop === 120,
+  );
+  await page
+    .getByRole("button", { name: "View commit diff for image file.bin", exact: true })
+    .click();
+  await page.getByText("Binary file changed — no text preview.", { exact: true }).waitFor();
+  assert.equal(await graph.isVisible(), false, "Selecting a file replaces history with its diff");
+
+  await page.getByRole("button", { name: "Back to history", exact: true }).click();
+  assert.equal(await graph.isVisible(), true);
+  assert.equal(
+    await graphList.evaluate((element) => element.scrollTop),
+    120,
+    "Returning from a file retains graph scroll",
+  );
+
+  await page.getByRole("button", { name: "View commit diff for preview.png", exact: true }).click();
+  await verifyImages(page, [
+    ["Parent", "original"],
+    ["Commit", "committed"],
+  ]);
+  const imageVersions = page.getByRole("group", { name: "Image versions", exact: true });
+  await imageVersions.getByRole("button", { name: "Commit", exact: true }).click();
+  assert.equal(await page.getByRole("img", { name: /^Parent image:/ }).count(), 0);
+  await page.getByRole("button", { name: "Actual size", exact: true }).click();
+  await page.getByRole("button", { name: "Fit image", exact: true }).click();
+  await imageVersions.getByRole("button", { name: "Compare", exact: true }).click();
+  await mkdir("screenshots", { recursive: true });
+  await page.screenshot({ path: resolve("screenshots/image-preview-commit.png") });
+  await page
+    .getByRole("button", { name: "View commit diff for zz-small.txt", exact: true })
+    .click();
+  await page.getByText("selected file line 0", { exact: true }).waitFor();
+  await page.getByText("selected file line 37", { exact: true }).waitFor();
+  assert.equal(
+    await page
+      .getByText(
+        "Preview truncated to keep the viewer responsive. Some lines or text are omitted.",
+        { exact: true },
+      )
+      .count(),
+    0,
+    "A small selected file has its own preview budget",
+  );
+
+  await page
+    .getByRole("button", { name: "View commit diff for pnpm-lock.yaml", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Expand diff for pnpm-lock.yaml", exact: true }).waitFor();
+  await page.getByRole("button", { name: "View commit diff for large.txt", exact: true }).click();
+
+  const diffBounds = await page
+    .getByRole("button", { name: "Back to history", exact: true })
+    .evaluate((element) => element.closest("section")!.getBoundingClientRect().toJSON());
+
+  assert.ok(diffBounds.height >= initialGraph.height, "Diff fills the history area");
+  assert.equal(
+    await page.getByRole("button", { name: "Expand diff for pnpm-lock.yaml", exact: true }).count(),
+    0,
+    "Only the selected file is displayed",
+  );
+
+  const largeDiff = page.getByRole("button", { name: "Expand diff for large.txt", exact: true });
+
+  await largeDiff.waitFor();
+
+  assert.equal(
+    await page.getByRole("button", { name: /Expand diff for image file.bin/ }).count(),
+    0,
+  );
+  assert.equal(await page.getByText("preview line 0", { exact: true }).count(), 0);
+
+  await mkdir("screenshots", { recursive: true });
+  await page.screenshot({ path: resolve("screenshots/diff-collapsed.png") });
+  await largeDiff.click();
+  await page
+    .getByText("Preview truncated to keep the viewer responsive. Some lines or text are omitted.", {
+      exact: true,
+    })
+    .waitFor();
+  await page.getByText("preview line 0", { exact: true }).waitFor();
+
+  const diffList = page
+    .locator("[data-virtual-list]")
+    .filter({ has: page.locator("[data-diff-text]") });
+
+  await diffList.evaluate((element) => {
+    element.scrollTop = 440;
+  });
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll("[data-virtual-list]")).some(
+      (element) => element.scrollTop === 440,
+    ),
+  );
+
+  const scrollBeforeFocus = await diffList.evaluate((element) => element.scrollTop);
+
+  await page.getByRole("button", { name: "Maximize diff viewer", exact: true }).click();
+  await page.getByRole("button", { name: "Restore diff viewer", exact: true }).click();
+  assert.equal(await diffList.evaluate((element) => element.scrollTop), scrollBeforeFocus);
+
+  await diffList.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await verifyCopy(page);
+  await page.getByRole("button", { name: "Side by side", exact: true }).click();
+  await page.locator("[data-virtual-list] .grid-cols-2").first().waitFor();
+  await verifyCopy(page);
+  await page.getByRole("button", { name: "Collapse diff for large.txt", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Collapse diff for large.txt", exact: true }).count(),
+    1,
+  );
+
+  await page.getByRole("button", { name: "Collapse diff for large.txt", exact: true }).click();
+  await largeDiff.waitFor();
+  assert.equal(await page.getByText("preview line 0", { exact: true }).count(), 0);
+
+  await page.getByRole("button", { name: "Unified", exact: true }).click();
+  await page.getByRole("button", { name: "Working tree", exact: true }).click();
+  await page.getByRole("button", { name: "Staged preview.png, status M", exact: true }).click();
+  await verifyImages(page, [
+    ["HEAD", "committed"],
+    ["Index", "index"],
+  ]);
+  await page.getByRole("button", { name: "Unstaged preview.png, status M", exact: true }).click();
+  await verifyImages(page, [
+    ["Index", "index"],
+    ["Working tree", "working"],
+  ]);
+  await page.getByRole("button", { name: "Untracked added.png, status ?", exact: true }).click();
+  const added = page.getByRole("img", { name: "Working tree image: added.png", exact: true });
+  await added.waitFor();
+  await page.waitForFunction(
+    () =>
+      document.querySelector<HTMLImageElement>('img[alt="Working tree image: added.png"]')
+        ?.naturalWidth === 1,
+  );
+  assert.equal(
+    await added.getAttribute("src"),
+    `data:image/png;base64,${tinyPng.toString("base64")}`,
+  );
+  await page
+    .getByRole("group", { name: "Image versions", exact: true })
+    .getByRole("button", { name: "Index", exact: true })
+    .click();
+  await page.getByText("File not present", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Untracked photo.jpg, status ?", exact: true }).click();
+  const photo = page.getByRole("img", { name: "Working tree image: photo.jpg", exact: true });
+  await photo.waitFor();
+  await page.waitForFunction(
+    () =>
+      (document.querySelector<HTMLImageElement>('img[alt="Working tree image: photo.jpg"]')
+        ?.naturalWidth ?? 0) > 1,
+  );
+  assert.match((await photo.getAttribute("src")) ?? "", /^data:image\/jpeg;base64,/);
+  await page.screenshot({ path: resolve("screenshots/image-preview-working.png") });
+  await page.getByRole("button", { name: "Unstaged main.txt, status M", exact: true }).click();
+  await page.getByText("Working tree · main.txt", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("textbox", { name: "Commit title" }).inputValue(),
+    "Preserve this draft",
+  );
+
+  const divider = page.getByRole("separator").first();
+  const oldSize = Number(await divider.getAttribute("aria-valuenow"));
+
+  await divider.focus();
+  await page.keyboard.press(
+    (await divider.getAttribute("aria-orientation")) === "vertical" ? "ArrowRight" : "ArrowDown",
+  );
+  assert.ok(Number(await divider.getAttribute("aria-valuenow")) > oldSize);
+
+  await page.locator("summary").filter({ hasText: "Remote branches" }).click();
+  await page.getByRole("button", { name: "Hide branches and tags", exact: true }).click();
+  await page.getByRole("button", { name: "Show branches and tags", exact: true }).waitFor();
+
+  const closed = app.waitForEvent("close");
+
+  await page.getByRole("button", { name: "Close window", exact: true }).click();
+  await closed;
+  page = await launch();
+  await page.getByRole("button", { name: "Show branches and tags", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("textbox", { name: "Commit title" }).inputValue(),
+    "Preserve this draft",
+  );
+
+  await page.getByRole("button", { name: "Show branches and tags", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('.reference-sidebar[data-collapsed="false"]') !== null &&
+      document.documentElement.dataset["navigationMotion"] === undefined,
+  );
+  assert.equal(
+    await page
+      .locator("summary")
+      .filter({ hasText: "Remote branches" })
+      .evaluate((element) => String(element.closest("details")?.open)),
+    "false",
+  );
+
+  await page.locator("summary").filter({ hasText: "Remote branches" }).click();
+
+  for (const width of [1440, 940]) {
+    await page.setViewportSize({ width, height: 850 });
+
+    if (width === 940) {
+      await page.waitForFunction(() => {
+        const sidebar = document.querySelector('.reference-sidebar[data-collapsed="true"]');
+        return sidebar !== null && sidebar.getBoundingClientRect().width <= 48;
+      });
+    }
+
+    const references = await page
+      .getByRole("complementary", { name: "Repository references" })
+      .boundingBox();
+    const history = await page
+      .getByRole("button", { name: "Back to history", exact: true })
+      .evaluate((element) => element.closest("section")!.getBoundingClientRect().toJSON());
+    const draft = await page.getByRole("textbox", { name: "Commit title" }).boundingBox();
+
+    assert.ok(references && history && draft);
+    assert.ok(references.x + references.width <= history.x + 1);
+    assert.ok(history.x + history.width <= draft.x + 1);
+    assert.ok(draft.x + draft.width <= width);
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      true,
+    );
+
+    await mkdir("screenshots", { recursive: true });
+    await page.screenshot({ path: resolve(`screenshots/workspace-${width}.png`) });
+
+    if (width === 940) {
+      await page.getByRole("button", { name: "Show branches and tags", exact: true }).click();
+
+      const drawer = page.getByRole("dialog", { name: "Branches and tags", exact: true });
+      const drawerReferences = drawer.getByRole("complementary", { name: "Repository references" });
+
+      await drawerReferences.waitFor();
+      assert.ok(
+        (await drawerReferences.boundingBox())!.width > (await drawer.boundingBox())!.width / 2,
+        "Expanded references should use the drawer width on small windows",
+      );
+
+      await drawer
+        .getByRole("button", { name: "Inspect tag v1.0", exact: true })
+        .click({ button: "right" });
+      await page.getByRole("dialog", { name: "Tag details", exact: true }).waitFor();
+      await page.keyboard.press("Escape");
+      await page
+        .getByRole("dialog", { name: "Tag details", exact: true })
+        .waitFor({ state: "hidden" });
+      assert.equal(await drawer.isVisible(), true);
+
+      await page.keyboard.press("Escape");
+      await drawer.waitFor({ state: "hidden" });
+      await page.getByRole("button", { name: "Maximize diff viewer", exact: true }).click();
+      await page.getByRole("button", { name: "Commit draft…", exact: true }).click();
+
+      const commitDrawer = page.getByRole("dialog", { name: "Commit draft", exact: true });
+
+      assert.equal(
+        await commitDrawer.getByRole("textbox", { name: "Commit title" }).inputValue(),
+        "Preserve this draft",
+      );
+
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Restore diff viewer", exact: true }).click();
+    }
+  }
+
+  assert.equal(git("symbolic-ref", "--short", "HEAD"), "main");
+  assert.deepEqual(
+    {
+      head: git("rev-parse", "HEAD"),
+      status: git("status", "--porcelain=v1"),
+      index: git("write-tree"),
+    },
+    before,
+  );
+  assert.equal(errors.length, 0, errors.join("\n"));
+
+  console.log(
+    "Workspace gate passed: inspection without Git mutations, status and references, bounded large/generated/binary diffs, clean clipboard text in both diff modes, focus scroll restoration, keyboard dividers, nested drawers, saved drafts/layout and wide/compact bounds.",
+  );
+} catch (error) {
+  if (app) {
+    await mkdir("screenshots", { recursive: true });
+    await app
+      .windows()[0]
+      ?.screenshot({ path: resolve("screenshots/workspace-gate-failure.png") })
+      .catch(() => {});
+  }
+
+  throw error;
+} finally {
+  if (app) await app.close().catch(() => app?.process().kill());
+  assert.ok(resolve(root).startsWith(resolve(tmpdir(), "eda-workspace-gate-")));
+  await rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+}
+
+async function verifyCopy(page: Page) {
+  assert.ok(app);
+
+  const line = page.locator("[data-diff-text]").filter({ hasText: "preview line 0" }).first();
+
+  await line.waitFor();
+
+  const expected = await line.textContent();
+
+  assert.ok(expected);
+
+  await line.evaluate((element) => {
+    const row = element.parentElement;
+    const range = document.createRange();
+
+    if (!row) throw new Error("Expected a diff row");
+
+    range.selectNodeContents(row);
+
+    const selection = window.getSelection();
+
+    if (!selection) throw new Error("Selection is unavailable");
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+c`);
+
+  const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+
+  assert.equal(copied.trim(), expected.trim(), "Diff copying must exclude line-number gutters");
+
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+}
+
+async function verifyImages(page: Page, versions: [string, string][]) {
+  for (const [label, tag] of versions) {
+    const image = page.getByRole("img", { name: `${label} image: preview.png`, exact: true });
+    await image.waitFor();
+    await page.waitForFunction(
+      (alt) =>
+        Array.from(document.images).some(
+          (image) => image.alt === alt && image.complete && image.naturalWidth === 1,
+        ),
+      `${label} image: preview.png`,
+    );
+    assert.equal(
+      await image.getAttribute("src"),
+      `data:image/png;base64,${pngVersion(tag).toString("base64")}`,
+    );
+  }
+}

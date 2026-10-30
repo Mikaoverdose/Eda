@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Format
+            command: pnpm format:check
+          - name: TypeScript
+            command: pnpm typecheck
+          - name: Lint
+            command: pnpm lint
+          - name: Tooling and architecture
+            command: node --test tests/tooling/*.test.ts
+          - name: Component inventory
+            command: node scripts/generate-component-inventory.ts --check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: ${{ matrix.command }}
+
+  test:
+    name: Tests / ${{ matrix.project }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        project: [main, renderer]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Record Git version
+        run: git --version
+      - run: pnpm exec vitest run --project ${{ matrix.project }}
+
+  build:
+    name: Build / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      - name: Share Windows desktop build
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: |
+            dist/
+            vendor/git/win-x64/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  desktop:
+    name: Desktop UI tests / ${{ matrix.name }}
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Profiles, tabs and keyboard shortcuts
+            suites: commands workspace profiles
+          - name: Staging, history rendering and bundled Git
+            suites: local large-repo bundled-git
+          - name: Merge, stashes and history recovery
+            suites: foundations
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-windows
+      - run: pnpm test:desktop ${{ matrix.suites }}
+      - name: Save desktop failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}-failure
+          path: screenshots/
+          if-no-files-found: ignore
+          retention-days: 7

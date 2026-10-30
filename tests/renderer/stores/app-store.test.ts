@@ -1,0 +1,225 @@
+import type { EdaApi } from "@shared/ipc";
+import type { Identity } from "@shared/identity/identity";
+import type { RepositorySummary } from "@shared/repository/repository";
+import { ok } from "@shared/errors";
+import { useAppStore } from "@renderer/stores/app-store";
+
+const identity = (id: string): Identity => ({
+  id,
+  name: id,
+  gitName: "Eda",
+  gitEmail: `${id}@example.com`,
+  hue: 210,
+  signing: { format: "none", signCommits: false },
+  rules: [],
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
+});
+
+const repo = (id: string): RepositorySummary =>
+  ({
+    id,
+    name: id,
+    path: `/repos/${id}`,
+    available: true,
+  }) as RepositorySummary;
+
+function install(active: Identity, repositories: RepositorySummary[]) {
+  Object.defineProperty(window, "eda", {
+    configurable: true,
+    value: {
+      repository: { list: async () => ok(repositories) },
+      identity: { list: async () => ok([active]), getActive: async () => ok(active) },
+    } as unknown as EdaApi,
+  });
+}
+
+const reset = () =>
+  useAppStore.setState({
+    activeIdentity: null,
+    repositories: [],
+    selectedRepositoryId: null,
+    openTabsByIdentity: {},
+    closedTabsByIdentity: {},
+    switchingIdentityId: null,
+  });
+
+describe("repository tabs", () => {
+  beforeEach(reset);
+
+  it("reorders without changing selection, reopens at its old position, and isolates closed tabs", () => {
+    useAppStore.setState({
+      activeIdentity: identity("work"),
+      repositories: [repo("a"), repo("b"), repo("c")],
+    });
+
+    for (const id of ["a", "b", "c"]) useAppStore.getState().selectRepository(id);
+
+    useAppStore.getState().moveTab("c", 0);
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["c", "a", "b"]);
+    expect(useAppStore.getState().selectedRepositoryId).toBe("c");
+
+    useAppStore.getState().closeTab("a");
+    useAppStore.setState({ activeIdentity: identity("home"), repositories: [repo("z")] });
+    useAppStore.getState().reopenTab();
+    expect(useAppStore.getState().openTabsByIdentity["home"]).toBeUndefined();
+
+    useAppStore.setState({
+      activeIdentity: identity("work"),
+      repositories: [repo("a"), repo("b"), repo("c")],
+    });
+    useAppStore.getState().reopenTab();
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["c", "a", "b"]);
+    expect(useAppStore.getState().selectedRepositoryId).toBe("a");
+  });
+
+  it("cannot reopen removed memberships or change tabs during profile transition", () => {
+    useAppStore.setState({
+      activeIdentity: identity("work"),
+      repositories: [repo("a"), repo("b")],
+    });
+
+    for (const id of ["a", "b"]) useAppStore.getState().selectRepository(id);
+
+    useAppStore.getState().closeTab("a");
+    useAppStore.setState({ repositories: [repo("b")] });
+    useAppStore.getState().reopenTab();
+    useAppStore.getState().selectRepository("foreign");
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["b"]);
+
+    useAppStore.setState({ switchingIdentityId: "home" });
+    useAppStore.getState().closeTab("b");
+    useAppStore.getState().moveTab("b", 0);
+    useAppStore.getState().selectRepository(null);
+    expect(useAppStore.getState().selectedRepositoryId).toBe("b");
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["b"]);
+  });
+
+  it("opens a tab when a repository is selected and does not duplicate it", () => {
+    useAppStore.setState({
+      activeIdentity: identity("work"),
+      repositories: [repo("a"), repo("b")],
+    });
+    useAppStore.getState().selectRepository("a");
+    useAppStore.getState().selectRepository("b");
+    useAppStore.getState().selectRepository("a");
+
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["a", "b"]);
+    expect(useAppStore.getState().selectedRepositoryId).toBe("a");
+  });
+
+  it("keeps each identity tab set separate", () => {
+    useAppStore.setState({ activeIdentity: identity("work"), repositories: [repo("a")] });
+    useAppStore.getState().selectRepository("a");
+    useAppStore.setState({ activeIdentity: identity("oss"), repositories: [repo("z")] });
+    useAppStore.getState().selectRepository("z");
+
+    expect(useAppStore.getState().openTabsByIdentity).toEqual({ work: ["a"], oss: ["z"] });
+  });
+
+  it("selects the neighbouring tab when the active one closes", () => {
+    useAppStore.setState({
+      activeIdentity: identity("work"),
+      repositories: [repo("a"), repo("b"), repo("c")],
+    });
+
+    for (const id of ["a", "b", "c"]) useAppStore.getState().selectRepository(id);
+
+    useAppStore.getState().selectRepository("b");
+    useAppStore.getState().closeTab("b");
+
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["a", "c"]);
+    expect(useAppStore.getState().selectedRepositoryId).toBe("c");
+  });
+
+  it("keeps the selection when a background tab closes", () => {
+    useAppStore.setState({
+      activeIdentity: identity("work"),
+      repositories: [repo("a"), repo("b")],
+    });
+
+    for (const id of ["a", "b"]) useAppStore.getState().selectRepository(id);
+
+    useAppStore.getState().closeTab("a");
+
+    expect(useAppStore.getState().selectedRepositoryId).toBe("b");
+  });
+
+  it("clears the selection when the last tab closes", () => {
+    useAppStore.setState({ activeIdentity: identity("work"), repositories: [repo("a")] });
+    useAppStore.getState().selectRepository("a");
+    useAppStore.getState().closeTab("a");
+
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual([]);
+    expect(useAppStore.getState().selectedRepositoryId).toBeNull();
+  });
+
+  it("drops tabs for repositories the identity no longer owns", async () => {
+    const work = identity("work");
+    useAppStore.setState({ activeIdentity: work, openTabsByIdentity: { work: ["a", "gone"] } });
+    install(work, [repo("a")]);
+    await useAppStore.getState().refreshRepositories();
+
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["a"]);
+  });
+
+  it("opens a tab for a selection restored by a refresh", async () => {
+    const work = identity("work");
+
+    useAppStore.setState({ activeIdentity: work, openTabsByIdentity: {} });
+    install(work, [repo("a")]);
+    await useAppStore.getState().refreshRepositories();
+
+    expect(useAppStore.getState().selectedRepositoryId).toBe("a");
+    expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["a"]);
+  });
+});
+
+it("ignores an older identity refresh after a newer profile response", async () => {
+  const { useSessionStore } = await import("@renderer/stores/session-store");
+  const { usePreferencesStore } = await import("@renderer/stores/preferences-store");
+  const { emptySession } = await import("@shared/identity/profile-session");
+  const app = useAppStore.getState();
+  const session = useSessionStore.getState();
+  const preferences = usePreferencesStore.getState();
+  let finish!: (result: ReturnType<typeof ok<Identity>>) => void;
+  const active = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(ok(identity("new")));
+  const load = vi.fn(async () => {});
+  Object.defineProperty(window, "eda", {
+    configurable: true,
+    value: {
+      identity: { list: async () => ok([identity("new")]), getActive: active },
+    },
+  });
+
+  try {
+    useSessionStore.setState({
+      snapshot: {
+        context: { profileId: "new", windowId: "window", generation: 2 },
+        session: emptySession(),
+        drafts: {},
+        recovery: null,
+      },
+    });
+    usePreferencesStore.setState({ load });
+    const oldRequest = useAppStore.getState().refreshIdentities();
+    await useAppStore.getState().refreshIdentities();
+    finish(ok(identity("old")));
+    await oldRequest;
+    expect(useAppStore.getState().activeIdentity?.id).toBe("new");
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledWith({ profileId: "new" });
+  } finally {
+    useAppStore.setState(app);
+    useSessionStore.setState(session);
+    usePreferencesStore.setState(preferences);
+  }
+});

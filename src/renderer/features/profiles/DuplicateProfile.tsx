@@ -1,0 +1,101 @@
+import { t } from "@shared/i18n";
+import { useState } from "react";
+import type { Identity } from "@shared/identity/identity";
+import { useAppStore } from "../../stores/app-store";
+import { useSessionStore } from "../../stores/session-store";
+import { Button, Dialog, Field, Input, Checkbox, ErrorDialog } from "../../components/ui/index";
+
+export function DuplicateProfile({ profile, onClose }: { profile: Identity; onClose: () => void }) {
+  const [name, setName] = useState(t("profiles.duplicateProfile.copy", { name: profile.name }));
+  const [preferences, setPreferences] = useState(true);
+  const [repositories, setRepositories] = useState(true);
+  const [tabs, setTabs] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true);
+
+    try {
+      if (!(await useSessionStore.getState().flush())) return;
+
+      const result = await window.eda.identity.duplicate(profile.id, {
+        name,
+        preferences,
+        repositories,
+        tabs: repositories && tabs,
+      });
+
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+
+      await useAppStore.getState().refreshIdentities();
+      onClose();
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      title={t("profiles.duplicateProfile.duplicateProfile")}
+      description={t("profiles.duplicateProfile.createANewProfileFromTheCopyStaysInactive", {
+        name: profile.name,
+      })}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      footer={
+        <>
+          <Button variant="quiet" disabled={busy} onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={busy || !name.trim()}
+            busy={busy}
+            onClick={() => void save()}
+          >
+            {t("profiles.duplicateProfile.createCopy")}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 text-sm">
+        <Field label={t("profiles.duplicateProfile.profileName")}>
+          {(props) => (
+            <Input
+              {...props}
+              value={name}
+              maxLength={100}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+        </Field>
+        <Checkbox checked={preferences} onChange={(event) => setPreferences(event.target.checked)}>
+          {t("profiles.duplicateProfile.copyPreferenceOverrides")}
+        </Checkbox>
+        <Checkbox
+          checked={repositories}
+          onChange={(event) => setRepositories(event.target.checked)}
+        >
+          {t("profiles.duplicateProfile.copyRepositoryMemberships")}
+        </Checkbox>
+        <Checkbox
+          checked={tabs}
+          disabled={!repositories}
+          onChange={(event) => setTabs(event.target.checked)}
+        >
+          {t("profiles.duplicateProfile.copyTabsAndLayout")}
+        </Checkbox>
+        <p className="text-xs text-text-tertiary">
+          {t("profiles.duplicateProfile.authorDetailsAndPathRulesAreCopiedKeys")}
+        </p>
+        <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+      </div>
+    </Dialog>
+  );
+}

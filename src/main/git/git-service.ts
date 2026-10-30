@@ -1,0 +1,991 @@
+import {
+  HISTORY_PAGE_SIZE,
+  MAX_HISTORY_PAGE_SIZE,
+  type CommitInspection,
+  type HistoryPage,
+  type RepositoryStatus,
+  type UnifiedDiff,
+} from "@shared/repository/repository-read";
+import { t } from "@shared/i18n";
+import { existsSync } from "node:fs";
+import type { OperationManager } from "../operations/operation-manager";
+import { GitError } from "@shared/errors";
+import type { Identity } from "@shared/identity/identity";
+import type { GitConfigEntry } from "@shared/identity/profile-session";
+
+import type {
+  BranchSummary,
+  TagSummary,
+  TagVerification,
+} from "@shared/repository/repository-write";
+import { buildGitEnvironment, type GitEnvironmentOptions } from "./execution/environment";
+import { parseUnifiedDiff } from "./parsers/diff-parser";
+import { boundDiff } from "@shared/repository/diff-limits";
+import { mapGitError } from "./execution/error-mapping";
+import type { GitEngine } from "./execution/git-engine";
+import { parseLog } from "./parsers/log-parser";
+import { readStashHistory } from "./operations/stash-history";
+import { type ProcessRunner, ProcessSpawnError } from "./execution/process-runner";
+
+import { parseStatus } from "./parsers/status-parser";
+import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "./validation";
+
+export interface GitExecOptions {
+  redactValues?: readonly string[];
+  cwd?: string;
+  operation: string;
+  identityName?: string;
+  env?: GitEnvironmentOptions;
+  signal?: AbortSignal;
+  onProgress?: (line: string) => void;
+  stdin?: string;
+  allowedExitCodes?: readonly number[];
+  maxStdoutBytes?: number;
+  maxStderrBytes?: number;
+}
+
+function literalPathspecs(paths: readonly string[] | undefined, operation: string): string[] {
+  if (paths === undefined) return [];
+
+  if (paths.length > 256) {
+    throw new GitError({
+      kind: "invalid-input",
+      operation,
+      message: t("main.git.gitService.tooManyFilePathsWereRequested"),
+      suggestedAction: t("main.git.gitService.select256FilesOrFewer"),
+    });
+  }
+
+  return paths.map((path) => {
+    assertRepositoryPath(path, operation);
+    return `:(literal)${path}`;
+  });
+}
+
+function outputTooLarge(repositoryPath: string, operation: string): GitError {
+  return new GitError({
+    kind: "output-too-large",
+    operation,
+    repositoryPath,
+    message: t("main.git.gitService.gitProducedMoreDiffDataThanEdaCanSafelyDisplay"),
+    suggestedAction: t("main.git.gitService.selectFewerFilesAndTryAgain"),
+  });
+}
+
+function parseOutput<T>(
+  parser: (output: Buffer) => T,
+  output: Buffer,
+  repositoryPath: string,
+  operation: string,
+): T {
+  try {
+    return parser(output);
+  } catch (error) {
+    throw new GitError({
+      kind: "repository-corrupt",
+      operation,
+      repositoryPath,
+      message: t("main.git.gitService.gitReturnedRepositoryDataEdaCouldNotUnderstand"),
+      suggestedAction: t("main.git.gitService.checkTheRepositoryWithGitAndReportThisIfItIsHealthy"),
+      ...(error instanceof Error && { rawStderr: error.message }),
+    });
+  }
+}
+
+export interface GitExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  stdoutBytes: Buffer;
+}
+
+export class GitService {
+  constructor(
+    private readonly runner: ProcessRunner,
+    private readonly engine: GitEngine,
+    private readonly baseEnv: Readonly<Record<string, string>> = {},
+    private readonly operations?: OperationManager,
+  ) {}
+
+  get gitVersion(): string {
+    return this.engine.version;
+  }
+
+  get gitPath(): string {
+    return this.engine.path;
+  }
+
+  async exec(args: readonly string[], options: GitExecOptions): Promise<GitExecResult> {
+    const redact = (text: string) =>
+      (options.redactValues ?? []).reduce(
+        (value, secret) => (secret ? value.split(secret).join("[redacted]") : value),
+        text,
+      );
+
+    this.operations?.started(options.operation);
+
+    const signal =
+      options.signal && this.operations?.signal
+        ? AbortSignal.any([options.signal, this.operations.signal])
+        : (options.signal ?? this.operations?.signal);
+    const env = buildGitEnvironment({
+      ...options.env,
+      overrides: { ...this.engine.environment, ...this.baseEnv, ...options.env?.overrides },
+    });
+    if (this.baseEnv["SSH_AUTH_SOCK"] !== undefined) {
+      // Don't let ~/.ssh/config switch away from Eda's SSH agent.
+      env["SSH_AUTH_SOCK"] = this.baseEnv["SSH_AUTH_SOCK"];
+      env["GIT_SSH_COMMAND"] = `${env["GIT_SSH_COMMAND"] ?? "ssh"} -o IdentityAgent=SSH_AUTH_SOCK`;
+    }
+
+    let result;
+
+    try {
+      result = await this.runner.run({
+        executable: this.engine.path,
+        args: ["--no-pager", ...args],
+        ...(options.cwd !== undefined && { cwd: options.cwd }),
+        env,
+        ...(options.stdin !== undefined && { stdin: options.stdin }),
+        ...(signal !== undefined && { signal }),
+        onStderrLine: (line) => {
+          options.onProgress?.(redact(line));
+          this.operations?.progress(redact(line));
+        },
+        ...(options.maxStdoutBytes !== undefined && { maxStdoutBytes: options.maxStdoutBytes }),
+        ...(options.maxStderrBytes !== undefined && { maxStderrBytes: options.maxStderrBytes }),
+      });
+    } catch (error) {
+      if (error instanceof ProcessSpawnError) {
+        if (options.cwd !== undefined && !existsSync(options.cwd)) {
+          throw new GitError({
+            kind: "not-a-repository",
+            operation: options.operation,
+            message: t("main.git.gitService.noLongerExists", { cwd: options.cwd }),
+            suggestedAction: t(
+              "main.git.gitService.itMayHaveBeenMovedOrDeletedRemoveItFromEdaOrOpenADifferentFolder",
+            ),
+            repositoryPath: options.cwd,
+          });
+        }
+
+        throw new GitError({
+          kind: "git-not-found",
+          operation: options.operation,
+          message: t("main.git.gitService.edaCouldNotStartGit"),
+          suggestedAction: t(
+            "main.git.gitService.theGitEngineIsConfiguredAsCheckThatItStillExistsInSettings",
+            { path: this.engine.path },
+          ),
+          ...(options.cwd !== undefined && { repositoryPath: options.cwd }),
+          rawStderr: error.message,
+        });
+      }
+
+      throw error;
+    }
+
+    const stderr = redact(result.stderr.toString("utf8"));
+
+    if (result.outputLimitExceeded !== undefined) {
+      throw new GitError({
+        kind: "output-too-large",
+        operation: options.operation,
+        message: t("main.git.gitService.gitProducedMoreDataThanEdaCanSafelyDisplay", {
+          outputLimitExceeded: result.outputLimitExceeded,
+        }),
+        suggestedAction: t("main.git.gitService.narrowTheRequestToFewerCommitsOrFilesAndTryAgain"),
+        ...(options.cwd !== undefined && { repositoryPath: options.cwd }),
+      });
+    }
+
+    if (result.cancelled) {
+      throw new GitError({
+        kind: "cancelled",
+        operation: options.operation,
+        message: t("main.git.gitService.theOperationWasCancelled", {
+          operation: options.operation,
+        }),
+        ...(options.cwd !== undefined && { repositoryPath: options.cwd }),
+        exitCode: result.exitCode,
+      });
+    }
+
+    const allowed = options.allowedExitCodes ?? [0];
+
+    if (!allowed.includes(result.exitCode)) {
+      throw mapGitError({
+        operation: options.operation,
+        ...(options.cwd !== undefined && { repositoryPath: options.cwd }),
+        ...(options.identityName !== undefined && { identityName: options.identityName }),
+        exitCode: result.exitCode,
+        stderr,
+        stdout: redact(result.stdout.toString("utf8")),
+      });
+    }
+
+    return {
+      stdout: redact(result.stdout.toString("utf8")),
+      stdoutBytes: options.redactValues?.length
+        ? Buffer.from(redact(result.stdout.toString("utf8")))
+        : result.stdout,
+      stderr,
+      exitCode: result.exitCode,
+    };
+  }
+
+  async execFields(args: readonly string[], options: GitExecOptions): Promise<string[]> {
+    const { stdout } = await this.exec(args, options);
+    const fields = stdout.split("\0");
+    if (fields.at(-1) === "") fields.pop();
+    return fields;
+  }
+
+  async isRepository(path: string): Promise<boolean> {
+    try {
+      const { stdout } = await this.exec(["rev-parse", "--is-inside-work-tree"], {
+        cwd: path,
+        operation: t("operations.checkRepository"),
+      });
+      return stdout.trim() === "true";
+    } catch (error) {
+      if (error instanceof GitError && error.kind === "not-a-repository") return false;
+      throw error;
+    }
+  }
+
+  async status(path: string): Promise<RepositoryStatus> {
+    const { stdoutBytes } = await this.exec(
+      [
+        "--no-optional-locks",
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "-z",
+        "--untracked-files=all",
+        "--",
+      ],
+      {
+        cwd: path,
+        operation: t("operations.readStatus"),
+        maxStdoutBytes: 8 * 1024 * 1024,
+        maxStderrBytes: 1024 * 1024,
+      },
+    );
+
+    return parseOutput(parseStatus, stdoutBytes, path, t("operations.readStatus"));
+  }
+
+  async history(
+    path: string,
+    page: {
+      offset?: number;
+      limit?: number;
+      refs?: string[];
+      hiddenRefs?: string[];
+      showStashes?: boolean;
+    } = {},
+  ): Promise<HistoryPage> {
+    const offset = page.offset ?? 0;
+    const limit = page.limit ?? HISTORY_PAGE_SIZE;
+
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      offset > 1_000_000 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > MAX_HISTORY_PAGE_SIZE
+    ) {
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.readHistory"),
+        message: t("main.git.gitService.theHistoryPageIsOutsideTheSupportedRange"),
+        suggestedAction: t("main.git.gitService.request1To200CommitsFromANonNegativeOffset"),
+        repositoryPath: path,
+      });
+    }
+
+    const format =
+      "%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f)%x00";
+
+    for (const ref of [...(page.refs ?? []), ...(page.hiddenRefs ?? [])])
+      assertValidRefName(ref, t("operations.filterHistory"));
+
+    const revisions = page.refs?.length
+      ? page.refs
+      : [
+          ...(page.hiddenRefs ?? []).map((ref) => `--exclude=${ref}`),
+          "--exclude=refs/stash",
+          "--exclude=refs/eda/*",
+          "--all",
+        ];
+
+    const stashes = page.showStashes ? await readStashHistory(this, path) : null;
+    const { stdoutBytes } = await this.exec(
+      [
+        "log",
+        ...revisions,
+        ...(stashes?.tips ?? []),
+        "--topo-order",
+        "--date=unix",
+        "--decorate=full",
+        "--decorate-refs-exclude=refs/eda/*",
+        `--max-count=${limit + 1}`,
+        `--skip=${offset}`,
+        `--format=${format}`,
+      ],
+      {
+        cwd: path,
+        operation: t("operations.readHistory"),
+        maxStdoutBytes: 16 * 1024 * 1024,
+        maxStderrBytes: 1024 * 1024,
+      },
+    );
+
+    const commits = parseOutput(parseLog, stdoutBytes, path, t("operations.readHistory"));
+
+    for (const commit of commits) {
+      const labels = stashes?.labels.get(commit.oid);
+      if (labels) commit.stashLabels = labels;
+    }
+
+    const hasMore = commits.length > limit;
+
+    if (hasMore) commits.pop();
+
+    return { commits, nextOffset: hasMore ? offset + limit : null };
+  }
+
+  async inspectCommit(path: string, oid: string): Promise<CommitInspection> {
+    assertFullObjectId(oid, t("operations.inspectCommit"));
+
+    const format =
+      "%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f)%x00";
+    const [log, refs, shallow] = await Promise.all([
+      this.exec(["log", "-1", "--decorate=full", `--format=${format}`, oid, "--"], {
+        cwd: path,
+        operation: t("operations.inspectCommit"),
+        maxStdoutBytes: 1024 * 1024,
+      }),
+      this.exec(
+        [
+          "for-each-ref",
+          `--contains=${oid}`,
+          "--format=%(refname)",
+          "refs/heads",
+          "refs/remotes",
+          "refs/tags",
+        ],
+        {
+          cwd: path,
+          operation: t("operations.findContainingReferences"),
+          maxStdoutBytes: 1024 * 1024,
+        },
+      ),
+      this.exec(["rev-parse", "--is-shallow-repository"], {
+        cwd: path,
+        operation: t("operations.inspectHistoryBoundary"),
+      }),
+    ]);
+
+    const commit = parseOutput(parseLog, log.stdoutBytes, path, t("operations.inspectCommit"))[0];
+
+    if (!commit)
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.inspectCommit"),
+        message: t("main.git.gitService.theCommitIsNoLongerAvailable"),
+        suggestedAction: t("main.git.gitService.refreshReferencesAndSelectAnAvailableCommit"),
+      });
+
+    return {
+      commit,
+      containingRefs: refs.stdout.trim().split("\n").filter(Boolean),
+      shallow: shallow.stdout.trim() === "true",
+    };
+  }
+
+  async workingDiff(
+    path: string,
+    options: { area: "unstaged" | "staged"; paths?: readonly string[] },
+  ): Promise<UnifiedDiff> {
+    const paths = literalPathspecs(options.paths, t("operations.readWorkingDiff"));
+    const args = [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--full-index",
+      "--unified=3",
+    ];
+
+    if (options.area === "staged") args.push("--cached");
+
+    args.push("--", ...paths);
+
+    const { stdoutBytes } = await this.exec(args, {
+      cwd: path,
+      operation: t("operations.readWorkingDiff"),
+      maxStdoutBytes: 32 * 1024 * 1024,
+      maxStderrBytes: 1024 * 1024,
+    });
+
+    const diff = parseOutput(parseUnifiedDiff, stdoutBytes, path, t("operations.readWorkingDiff"));
+
+    if (options.area === "staged") return diff;
+
+    const status = await this.status(path);
+    const selected = options.paths?.length ? new Set(options.paths) : undefined;
+    const untracked = status.changes.filter(
+      (change) => change.kind === "untracked" && (!selected || selected.has(change.path)),
+    );
+
+    if (untracked.length > 256) throw outputTooLarge(path, t("operations.readWorkingDiff"));
+
+    let remaining = 32 * 1024 * 1024 - stdoutBytes.length;
+
+    for (const change of untracked) {
+      assertRepositoryPath(change.path, t("operations.readWorkingDiff"));
+
+      if (remaining <= 0) throw outputTooLarge(path, t("operations.readWorkingDiff"));
+
+      const nullPath = process.platform === "win32" ? "NUL" : "/dev/null";
+      const result = await this.exec(
+        [
+          "-c",
+          "core.quotePath=false",
+          "diff",
+          "--no-index",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--full-index",
+          "--unified=3",
+          "--",
+          nullPath,
+          change.path,
+        ],
+        {
+          cwd: path,
+          operation: t("operations.readUntrackedDiff"),
+          allowedExitCodes: [0, 1],
+          maxStdoutBytes: remaining,
+          maxStderrBytes: 1024 * 1024,
+        },
+      );
+
+      remaining -= result.stdoutBytes.length;
+      diff.files.push(
+        ...parseOutput(
+          parseUnifiedDiff,
+          result.stdoutBytes,
+          path,
+          t("operations.readUntrackedDiff"),
+        ).files,
+      );
+    }
+
+    return boundDiff(diff);
+  }
+
+  async commitDiff(path: string, oid: string, paths?: readonly string[]): Promise<UnifiedDiff> {
+    assertFullObjectId(oid, t("operations.readCommitDiff"));
+
+    const safePaths = literalPathspecs(paths, t("operations.readCommitDiff"));
+    const { stdoutBytes } = await this.exec(
+      [
+        "-c",
+        "core.quotePath=false",
+        "diff-tree",
+        "--root",
+        "--diff-merges=first-parent",
+        "--no-commit-id",
+        "-r",
+        "-p",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--full-index",
+        "--unified=3",
+        oid,
+        "--",
+        ...safePaths,
+      ],
+      {
+        cwd: path,
+        operation: t("operations.readCommitDiff"),
+        maxStdoutBytes: 32 * 1024 * 1024,
+        maxStderrBytes: 1024 * 1024,
+      },
+    );
+
+    return parseOutput(parseUnifiedDiff, stdoutBytes, path, t("operations.readCommitDiff"));
+  }
+
+  async compareDiff(path: string, from: string, to: string): Promise<UnifiedDiff> {
+    assertFullObjectId(from, t("operations.compareRevisions"));
+    assertFullObjectId(to, t("operations.compareRevisions"));
+
+    const { stdoutBytes } = await this.exec(
+      [
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--full-index",
+        "--unified=3",
+        from,
+        to,
+        "--",
+      ],
+      {
+        cwd: path,
+        operation: t("operations.compareRevisions"),
+        maxStdoutBytes: 32 * 1024 * 1024,
+        maxStderrBytes: 1024 * 1024,
+      },
+    );
+
+    return parseOutput(parseUnifiedDiff, stdoutBytes, path, t("operations.compareRevisions"));
+  }
+
+  async stage(path: string, paths: readonly string[]): Promise<void> {
+    const safe = literalPathspecs(paths, t("operations.stageChanges"));
+    if (safe.length === 0) return;
+    await this.exec(["add", "--", ...safe], { cwd: path, operation: t("operations.stageChanges") });
+  }
+
+  async stageAll(path: string): Promise<void> {
+    await this.exec(["add", "--all", "--"], {
+      cwd: path,
+      operation: t("operations.stageAllChanges"),
+    });
+  }
+
+  async unstage(path: string, paths: readonly string[]): Promise<void> {
+    const safe = literalPathspecs(paths, t("operations.unstageChanges"));
+
+    if (safe.length === 0) return;
+
+    if (await this.hasCommits(path)) {
+      await this.exec(["restore", "--staged", "--", ...safe], {
+        cwd: path,
+        operation: t("operations.unstageChanges"),
+      });
+      return;
+    }
+
+    await this.exec(["rm", "--cached", "-r", "--", ...safe], {
+      cwd: path,
+      operation: t("operations.unstageChanges"),
+    });
+  }
+
+  async unstageAll(path: string): Promise<void> {
+    if (await this.hasCommits(path)) {
+      await this.exec(["restore", "--staged", "--", "."], {
+        cwd: path,
+        operation: t("operations.unstageAllChanges"),
+      });
+      return;
+    }
+
+    await this.exec(["rm", "--cached", "-r", "--", "."], {
+      cwd: path,
+      operation: t("operations.unstageAllChanges"),
+      // git rm exits with 128 if the repository has no commits and the index is empty.
+      allowedExitCodes: [0, 128],
+    });
+  }
+
+  async commit(
+    path: string,
+    message: string,
+    options: { amend?: boolean; signOff?: boolean; allowEmpty?: boolean } = {},
+    identity?: Identity,
+  ): Promise<string> {
+    if (message.trim().length === 0) {
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.commit"),
+        message: t("main.git.gitService.aCommitNeedsAMessage"),
+        suggestedAction: t("main.git.gitService.writeAShortSummaryOfTheChangeAndTryAgain"),
+        repositoryPath: path,
+      });
+    }
+
+    const args = ["commit", "--file=-", "--cleanup=strip"];
+
+    if (options.amend) args.push("--amend");
+    if (options.signOff) args.push("--signoff");
+    if (options.allowEmpty) args.push("--allow-empty");
+
+    const overrides: Record<string, string> = {};
+
+    if (identity) {
+      const signing = identity.signing;
+      // Hooks inherit these -c values through Git's config environment.
+      const config = {
+        "user.name": identity.gitName,
+        "user.email": identity.gitEmail,
+        "gpg.format": signing.format === "ssh" ? "ssh" : "openpgp",
+        "user.signingkey": signing.keyRef ?? "",
+        "commit.gpgsign":
+          signing.format !== "none" && !!signing.keyRef && signing.signCommits ? "true" : "false",
+      };
+
+      args.unshift(...Object.entries(config).flatMap(([key, value]) => ["-c", `${key}=${value}`]));
+      overrides["GIT_COMMITTER_NAME"] = identity.gitName;
+      overrides["GIT_COMMITTER_EMAIL"] = identity.gitEmail;
+
+      if (!options.amend) {
+        overrides["GIT_AUTHOR_NAME"] = identity.gitName;
+        overrides["GIT_AUTHOR_EMAIL"] = identity.gitEmail;
+      }
+    }
+
+    await this.exec(args, {
+      cwd: path,
+      operation: t("operations.commit"),
+      stdin: message,
+      env: { overrides, ...(identity?.sshKeyPath ? { sshKeyPath: identity.sshKeyPath } : {}) },
+    });
+
+    const { stdout } = await this.exec(["rev-parse", "HEAD"], {
+      cwd: path,
+      operation: t("operations.commit"),
+    });
+
+    return stdout.trim();
+  }
+
+  async createBranch(
+    path: string,
+    name: string,
+    options: { checkout?: boolean; startPoint?: string } = {},
+  ): Promise<void> {
+    assertValidRefName(name, t("operations.createBranch"));
+
+    if (options.startPoint !== undefined)
+      assertFullObjectId(options.startPoint, t("operations.createBranch"));
+
+    const start = options.startPoint === undefined ? [] : [options.startPoint];
+    const args = options.checkout
+      ? ["checkout", "--no-overwrite-ignore", "-b", name, ...start]
+      : ["branch", name, ...start];
+
+    await this.exec(args, { cwd: path, operation: t("operations.createBranch") });
+  }
+
+  async checkoutBranch(path: string, name: string): Promise<void> {
+    assertValidRefName(name, t("operations.checkoutBranch"));
+    await this.exec(["checkout", "--no-overwrite-ignore", name, "--"], {
+      cwd: path,
+      operation: t("operations.checkoutBranch"),
+    });
+  }
+
+  async deleteBranch(path: string, name: string, options: { force?: boolean } = {}): Promise<void> {
+    assertValidRefName(name, t("operations.deleteBranch"));
+    await this.exec(["branch", options.force ? "-D" : "-d", name], {
+      cwd: path,
+      operation: t("operations.deleteBranch"),
+    });
+  }
+
+  async renameBranch(path: string, from: string, to: string): Promise<void> {
+    assertValidRefName(from, t("operations.renameBranch"));
+    assertValidRefName(to, t("operations.renameBranch"));
+    await this.exec(["branch", "-m", from, to], {
+      cwd: path,
+      operation: t("operations.renameBranch"),
+    });
+  }
+
+  async listBranches(path: string): Promise<BranchSummary[]> {
+    const fields = await this.execFields(
+      [
+        "for-each-ref",
+        "--format=%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(refname)%00%(symref)%00%(worktreepath)%00",
+        "refs/heads",
+        "refs/remotes",
+      ],
+      { cwd: path, operation: t("operations.listBranches"), maxStdoutBytes: 4 * 1024 * 1024 },
+    );
+
+    const branches: BranchSummary[] = [];
+
+    for (let index = 0; index + 6 < fields.length; index += 7) {
+      if (fields[index + 5]) continue;
+
+      const fullRef = fields[index + 4]!;
+
+      branches.push({
+        // for-each-ref adds a newline after each NUL-terminated record.
+        name: fields[index]!.replace(/^\n/, ""),
+        oid: fields[index + 1]!,
+        isHead: fields[index + 2] === "*",
+        remote: fullRef.startsWith("refs/remotes/"),
+        ...(fields[index + 3] ? { upstream: fields[index + 3]! } : {}),
+        ...(fields[index + 6] ? { worktreePath: fields[index + 6]! } : {}),
+      });
+    }
+
+    return branches;
+  }
+
+  async createTag(
+    path: string,
+    name: string,
+    options: { message?: string; target?: string; sign?: boolean } = {},
+    identity?: Identity,
+  ): Promise<void> {
+    assertValidRefName(name, t("operations.createTag"));
+
+    if (options.target !== undefined) assertFullObjectId(options.target, t("operations.createTag"));
+
+    if (
+      options.sign &&
+      (!options.message?.trim() || !identity || identity.signing.format === "none")
+    )
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.signTag"),
+        message: t("main.git.gitService.chooseSshOrGpgSigningInThisProfile"),
+      });
+
+    const target = options.target === undefined ? [] : [options.target];
+    const args = options.message
+      ? [
+          "-c",
+          "tag.gpgSign=false",
+          "tag",
+          options.sign ? "--sign" : "--no-sign",
+          "--annotate",
+          "--file=-",
+          "--cleanup=strip",
+          name,
+          ...target,
+        ]
+      : ["-c", "tag.gpgSign=false", "tag", "--no-sign", name, ...target];
+
+    if (identity)
+      args.unshift(
+        "-c",
+        `user.name=${identity.gitName}`,
+        "-c",
+        `user.email=${identity.gitEmail}`,
+        "-c",
+        `gpg.format=${identity.signing.format === "ssh" ? "ssh" : "openpgp"}`,
+        "-c",
+        `user.signingkey=${identity.signing.keyRef ?? ""}`,
+      );
+
+    await this.exec(args, {
+      cwd: path,
+      operation: t("operations.createTag"),
+      ...(options.message ? { stdin: options.message } : {}),
+      ...(identity
+        ? {
+            env: {
+              overrides: {
+                GIT_COMMITTER_NAME: identity.gitName,
+                GIT_COMMITTER_EMAIL: identity.gitEmail,
+              },
+            },
+          }
+        : {}),
+    });
+  }
+
+  async verifyTag(path: string, name: string): Promise<TagVerification> {
+    assertValidRefName(name, t("operations.verifyTag"));
+
+    const { stdout } = await this.exec(["rev-parse", "--verify", `refs/tags/${name}`], {
+      cwd: path,
+      operation: t("operations.resolveTag"),
+    });
+    const oid = stdout.trim();
+
+    assertFullObjectId(oid, t("operations.verifyTag"));
+
+    const type = await this.exec(["cat-file", "-t", oid], {
+      cwd: path,
+      operation: t("operations.inspectTagType"),
+    });
+
+    if (type.stdout.trim() !== "tag")
+      return {
+        oid,
+        status: "unsigned",
+        diagnostics: t("main.git.gitService.lightweightTagsDoNotContainATagSignature"),
+      };
+
+    const tag = await this.exec(["cat-file", "tag", oid], {
+      cwd: path,
+      operation: t("operations.inspectTagSignature"),
+      maxStdoutBytes: 1024 * 1024,
+    });
+
+    if (!/^-----BEGIN (?:PGP SIGNATURE|SSH SIGNATURE|SIGNED MESSAGE)-----$/m.test(tag.stdout))
+      return {
+        oid,
+        status: "unsigned",
+        diagnostics: t("main.git.gitService.thisAnnotatedTagHasNoSignature"),
+      };
+
+    const result = await this.exec(["verify-tag", "--", oid], {
+      cwd: path,
+      operation: t("operations.verifyTag"),
+      allowedExitCodes: [0, 1],
+      maxStderrBytes: 64 * 1024,
+    });
+
+    return {
+      oid,
+      status: result.exitCode === 0 ? "verified" : "unverified",
+      diagnostics:
+        result.stderr || result.stdout || t("main.git.gitService.gitCouldNotVerifyThisSignature"),
+    };
+  }
+
+  async deleteTag(path: string, name: string): Promise<void> {
+    assertValidRefName(name, t("operations.deleteTag"));
+    await this.exec(["tag", "-d", name], { cwd: path, operation: t("operations.deleteTag") });
+  }
+
+  async listTags(path: string): Promise<TagSummary[]> {
+    const fields = await this.execFields(
+      [
+        "for-each-ref",
+        "--format=%(refname:short)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(taggername)%00%(contents)%00",
+        "refs/tags",
+      ],
+      { cwd: path, operation: t("operations.listTags"), maxStdoutBytes: 4 * 1024 * 1024 },
+    );
+
+    const tags: TagSummary[] = [];
+
+    for (let index = 0; index + 5 < fields.length; index += 6) {
+      tags.push({
+        name: fields[index]!.replace(/^\n/, ""),
+        oid: fields[index + 2] || fields[index + 1]!,
+        ...(fields[index + 3] === "tag"
+          ? { annotated: true, tagger: fields[index + 4]!, message: fields[index + 5]! }
+          : {}),
+      });
+    }
+
+    return tags;
+  }
+
+  async checkoutTag(path: string, name: string): Promise<void> {
+    assertValidRefName(name, t("operations.checkoutTag"));
+    await this.exec(["checkout", "--no-overwrite-ignore", "--detach", `refs/tags/${name}`, "--"], {
+      cwd: path,
+      operation: t("operations.checkoutTag"),
+    });
+  }
+
+  async hasCommits(path: string): Promise<boolean> {
+    const { exitCode } = await this.exec(["rev-parse", "--verify", "--quiet", "HEAD"], {
+      cwd: path,
+      operation: t("operations.readRepositoryState"),
+      allowedExitCodes: [0, 1],
+    });
+    return exitCode === 0;
+  }
+
+  async resolveRepositoryRoot(path: string): Promise<string> {
+    const { stdout } = await this.exec(["rev-parse", "--show-toplevel"], {
+      cwd: path,
+      operation: t("operations.openRepository"),
+    });
+    return stdout.trim();
+  }
+
+  async isRefNameValid(ref: string): Promise<boolean> {
+    assertValidRefName(ref, t("operations.validateReferenceName"));
+    const { exitCode } = await this.exec(["check-ref-format", "--branch", ref], {
+      operation: t("operations.validateReferenceName"),
+      allowedExitCodes: [0, 1, 128, 129],
+    });
+    return exitCode === 0;
+  }
+
+  async inspectConfig(
+    key: string,
+    options: { cwd?: string; scope?: "global" | "local" } = {},
+  ): Promise<GitConfigEntry> {
+    const showScope = this.engine.versionParts.major > 2 || this.engine.versionParts.minor >= 26;
+    const result = await this.exec(
+      [
+        "config",
+        ...(options.scope ? [`--${options.scope}`] : []),
+        "--null",
+        "--show-origin",
+        ...(showScope ? ["--show-scope"] : []),
+        "--get",
+        "--",
+        key,
+      ],
+      {
+        ...(options.cwd ? { cwd: options.cwd } : {}),
+        operation: t("operations.inspectGitConfiguration"),
+        allowedExitCodes: [0, 1],
+      },
+    );
+
+    if (result.exitCode === 1) return { key };
+
+    const parts = result.stdout.split("\0");
+    const scope = showScope ? parts.shift() : options.scope;
+    const [origin, value] = parts;
+
+    return {
+      key,
+      ...(scope !== undefined && { scope }),
+      ...(origin !== undefined && { origin }),
+      ...(value !== undefined && { value }),
+    };
+  }
+
+  async readConfig(
+    key: string,
+    options: { cwd?: string; scope?: "global" | "local" } = {},
+  ): Promise<string | undefined> {
+    const scopeArgs =
+      options.scope === "global" ? ["--global"] : options.scope === "local" ? ["--local"] : [];
+    const { stdout, exitCode } = await this.exec(["config", ...scopeArgs, "--get", "--", key], {
+      ...(options.cwd !== undefined && { cwd: options.cwd }),
+      operation: t("operations.readGitConfiguration"),
+      allowedExitCodes: [0, 1],
+    });
+
+    return exitCode === 0 ? stdout.replace(/\n$/, "") : undefined;
+  }
+
+  async writeConfig(
+    key: string,
+    value: string,
+    options: { cwd?: string; scope: "global" | "local" },
+  ): Promise<void> {
+    await this.exec(["config", `--${options.scope}`, "--", key, value], {
+      ...(options.cwd !== undefined && { cwd: options.cwd }),
+      operation: t("operations.writeGitConfiguration"),
+    });
+  }
+
+  async unsetConfig(
+    key: string,
+    options: { cwd?: string; scope: "global" | "local" },
+  ): Promise<void> {
+    await this.exec(["config", `--${options.scope}`, "--unset-all", "--", key], {
+      ...(options.cwd !== undefined && { cwd: options.cwd }),
+      operation: t("operations.clearGitConfiguration"),
+      allowedExitCodes: [0, 5],
+    });
+  }
+}

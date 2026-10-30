@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "types": ["node"]
+  },
+  "include": [
+    "scripts",
+    "tests/tooling",
+    "tests/desktop",
+    "electron-builder.config.ts",
+    "eslint.config.ts",
+    "src/renderer/env.d.ts"
+  ]
+}

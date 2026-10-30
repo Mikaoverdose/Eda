@@ -1,0 +1,205 @@
+import {
+  MAX_BACKGROUND_IMAGE_LENGTH,
+  requireSettingKey,
+  type SettingScope,
+  type SettingsContext,
+} from "@shared/preferences/settings";
+import { t } from "@shared/i18n";
+import { open } from "node:fs/promises";
+import { app, dialog, nativeImage, BrowserWindow } from "electron";
+import { ok } from "@shared/errors";
+import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
+import type { Services } from "../../services";
+import { broadcast, handle } from "../transport";
+
+import { invalidRequest } from "../request-errors";
+import { requireId, requireRecord } from "../validate";
+
+export function registerSettingsHandlers(services: Services): void {
+  const { identity } = services;
+  const context = (raw: unknown): SettingsContext => {
+    const input = requireRecord(raw, t("main.settingsHandlers.settingsContext"));
+    const profileId =
+      input["profileId"] === undefined
+        ? undefined
+        : requireId(input["profileId"], t("fields.profileId"));
+
+    if (profileId && profileId !== identity.getActive()?.id)
+      throw invalidRequest(
+        t("main.settingsHandlers.theActiveProfileChangedRefreshPreferencesAndTryAgain"),
+      );
+
+    const repositoryId =
+      input["repositoryId"] === undefined
+        ? undefined
+        : requireId(input["repositoryId"], t("fields.repositoryId"));
+
+    return { ...(profileId ? { profileId } : {}), ...(repositoryId ? { repositoryId } : {}) };
+  };
+
+  const scope = (raw: unknown): SettingScope => {
+    const input = requireRecord(raw, t("main.settingsHandlers.settingScope"));
+
+    if (input["kind"] === "application") return { kind: "application" };
+
+    const owner = context(input);
+
+    if (!owner.profileId)
+      throw invalidRequest(t("main.settingsHandlers.aProfileIsRequiredForThisScope"));
+    if (input["kind"] === "profile") return { kind: "profile", profileId: owner.profileId };
+    if (input["kind"] === "repository" && owner.repositoryId)
+      return { kind: "repository", profileId: owner.profileId, repositoryId: owner.repositoryId };
+
+    throw invalidRequest(t("main.settingsHandlers.unknownSettingScope"));
+  };
+
+  const previewing = new Map<Electron.WebContents, () => void>();
+  const applyZoomTo = (contents: Electron.WebContents) => {
+    if (contents.isDestroyed()) return;
+
+    const active = identity.getActive();
+    const value = services.preferences.resolve(
+      "uiZoom",
+      !previewing.has(contents) && active ? { profileId: active.id } : {},
+    ).value;
+
+    if (Math.abs(contents.getZoomFactor() - value / 100) > 0.001)
+      contents.setZoomFactor(value / 100);
+
+    const transparency = services.preferences.resolve(
+      "windowTransparency",
+      !previewing.has(contents) && active ? { profileId: active.id } : {},
+    ).value;
+
+    if (process.platform !== "linux")
+      BrowserWindow.fromWebContents(contents)?.setOpacity(
+        transparency.enabled ? transparency.opacity / 100 : 1,
+      );
+  };
+
+  const applyZoom = () => {
+    for (const window of BrowserWindow.getAllWindows()) applyZoomTo(window.webContents);
+  };
+
+  handle(IPC_CHANNELS.settingsPreviewGlobalAppearance, async (event, enabled) => {
+    if (typeof enabled !== "boolean")
+      throw invalidRequest(t("main.settingsHandlers.previewStateMustBeABoolean"));
+
+    const contents = event.sender;
+
+    if (enabled && !previewing.has(contents)) {
+      const clear = () => {
+        previewing.delete(contents);
+        contents.removeListener("destroyed", clear);
+        contents.removeListener("render-process-gone", clear);
+        contents.removeListener("did-start-navigation", clear);
+        applyZoomTo(contents);
+      };
+
+      previewing.set(contents, clear);
+      contents.once("destroyed", clear);
+      contents.once("render-process-gone", clear);
+      contents.once("did-start-navigation", clear);
+    } else if (!enabled) previewing.get(contents)?.();
+
+    applyZoomTo(contents);
+
+    return ok(undefined);
+  });
+
+  identity.onChange(applyZoom);
+  app.on("browser-window-created", (_event, window) => {
+    window.once("ready-to-show", () => applyZoomTo(window.webContents));
+  });
+
+  handle(IPC_CHANNELS.settingsChooseBackgroundImage, async (event) => {
+    const parent = BrowserWindow.fromWebContents(event.sender);
+
+    if (!parent) throw invalidRequest(t("main.settingsHandlers.theSettingsWindowIsUnavailable"));
+
+    const result = await dialog.showOpenDialog(parent, {
+      properties: ["openFile"],
+      filters: [
+        {
+          name: t("main.fileFilters.backgroundImages"),
+          extensions: ["png", "jpg", "jpeg", "webp"],
+        },
+      ],
+    });
+
+    if (result.canceled || !result.filePaths[0]) return ok(null);
+
+    const path = result.filePaths[0];
+    const limit = 12 * 1024 * 1024;
+    const file = await open(path, "r");
+    let bytes: Buffer;
+
+    try {
+      const metadata = await file.stat();
+
+      if (!metadata.isFile() || metadata.size > limit)
+        throw invalidRequest(t("main.settingsHandlers.chooseAnImageFileSmallerThan12Mb"));
+
+      const buffer = Buffer.alloc(limit + 1);
+      let length = 0;
+
+      while (length < buffer.length) {
+        const { bytesRead } = await file.read(buffer, length, buffer.length - length, null);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+
+      if (length > limit)
+        throw invalidRequest(t("main.settingsHandlers.chooseAnImageSmallerThan12Mb"));
+
+      bytes = buffer.subarray(0, length);
+    } finally {
+      await file.close();
+    }
+
+    let image = nativeImage.createFromBuffer(bytes);
+
+    if (image.isEmpty())
+      throw invalidRequest(
+        t("main.settingsHandlers.thisImageCouldNotBeOpenedChooseApngjpegOrWebPImage"),
+      );
+
+    const size = image.getSize();
+
+    if (Math.max(size.width, size.height) > 1920)
+      image = image.resize(size.width >= size.height ? { width: 1920 } : { height: 1920 });
+
+    const data = "data:image/jpeg;base64," + image.toJPEG(75).toString("base64");
+
+    if (data.length > MAX_BACKGROUND_IMAGE_LENGTH)
+      throw invalidRequest(t("main.settingsHandlers.thisImageIsTooDetailedChooseASmallerImage"));
+
+    return ok(data);
+  });
+
+  const changed = (key: ReturnType<typeof requireSettingKey>, target: SettingScope) => {
+    if (key === "automaticUpdateChecks") services.updates.refreshSchedule();
+    if (key === "uiZoom" || key === "windowTransparency") applyZoom();
+    broadcast(IPC_EVENTS.settingChanged, { key, scope: target });
+  };
+
+  handle(IPC_CHANNELS.settingsResolve, async (_e, rawKey, rawContext) =>
+    ok(services.preferences.resolve(requireSettingKey(rawKey), context(rawContext))),
+  );
+
+  handle(IPC_CHANNELS.settingsSet, async (_e, rawKey, rawScope, value) => {
+    const key = requireSettingKey(rawKey);
+    const target = scope(rawScope);
+    services.preferences.set(key, target, value);
+    changed(key, target);
+    return ok(undefined);
+  });
+
+  handle(IPC_CHANNELS.settingsReset, async (_e, rawKey, rawScope) => {
+    const key = requireSettingKey(rawKey);
+    const target = scope(rawScope);
+    services.preferences.reset(key, target);
+    changed(key, target);
+    return ok(undefined);
+  });
+}

@@ -1,0 +1,160 @@
+import assert from "node:assert/strict";
+import { _electron as electron, type ElectronApplication } from "playwright";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+const root = await mkdtemp(join(tmpdir(), "eda-debug-gate-"));
+const config = join(root, "gitconfig");
+
+await writeFile(config, "[user]\nname = Fixture\nemail = fixture@example.com\n");
+
+const env = {
+  ...process.env,
+  HOME: root,
+  USERPROFILE: root,
+  GIT_CONFIG_GLOBAL: config,
+  GIT_CONFIG_SYSTEM: process.platform === "win32" ? "NUL" : "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
+const modifier = process.platform === "darwin" ? "Meta" : "Control";
+let app: ElectronApplication | undefined;
+
+try {
+  app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
+
+  const page = await app.firstWindow();
+
+  page.setDefaultTimeout(20_000);
+  await page.getByRole("button", { name: "Get started", exact: true }).click();
+  await page.getByRole("textbox", { name: /^Profile name/ }).fill("Work");
+  await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
+  await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
+  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
+  await mkdir("screenshots", { recursive: true });
+  await page.keyboard.press(`${modifier}+,`);
+  await page.getByRole("button", { name: "Failure simulations", exact: true }).click();
+  await page.getByRole("heading", { name: "Failure simulations", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Fail IPC request", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Something went wrong inside Eda." }).waitFor();
+
+  const runtimeError = page.waitForEvent("pageerror");
+
+  await page.getByRole("button", { name: "Throw runtime error", exact: true }).click();
+  assert.match((await runtimeError).message, /Eda debug simulation: uncaught runtime error/);
+
+  const rejection = page.waitForEvent("pageerror");
+
+  await page.getByRole("button", { name: "Reject promise", exact: true }).click();
+  assert.match((await rejection).message, /Eda debug simulation: unhandled promise rejection/);
+
+  await page.screenshot({ path: resolve("screenshots/failure-simulations.png") });
+
+  await page.getByRole("button", { name: "Trigger render error…", exact: true }).click();
+  await page.getByRole("button", { name: "Trigger render error", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Eda could not display this screen", exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Reload Eda", exact: true }).click();
+  await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
+  console.log("Render-error reload restored the active profile.");
+
+  await app.evaluate(({ dialog }) => {
+    const original = dialog.showMessageBox;
+
+    dialog.showMessageBox = async (
+      windowOrOptions: Electron.BaseWindow | Electron.MessageBoxOptions,
+      options?: Electron.MessageBoxOptions,
+    ) => {
+      const title = (options ?? (windowOrOptions as Electron.MessageBoxOptions)).title;
+      if (title === "Crash renderer?") return { response: 1, checkboxChecked: false };
+      dialog.showMessageBox = original;
+      assertRecoveryTitle(title);
+      return { response: 0, checkboxChecked: false };
+    };
+
+    function assertRecoveryTitle(title: string | undefined) {
+      if (title !== "Eda’s window stopped") throw new Error("Expected native renderer recovery.");
+    }
+  });
+  await page.keyboard.press(`${modifier}+,`);
+  await page.getByRole("button", { name: "Failure simulations", exact: true }).click();
+
+  const crashed = app.evaluate(
+    ({ BrowserWindow }) =>
+      new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Renderer did not recover.")), 20_000);
+
+        BrowserWindow.getAllWindows()[0]!.webContents.once(
+          "render-process-gone",
+          (_event, details) => {
+            BrowserWindow.getAllWindows()[0]!.webContents.once("did-finish-load", () => {
+              clearTimeout(timer);
+              resolve(details.reason);
+            });
+          },
+        );
+      }),
+  );
+
+  await page
+    .getByRole("button", { name: "Crash renderer…", exact: true })
+    .click()
+    .catch((error: unknown) => {
+      if (!(error instanceof Error) || !error.message.includes("Target crashed")) throw error;
+    });
+  assert.match(await crashed, /^(crashed|killed)$/);
+
+  // Playwright still considers the target crashed after Electron reloads it.
+  const restored = await app.evaluate(async ({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0]!.webContents;
+
+    return contents.executeJavaScript(`new Promise((resolve, reject) => {
+      const observer = new MutationObserver(check);
+      const timer = setTimeout(() => {
+        observer.disconnect();
+        reject(new Error("The active profile was not restored after the crash."));
+      }, 5000);
+      function check() {
+        const button = document.querySelector('button[aria-label^="Active profile: Work,"]');
+        if (!button) return;
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve(button.getAttribute("aria-label"));
+      }
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+      check();
+    })`);
+  });
+
+  assert.match(restored, /Active profile: Work, work@example.com/);
+
+  console.log(
+    "Debug gate passed: real runtime errors, unhandled rejections, sanitized IPC errors, render-error reload and native renderer-crash recovery.",
+  );
+} catch (error) {
+  if (app)
+    await app
+      .windows()[0]
+      ?.screenshot({ path: resolve("screenshots/debug-gate-failure.png") })
+      .catch(() => {});
+  throw error;
+} finally {
+  if (app) {
+    const running = app;
+    const timer = setTimeout(() => running.process().kill("SIGKILL"), 5000);
+    await running.close().catch(() => running.process().kill());
+    clearTimeout(timer);
+  }
+
+  assert.ok(resolve(root).startsWith(resolve(tmpdir(), "eda-debug-gate-")));
+
+  await rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+}

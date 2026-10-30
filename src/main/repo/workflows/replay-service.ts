@@ -1,0 +1,422 @@
+import { t } from "@shared/i18n";
+import { randomUUID } from "node:crypto";
+import { GitError } from "@shared/errors";
+import type { Identity } from "@shared/identity/identity";
+import type {
+  ReplayAction,
+  ReplayCommit,
+  ReplayKind,
+  ReplayResult,
+  ReplayReview,
+} from "@shared/workflows/replay";
+import type { GitService } from "../../git/git-service";
+import { assertFullObjectId } from "../../git/validation";
+import type { IdentityManager } from "../../identity/identity-manager";
+import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
+import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
+import { matchesNativeWorkflow, type WorkflowService } from "./workflow-service";
+import { workflowFingerprint } from "./workflow-fingerprint";
+import { captureRewriteStart, finalizeRewrite } from "../history/rewrite-history";
+
+const invalid = (message: string) =>
+  new GitError({ kind: "invalid-input", operation: t("operations.replayCommits"), message });
+
+export class ReplayService {
+  private readonly recovery: DiscardService;
+  private readonly reviews = new Map<
+    string,
+    {
+      review: ReplayReview;
+      root: string;
+      repositoryId: string;
+      identity: Identity;
+      workflowToken: string | null;
+      fingerprint: string;
+      record?: WorkflowJournalRecord;
+      snapshot?: OperationSnapshot;
+      expires: number;
+    }
+  >();
+
+  constructor(
+    private readonly git: GitService,
+    private readonly repositories: RepositoryManager,
+    private readonly writer: RepositoryWriter,
+    private readonly identities: IdentityManager,
+    private readonly workflows: WorkflowService,
+    private readonly journal: WorkflowJournal,
+    recovery: ContentRecoveryRepository,
+  ) {
+    this.recovery = new DiscardService(git, recovery);
+  }
+
+  private async commits(root: string, oids: string[]): Promise<ReplayCommit[]> {
+    if (!oids.length) return [];
+
+    const result = await this.git.exec(
+      ["show", "--no-patch", "--no-walk=unsorted", "-z", "--format=%H%x00%P%x00%s", ...oids, "--"],
+      { cwd: root, operation: t("operations.reviewReplayCommits"), maxStdoutBytes: 1024 * 1024 },
+    );
+    const fields = result.stdout.split("\0");
+
+    if (fields.at(-1) === "") fields.pop();
+    if (fields.length !== oids.length * 3)
+      throw invalid(t("main.replayService.gitReturnedAnIncompleteCommitSelection"));
+
+    return oids.map((oid, index) => {
+      if (fields[index * 3] !== oid)
+        throw invalid(t("main.replayService.gitReturnedADifferentCommitOrderReviewAgain"));
+
+      return {
+        oid,
+        subject: fields[index * 3 + 2]!,
+        parents: fields[index * 3 + 1]!.split(" ").filter(Boolean),
+      };
+    });
+  }
+
+  prepare(
+    repositoryId: string,
+    kind: ReplayKind,
+    action: ReplayAction,
+    oids: string[] = [],
+    mainline?: number,
+  ): Promise<ReplayReview> {
+    if (
+      !["cherry-pick", "revert"].includes(kind) ||
+      !["start", "continue", "skip", "abort"].includes(action)
+    )
+      throw invalid(t("main.replayService.chooseACherryPickOrRevertAction"));
+
+    if (
+      !Array.isArray(oids) ||
+      oids.length > 100 ||
+      new Set(oids).size !== oids.length ||
+      (action === "start" && !oids.length)
+    )
+      throw invalid(t("main.replayService.choose1To100DistinctCommitIDsInExecutionOrder"));
+
+    for (const oid of oids) assertFullObjectId(oid, t("operations.reviewReplayCommit"));
+
+    if (mainline !== undefined && (!Number.isInteger(mainline) || mainline < 1 || mainline > 1024))
+      throw invalid(t("main.replayService.chooseAValidMainlineParentNumber"));
+
+    return this.writer.remoteOperation(
+      repositoryId,
+      t("main.replayService.review", { kind: kind }),
+      async (root, identity) => {
+        const status = await this.git.status(root);
+        const workflow = await this.workflows.observe(root, status);
+        let record = this.journal.activeLocal(root, kind);
+
+        if (action === "start") {
+          if (
+            workflow ||
+            status.changes.length ||
+            status.branch.detached ||
+            !status.branch.head ||
+            !status.branch.oid
+          )
+            throw invalid(t("main.replayService.checkOutACleanExistingBranchAndFinish"));
+
+          record = undefined;
+        } else {
+          if (workflow?.kind !== kind || !workflow.originalHead)
+            throw invalid(
+              t("main.replayService.noIsAvailableRefreshRepositoryState", { kind: kind }),
+            );
+          if (!matchesNativeWorkflow(record, workflow)) record = undefined;
+
+          if (record && record.profileId !== identity.id)
+            throw invalid(
+              t(
+                "main.replayService.switchToTheProfileThatOwnsThisOperationBeforeContinuingOrAborting",
+              ),
+            );
+
+          if (action === "continue" && workflow.conflicts.length)
+            throw invalid(t("main.replayService.resolveAndStageEveryConflictBeforeContinuing"));
+        }
+
+        const commits = await this.commits(
+          root,
+          action === "start" ? oids : (record?.incoming ?? workflow?.incoming ?? []),
+        );
+
+        if (mainline !== undefined && commits.some((commit) => mainline > commit.parents.length))
+          throw invalid(t("main.replayService.thatMainlineParentDoesNotExistInEvery"));
+
+        let snapshot: OperationSnapshot | undefined;
+
+        if (action === "abort" || action === "skip") {
+          const paths = new Set(
+            status.changes
+              .filter((item) => item.kind !== "untracked" && item.kind !== "ignored")
+              .flatMap((item) =>
+                item.originalPath ? [item.path, item.originalPath] : [item.path],
+              ),
+          );
+
+          if (action === "abort") {
+            const changed = await this.git.exec(
+              [
+                "diff",
+                "--name-only",
+                "-z",
+                "--no-renames",
+                "--no-ext-diff",
+                "--no-textconv",
+                workflow!.originalHead!,
+                "--",
+              ],
+              { cwd: root, operation: t("operations.reviewReplayAbortPaths") },
+            );
+
+            for (const path of changed.stdout.split("\0").filter(Boolean)) paths.add(path);
+          }
+
+          snapshot = await this.recovery.prepareOperation(root, identity.id, repositoryId, [
+            ...paths,
+          ]);
+          snapshot.record.source = "replay-recovery";
+        }
+
+        const captured = record?.identity ?? identity;
+        const review: ReplayReview = {
+          token: randomUUID(),
+          kind,
+          action,
+          head: action === "start" ? status.branch.oid! : workflow!.originalHead!,
+          branch: status.branch.head ?? null,
+          commits,
+          ...(mainline !== undefined ? { mainline } : {}),
+          author: captured.gitName,
+          email: captured.gitEmail,
+          paths: snapshot?.record.paths ?? [],
+          recoveryBytes: snapshot?.record.bytes ?? 0,
+        };
+
+        this.reviews.set(review.token, {
+          review,
+          root,
+          repositoryId,
+          identity: captured,
+          workflowToken: workflow?.token ?? null,
+          fingerprint: await workflowFingerprint(this.git, root, status),
+          ...(record ? { record } : {}),
+          ...(snapshot ? { snapshot } : {}),
+          expires: Date.now() + 300_000,
+        });
+
+        while (this.reviews.size > 8) this.reviews.delete(this.reviews.keys().next().value!);
+
+        return review;
+      },
+    );
+  }
+
+  execute(repositoryId: string, token: string): Promise<ReplayResult> {
+    const repository = this.repositories.resolveActiveRepository(repositoryId);
+    const pending = this.reviews.get(token);
+
+    if (
+      !pending ||
+      pending.expires < Date.now() ||
+      pending.repositoryId !== repositoryId ||
+      pending.root !== repository.path ||
+      pending.identity.id !== repository.identityId
+    )
+      throw invalid(
+        t("main.replayService.thisReplayReviewExpiredOrBelongsToAnotherContextReviewAgain"),
+      );
+
+    const { review, identity } = pending;
+
+    if (
+      review.action === "start" &&
+      review.commits.some((commit) => commit.parents.length > 1) &&
+      review.mainline === undefined
+    )
+      throw invalid(t("main.replayService.chooseTheMainlineParentBeforeReplayingAMergeCommit"));
+
+    return this.writer.remoteOperation(
+      repositoryId,
+      `${review.kind} ${review.action}`,
+      async (root) => {
+        const status = await this.git.status(root);
+        const workflow = await this.workflows.observe(root, status);
+
+        if (
+          (workflow?.token ?? null) !== pending.workflowToken ||
+          (await workflowFingerprint(this.git, root, status)) !== pending.fingerprint
+        )
+          throw invalid(
+            t("main.replayService.theOperationOrRepositoryChangedAfterReviewReviewAgain"),
+          );
+
+        if (workflow?.ownerProfileId && workflow.ownerProfileId !== identity.id)
+          throw invalid(t("main.replayService.anotherProfileOwnsThisOperation"));
+
+        if (review.action !== "abort") this.identities.assertOperationIdentity(identity);
+
+        if (pending.snapshot)
+          await this.recovery.saveOperation(pending.snapshot.record, pending.snapshot.index);
+
+        const record: WorkflowJournalRecord = pending.record ?? {
+          version: 1,
+          id: randomUUID(),
+          repositoryId,
+          profileId: identity.id,
+          root,
+          identity,
+          mode: review.kind,
+          head: review.head,
+          ...(review.branch ? { branch: review.branch } : {}),
+          incoming: review.commits.map((commit) => commit.oid),
+          workflowToken: pending.workflowToken ?? "",
+          tree: "",
+          message: review.kind,
+          author: identity.gitName,
+          email: identity.gitEmail,
+          signing: identity.signing.signCommits,
+          state: "prepared",
+          updatedAt: new Date().toISOString(),
+        };
+
+        record.state = "running";
+
+        if (workflow?.instance && !record.nativeInstance) record.nativeInstance = workflow.instance;
+
+        this.journal.save(record);
+        this.reviews.delete(token);
+
+        const rewriteStart =
+          review.action === "abort"
+            ? undefined
+            : (record.rewriteStart ?? (await captureRewriteStart(this.git, root)));
+
+        if (rewriteStart && !record.rewriteStart) {
+          record.rewriteStart = rewriteStart;
+          this.journal.save(record);
+        }
+
+        const signing = identity.signing;
+        const config = {
+          "user.name": identity.gitName,
+          "user.email": identity.gitEmail,
+          "gpg.format": signing.format === "ssh" ? "ssh" : "openpgp",
+          "user.signingkey": signing.keyRef ?? "",
+          "commit.gpgsign":
+            signing.format !== "none" && !!signing.keyRef && signing.signCommits ? "true" : "false",
+          "submodule.recurse": "false",
+        };
+
+        try {
+          const result = await this.git.exec(
+            [
+              ...Object.entries(config).flatMap(([key, value]) => ["-c", `${key}=${value}`]),
+              review.kind,
+              ...(review.action === "start"
+                ? [
+                    "--no-edit",
+                    ...(review.kind === "cherry-pick" ? ["--allow-empty"] : []),
+                    "--no-walk=unsorted",
+                    ...(review.mainline !== undefined
+                      ? ["--mainline", String(review.mainline)]
+                      : []),
+                    "--stdin",
+                  ]
+                : [`--${review.action}`]),
+            ],
+            {
+              cwd: root,
+              operation: `${review.kind} ${review.action}`,
+              allowedExitCodes: [0, 1],
+              ...(review.action === "start"
+                ? { stdin: `${review.commits.map((commit) => commit.oid).join("\n")}\n` }
+                : {}),
+              env: {
+                ...(identity.sshKeyPath ? { sshKeyPath: identity.sshKeyPath } : {}),
+                overrides: {
+                  GIT_EDITOR: "true",
+                  GIT_COMMITTER_NAME: identity.gitName,
+                  GIT_COMMITTER_EMAIL: identity.gitEmail,
+                  ...(review.kind === "revert"
+                    ? { GIT_AUTHOR_NAME: identity.gitName, GIT_AUTHOR_EMAIL: identity.gitEmail }
+                    : {}),
+                },
+              },
+            },
+          );
+
+          const after = await this.git.status(root);
+          const remaining = await this.workflows.observe(root, after);
+
+          if (remaining?.instance && !record.nativeInstance)
+            record.nativeInstance = remaining.instance;
+
+          record.state = remaining?.kind === review.kind ? "paused" : "completed";
+
+          if (after.branch.oid) record.resultHead = after.branch.oid;
+
+          if (result.exitCode !== 0 && !remaining)
+            throw invalid(
+              t(
+                "main.replayService.gitCouldNotCompleteThisActionInspectActivityAndRepositoryState",
+              ),
+            );
+
+          if (record.state === "completed" && rewriteStart) {
+            try {
+              await finalizeRewrite(
+                this.git,
+                this.journal,
+                this.recovery,
+                record,
+                after.branch.oid ?? null,
+                rewriteStart,
+              );
+            } catch (error) {
+              record.recoveryWarning = t(
+                "main.replayService.completedButAutomaticUndoCouldNotBePreparedUseHistoryRecoveryToInspectTheOriginalCommit",
+                {
+                  kind: review.kind,
+                  head: record.head,
+                  value3:
+                    error instanceof Error
+                      ? error.message
+                      : t("main.replayService.recoveryMetadataCouldNotBeSaved"),
+                },
+              );
+            }
+          }
+
+          return {
+            state: remaining ? "needs-attention" : "completed",
+            head: after.branch.oid ?? null,
+            ...(record.recoveryWarning ? { recoveryWarning: record.recoveryWarning } : {}),
+          };
+        } finally {
+          if (record.state === "running") {
+            record.state = "paused";
+
+            try {
+              const remaining = await this.workflows.observe(root, await this.git.status(root));
+              if (remaining?.instance && !record.nativeInstance)
+                record.nativeInstance = remaining.instance;
+              if (remaining?.kind !== review.kind) record.state = "completed";
+            } catch {}
+          }
+
+          record.updatedAt = new Date().toISOString();
+          this.journal.save(record);
+
+          if (pending.snapshot) await this.recovery.finishOperation(pending.snapshot.record);
+        }
+      },
+    );
+  }
+}

@@ -1,0 +1,287 @@
+import assert from "node:assert/strict";
+import { _electron as electron, type ElectronApplication } from "playwright";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assertCompositorMotion } from "../helpers/motion.ts";
+
+type Probe = {
+  motion?: string | undefined;
+  ready?: number;
+  finished?: number;
+  duration?: number;
+  paneOpacity?: string;
+  paneAnimation?: string;
+  error?: string;
+};
+
+declare global {
+  interface Window {
+    __navigationProbes: Probe[];
+    __navigationWatchChanges: number;
+  }
+}
+
+const root = await mkdtemp(join(tmpdir(), "eda-navigation-gate-"));
+const config = join(root, "gitconfig");
+
+await writeFile(config, "[user]\nname = Fixture\nemail = fixture@example.com\n");
+
+let app: ElectronApplication | undefined;
+
+try {
+  app = await electron.launch({
+    args: ["dist/main/index.js", "--no-sandbox", `--user-data-dir=${root}`],
+    env: {
+      ...process.env,
+      HOME: root,
+      USERPROFILE: root,
+      GIT_CONFIG_GLOBAL: config,
+      GIT_CONFIG_NOSYSTEM: "1",
+      ...(process.env["EDA_DEV_SERVER_URL"]
+        ? { VITE_DEV_SERVER_URL: process.env["EDA_DEV_SERVER_URL"] }
+        : {}),
+    },
+  });
+
+  const page = await app.firstWindow();
+
+  page.setDefaultTimeout(20000);
+  await page.getByRole("button", { name: "Get started", exact: true }).waitFor();
+  await assertCompositorMotion(page);
+  await page.getByRole("button", { name: "Get started", exact: true }).click();
+  await page.getByRole("textbox", { name: /^Profile name/ }).fill("Navigation fixture");
+  await page.getByRole("textbox", { name: /^Git author name/ }).fill("Fixture");
+  await page.getByRole("textbox", { name: /^Git email/ }).fill("fixture@example.com");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
+  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await page.getByRole("button", { name: /Active profile: Navigation fixture/ }).waitFor();
+
+  const repositoryPath = join(root, "navigation-repository");
+
+  await mkdir(repositoryPath);
+  execFileSync("git", ["init", "-b", "main", repositoryPath], { stdio: "pipe" });
+
+  const repositoryId = await page.evaluate(async (path) => {
+    const opened = await window.eda.repository.open(path);
+    if (!opened.ok) throw new Error(opened.error.message);
+    return opened.value.id;
+  }, repositoryPath);
+
+  await page.getByRole("button", { name: "Open navigation-repository", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Filter changed files", exact: true }).waitFor();
+
+  const backgroundBytes = await readFile(
+    new URL("../fixtures/backgrounds/sakura.jpg", import.meta.url),
+  );
+  const backgroundImage = `data:image/jpeg;base64,${backgroundBytes.toString("base64")}`;
+
+  await page.evaluate(async (image) => {
+    const decoded = new Image();
+
+    decoded.src = image;
+    await decoded.decode();
+
+    const result = await window.eda.settings.set(
+      "background",
+      { kind: "application" },
+      {
+        image,
+        strength: 20,
+        blur: 4,
+      },
+    );
+
+    if (!result.ok) throw new Error(result.error.message);
+  }, backgroundImage);
+  await page.waitForFunction(() => document.documentElement.dataset["customBackground"] === "true");
+  await page.evaluate((id) => {
+    window.__navigationWatchChanges = 0;
+    window.eda.events.onRepositoryChanged((changed) => {
+      if (changed === id) window.__navigationWatchChanges++;
+    });
+  }, repositoryId);
+  await page.evaluate(() => {
+    window.__navigationProbes = [];
+
+    const original = document.startViewTransition.bind(document);
+
+    document.startViewTransition = (update) => {
+      const probe: Probe = { motion: document.documentElement.dataset["navigationMotion"] };
+
+      window.__navigationProbes.push(probe);
+
+      const transition = original(update);
+
+      void transition.ready
+        .then(() => {
+          probe.ready = performance.now();
+          probe.duration =
+            parseFloat(
+              getComputedStyle(
+                document.documentElement,
+                probe.motion === "layout"
+                  ? "::view-transition-group(layout-pane-0)"
+                  : "::view-transition-new(navigation-content)",
+              ).animationDuration,
+            ) * 1000;
+          if (probe.motion === "layout") {
+            probe.paneOpacity = getComputedStyle(
+              document.documentElement,
+              "::view-transition-new(layout-pane-0)",
+            ).opacity;
+            probe.paneAnimation = getComputedStyle(
+              document.documentElement,
+              "::view-transition-group(layout-pane-0)",
+            ).animationName;
+          }
+        })
+        .catch((error: unknown) => {
+          probe.error = String(error);
+        });
+      void transition.finished.then(() => {
+        probe.finished = performance.now();
+      });
+
+      return transition;
+    };
+  });
+
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
+  const settled = async (motion: string) =>
+    page.waitForFunction((expected) => {
+      const probe = window.__navigationProbes.at(-1);
+      return probe?.motion === expected && probe.finished !== undefined;
+    }, motion);
+
+  const draft = page.getByRole("textbox", { name: "Commit title", exact: true });
+
+  await draft.fill("Keep this draft through layout changes");
+
+  for (const name of [
+    "Maximize working tree",
+    "Restore working tree",
+    "Collapse working tree",
+    "Expand Working tree",
+    "Hide branches and tags",
+    "Show branches and tags",
+    "Activity",
+    "Activity",
+  ]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await settled("layout");
+  }
+
+  assert.equal(await draft.inputValue(), "Keep this draft through layout changes");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  const beforeReduced = await page.evaluate(() => window.__navigationProbes.length);
+
+  await page.getByRole("button", { name: "Collapse working tree", exact: true }).click();
+  await page.getByRole("button", { name: "Expand Working tree", exact: true }).click();
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__navigationProbes.length), beforeReduced);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  await settings.click();
+  await settled("forward");
+  await page.evaluate(() => {
+    window.__navigationWatchChanges = 0;
+  });
+  await writeFile(join(repositoryPath, "changed-in-settings.txt"), "external change\n");
+  await page.waitForFunction(() => window.__navigationWatchChanges > 0);
+  await settings.click();
+  await settled("back");
+  await page.evaluate(async () => {
+    const profile = await window.eda.identity.getActive();
+
+    if (!profile.ok || !profile.value) throw new Error("Missing fixture profile");
+
+    for (const [scope, value] of [
+      [{ kind: "profile", profileId: profile.value.id }, 100],
+      [{ kind: "application" }, 110],
+    ] as const) {
+      const result = await window.eda.settings.set("uiZoom", scope, value);
+      if (!result.ok) throw new Error(result.error.message);
+    }
+  });
+
+  const width = await page.evaluate(() => innerWidth);
+
+  await settings.click();
+  await settled("forward");
+  await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
+  await settled("section");
+  await page.waitForFunction((previous) => innerWidth < previous, width);
+  await settings.click();
+  await settled("back");
+  await page.waitForFunction((previous) => innerWidth === previous, width);
+
+  const probes = await page.evaluate(() => window.__navigationProbes);
+  const layouts = probes.filter((probe) => probe.motion === "layout");
+  const section = probes.find((probe) => probe.motion === "section");
+
+  assert.equal(layouts.length, 8);
+  assert.ok(section?.duration);
+  for (const layout of layouts) {
+    assert.equal(layout.duration, section.duration, "Pane resizing reuses the shared motion pace.");
+    assert.equal(layout.paneOpacity, "1", "Pane resizing keeps content solid.");
+    assert.ok(layout.paneAnimation && layout.paneAnimation !== "none", "Pane bounds must animate.");
+  }
+
+  for (const probe of probes) {
+    assert.equal(probe.error, undefined, `Capture failed: ${probe.error}`);
+    assert.ok(probe.ready !== undefined && probe.finished !== undefined && probe.duration);
+    assert.ok(
+      probe.finished - probe.ready >= probe.duration * 0.8,
+      `${probe.motion} was cut short: ${probe.finished - probe.ready}ms of ${probe.duration}ms`,
+    );
+  }
+
+  // Use raw clicks: Locator.click waits for hit testing and hides this bug.
+  const bounds = await settings.boundingBox();
+
+  assert.ok(bounds);
+
+  const initialCount = probes.length;
+
+  for (const [offset, motion] of ["forward", "back", "forward", "back"].entries()) {
+    if (offset > 0) {
+      assert.equal(
+        await page.evaluate(() => window.__navigationProbes.at(-1)?.finished),
+        undefined,
+        "The test must interrupt a running animation",
+      );
+    }
+
+    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.waitForFunction(
+      ({ index, expected }) => {
+        const probe = window.__navigationProbes[index];
+        return probe?.motion === expected && probe.ready !== undefined;
+      },
+      { index: initialCount + offset, expected: motion },
+    );
+  }
+
+  await settled("back");
+  assert.equal(await settings.getAttribute("aria-current"), null);
+  assert.equal(
+    await page.getByRole("searchbox", { name: "Filter changed files" }).isVisible(),
+    true,
+  );
+
+  console.log(
+    "Shared pane resizing and navigation motion passed: maximize, collapse, reference sidebar, retained drafts, reduced motion, pointer interruption, watching and scale restoration.",
+  );
+} finally {
+  await app?.close();
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}

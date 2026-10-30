@@ -1,0 +1,452 @@
+import { t, type MessageKey } from "@shared/i18n";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir } from "node:fs/promises";
+import { basename, isAbsolute, join } from "node:path";
+import type {
+  CloneRequest,
+  FetchRequest,
+  PushPreview,
+  PushRequest,
+  RemoteChange,
+  RemoteState,
+} from "@shared/integrations/remotes";
+import type { Identity } from "@shared/identity/identity";
+import { GitError } from "@shared/errors";
+import { isGitHubHttps } from "@shared/integrations/github";
+import type { GitHubAuth } from "../../providers/github-auth";
+import type { GitService } from "../../git/git-service";
+import {
+  GitRemotes,
+  remoteError,
+  remoteName,
+  remoteUrl,
+  transportOptions,
+} from "../../git/operations/remotes";
+import { assertValidRefName } from "../../git/validation";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
+import type { IdentityManager } from "../../identity/identity-manager";
+import type { IdentityRepository } from "../../persistence/identity-repository";
+import type { OperationManager } from "../../operations/operation-manager";
+import type { FetchHistoryRepository } from "../../persistence/fetch-history-repository";
+
+interface PreparedPush {
+  preview: PushPreview;
+  request: PushRequest;
+  identity: Identity;
+  path: string;
+  expires: number;
+}
+
+export class RemoteService {
+  private readonly remotes: GitRemotes;
+  private readonly pushes = new Map<string, PreparedPush>();
+
+  constructor(
+    private readonly git: GitService,
+    private readonly repositories: RepositoryManager,
+    private readonly writer: RepositoryWriter,
+    private readonly identity: IdentityManager,
+    private readonly identities: IdentityRepository,
+    private readonly operations: OperationManager,
+    private readonly fetchHistory: FetchHistoryRepository,
+    private readonly github?: Pick<GitHubAuth, "forFetch">,
+  ) {
+    this.remotes = new GitRemotes(git);
+  }
+
+  async inspect(id: string): Promise<RemoteState> {
+    const { path } = this.repositories.resolveActiveRepository(id);
+    const [remotes, branches, states] = await Promise.all([
+      this.remotes.list(path),
+      this.git.listBranches(path),
+      this.remotes.upstreamStates(path),
+    ]);
+
+    return {
+      remotes,
+      branches: branches.map((branch) => ({
+        ...branch,
+        upstreamState: states.get(branch.name) ?? "",
+      })),
+    };
+  }
+
+  async fetchStates(id: string) {
+    const repository = this.repositories.resolveActiveRepository(id);
+
+    return (await this.remotes.list(repository.path)).map((remote) => ({
+      name: remote.name,
+      supported: remote.fetchUrls.length === 1,
+      history: this.fetchHistory.read(
+        repository.identityId,
+        id,
+        remote.name,
+        remote.fetchUrls[0] ?? "",
+      ),
+    }));
+  }
+
+  change(id: string, change: RemoteChange): Promise<void> {
+    return this.writer.remoteOperation(
+      id,
+      t("main.remoteService.configureRemote"),
+      (path) => this.remotes.change(path, change),
+      "main.remoteService.configureRemote",
+    );
+  }
+
+  track(id: string, branch: string, upstream: string | null): Promise<void> {
+    return this.writer.remoteOperation(
+      id,
+      t("main.remoteService.setUpstream"),
+      (path) => this.remotes.track(path, branch, upstream),
+      "main.remoteService.setUpstream",
+    );
+  }
+
+  cancelScheduled(profileId: string, repositoryId: string): void {
+    for (const operation of this.operations.list(profileId))
+      if (
+        operation.repositoryId === repositoryId &&
+        operation.kindKey === "main.backgroundFetchService.backgroundFetch" &&
+        (operation.state === "queued" || operation.state === "running")
+      )
+        this.operations.cancel(profileId, operation.id);
+  }
+
+  fetch(
+    request: FetchRequest,
+    kind = t("main.remoteService.fetchRemotes"),
+    kindKey: MessageKey = "main.remoteService.fetchRemotes",
+  ): Promise<string> {
+    return this.writer.remoteOperation(
+      request.repositoryId,
+      kind,
+      (path, identity) => this.fetchInPlace(path, identity, request),
+      kindKey,
+    );
+  }
+
+  // The caller must already hold the repository writer lock.
+  async fetchInPlace(
+    path: string,
+    identity: Identity,
+    request: FetchRequest,
+    refspec?: string,
+  ): Promise<string> {
+    if (request.remote === null && request.credentials)
+      throw remoteError(t("main.remoteService.fetchOneRemoteWhenSupplyingHttpsCredentials"));
+
+    const names =
+      request.remote === null
+        ? (await this.remotes.list(path)).map((remote) => remote.name)
+        : [request.remote];
+
+    if (!names.length) throw remoteError(t("main.remoteService.addARemoteBeforeFetching"));
+
+    const completed: string[] = [];
+
+    for (const name of names) {
+      const url = await this.remotes.destination(path, name, false);
+
+      this.operations.progress(
+        t("main.remoteService.fetching", {
+          name: name,
+          value2: request.prune ? t("main.remoteService.withPruning") : "",
+        }),
+      );
+
+      try {
+        const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
+        const result = await this.git.exec(
+          [
+            "fetch",
+            "--progress",
+            "--no-recurse-submodules",
+            request.prune ? "--prune" : "--no-prune",
+            "--no-prune-tags",
+            ...(request.tags ? ["--tags"] : ["--no-tags"]),
+            "--",
+            url,
+            refspec ?? `+refs/heads/*:refs/remotes/${name}/*`,
+          ],
+          {
+            cwd: path,
+            operation: t("operations.fetch", { name: name }),
+            ...transportOptions(url, identity, credentials),
+          },
+        );
+
+        this.operations.progress(
+          t("main.remoteService.completed", {
+            name: name,
+            value2: result.stderr || t("main.remoteService.remoteTrackingBranchesAreUpToDate"),
+          }),
+        );
+        completed.push(name);
+        this.fetchHistory.record(identity.id, request.repositoryId, name, url, Date.now(), null);
+      } catch (error) {
+        const accessDenied =
+          error instanceof GitError &&
+          /returned error: 403|write access to repository not granted/i.test(error.rawStderr ?? "");
+        const failure =
+          this.github &&
+          isGitHubHttps(url) &&
+          error instanceof GitError &&
+          error.kind === "auth-failed"
+            ? new GitError({
+                kind: accessDenied ? "github-access-required" : "github-auth-required",
+                operation: error.operation,
+                message: accessDenied
+                  ? t("main.remoteService.gitHubDeniedRepositoryAccessEnableEdaFor")
+                  : t("main.remoteService.gitHubRejectedThisLoginSignInWithGitHubAgainThenRetry"),
+                suggestedAction: accessDenied
+                  ? t(
+                      "main.remoteService.openSettingsProfileIntegrationsEnableAccessOrManageAccess",
+                    )
+                  : t(
+                      "main.remoteService.reconnectGitHubInTheIntegrationsSectionOfProfileSettings",
+                    ),
+              })
+            : error;
+        this.fetchHistory.record(
+          identity.id,
+          request.repositoryId,
+          name,
+          url,
+          Date.now(),
+          failure instanceof Error ? failure.message : t("main.remoteService.fetchFailed"),
+        );
+
+        throw failure;
+      }
+    }
+
+    return t("main.remoteService.fetchedLocalBranchesAndFilesWereNotChanged", {
+      completed: completed.join(", "),
+      value2: request.prune ? t("main.remoteService.deletedRemoteTrackingBranchesPruned") : "",
+    });
+  }
+
+  preparePush(request: PushRequest): Promise<PushPreview> {
+    remoteName(request.remote);
+
+    if (request.mode !== "delete") assertValidRefName(request.branch, t("operations.pushSource"));
+    if (request.setUpstream && (request.mode === "delete" || request.refKind === "tag"))
+      throw remoteError(t("main.remoteService.upstreamTrackingIsOnlyAvailableWhenPushingABranch"));
+
+    assertValidRefName(request.destination, t("operations.pushDestination"));
+
+    return this.writer.remoteOperation(
+      request.repositoryId,
+      t("main.remoteService.inspectPushDestination"),
+      async (path, identity) => {
+        const url = await this.remotes.destination(path, request.remote, true);
+        const namespace = request.refKind === "tag" ? "tags" : "heads";
+        const source = request.mode === "delete" ? "" : `refs/${namespace}/${request.branch}`;
+        const destination = `refs/${namespace}/${request.destination}`;
+        const localOid = source
+          ? (
+              await this.git.exec(["rev-parse", "--verify", source], {
+                cwd: path,
+                operation: t("operations.inspectPushSource"),
+              })
+            ).stdout.trim()
+          : null;
+
+        const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
+        const result = await this.git.exec(["ls-remote", "--refs", "--", url, destination], {
+          cwd: path,
+          operation: t("operations.inspectRemoteBranch"),
+          ...transportOptions(url, identity, credentials),
+        });
+        const match = result.stdout
+          .split("\n")
+          .map((line) => line.split("\t"))
+          .find(([, ref]) => ref === destination);
+        const remoteOid = match?.[0] ?? null;
+
+        if (remoteOid !== null && !/^[a-f0-9]{40,64}$/.test(remoteOid))
+          throw remoteError(t("main.remoteService.theRemoteReturnedAnInvalidObjectId"));
+        if (request.mode === "delete" && remoteOid === null)
+          throw remoteError(
+            t("main.remoteService.thatRemoteRefNoLongerExistsRefreshBeforeDeleting"),
+          );
+
+        const preview: PushPreview = {
+          token: randomUUID(),
+          url,
+          source,
+          destination,
+          localOid,
+          remoteOid,
+          mode: request.mode,
+        };
+
+        for (const [key, value] of this.pushes)
+          if (value.expires < Date.now()) this.pushes.delete(key);
+
+        if (this.pushes.size >= 20) this.pushes.delete(this.pushes.keys().next().value!);
+
+        const savedRequest = { ...request };
+
+        delete savedRequest.credentials;
+        this.pushes.set(preview.token, {
+          preview,
+          request: savedRequest,
+          path,
+          identity,
+          expires: Date.now() + 5 * 60_000,
+        });
+
+        return preview;
+      },
+      "main.remoteService.inspectPushDestination",
+    );
+  }
+
+  push(id: string, token: string, credentials?: PushRequest["credentials"]): Promise<string> {
+    const prepared = this.pushes.get(token);
+
+    this.pushes.delete(token);
+
+    const repository = this.repositories.resolveActiveRepository(id);
+
+    if (
+      !prepared ||
+      prepared.expires < Date.now() ||
+      prepared.request.repositoryId !== id ||
+      prepared.identity.id !== repository.identityId ||
+      prepared.path !== repository.path
+    )
+      throw remoteError(t("main.remoteService.thePushPreviewExpiredOrItsProfileChanged"));
+
+    return this.writer.remoteOperation(
+      id,
+      t("operationTitles.pushBranch"),
+      async (path) => {
+        const { request, preview, identity } = prepared;
+        const url = await this.remotes.destination(path, request.remote, true);
+        const localOid = preview.source
+          ? (
+              await this.git.exec(["rev-parse", "--verify", preview.source], {
+                cwd: path,
+                operation: t("operations.recheckPushSource"),
+              })
+            ).stdout.trim()
+          : null;
+
+        if (url !== preview.url || localOid !== preview.localOid)
+          throw remoteError(
+            t("main.remoteService.theBranchOrDestinationChangedAfterPreviewReviewANewPushPreview"),
+          );
+
+        const result = await this.git.exec(
+          [
+            "-c",
+            `remote.${request.remote}.mirror=false`,
+            "push",
+            "--porcelain",
+            "--progress",
+            "--no-follow-tags",
+            "--recurse-submodules=no",
+            ...(request.mode === "lease" || request.mode === "delete"
+              ? [`--force-with-lease=${preview.destination}:${preview.remoteOid ?? ""}`]
+              : request.mode === "force"
+                ? ["--force"]
+                : ["--no-force"]),
+            ...(request.setUpstream ? ["--set-upstream"] : []),
+            "--",
+            request.remote,
+            `${preview.source}:${preview.destination}`,
+          ],
+          {
+            cwd: path,
+            operation: t("operations.pushBranch"),
+            ...transportOptions(
+              url,
+              identity,
+              credentials ?? (await this.github?.forFetch(identity.id, url)),
+            ),
+          },
+        );
+
+        this.operations.progress(result.stdout);
+
+        return result.stdout;
+      },
+      "operationTitles.pushBranch",
+    );
+  }
+
+  clone(request: CloneRequest) {
+    const captured = this.identity.getActive();
+
+    if (!captured || captured.id !== request.profileId)
+      throw remoteError(t("main.remoteService.theProfileChangedReopenCloneAndTryAgain"));
+
+    remoteUrl(request.url);
+
+    const transport = transportOptions(request.url, captured, request.credentials);
+
+    if (
+      !isAbsolute(request.parent) ||
+      !/^[^<>:"/\\|?*\x00-\x1f]+$/.test(request.name) ||
+      request.name === "." ||
+      request.name === ".." ||
+      /[. ]$/.test(request.name) ||
+      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(request.name)
+    )
+      throw remoteError(t("main.remoteService.chooseAnAbsoluteParentFolderAndAValidNewFolderName"));
+
+    const path = join(request.parent, request.name);
+
+    return this.operations.run(
+      { profileId: captured.id, repositoryId: randomUUID(), repositoryName: basename(path) },
+      t("operationTitles.cloneRepository"),
+      () =>
+        this.identity.serialize(async () => {
+          if (!this.identities.findById(captured.id))
+            throw remoteError(t("main.remoteService.theOriginatingProfileNoLongerExists"));
+
+          this.operations.started(t("main.remoteService.preparingCloneDestination"));
+
+          if (!(await lstat(request.parent)).isDirectory())
+            throw remoteError(t("main.remoteService.theCloneParentMustBeADirectory"));
+
+          try {
+            await mkdir(path);
+          } catch {
+            throw remoteError(
+              t(
+                "main.remoteService.theDestinationAlreadyExistsOrCannotBeCreatedChooseANewFolderName",
+              ),
+            );
+          }
+
+          try {
+            await this.git.exec(
+              ["clone", "--progress", "--no-recurse-submodules", "--", request.url, path],
+              {
+                operation: t("operations.cloneRepository"),
+                ...transport,
+              },
+            );
+
+            return await this.repositories.open(path, captured);
+          } catch (error) {
+            this.operations.progress(
+              t(
+                "main.remoteService.cloneDidNotCompleteInspectBeforeRetryingEdaHasNotRemovedItsFiles",
+                { path: path },
+              ),
+            );
+            throw error;
+          }
+        }),
+      undefined,
+      "operationTitles.cloneRepository",
+    );
+  }
+}

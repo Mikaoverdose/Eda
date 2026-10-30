@@ -1,0 +1,855 @@
+@import "./tokens.css";
+@import "tailwindcss";
+@import "./motion.css";
+
+.window-titlebar {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-titlebar button,
+.window-titlebar input,
+.window-titlebar [draggable="true"],
+.window-titlebar [role="menu"],
+.window-controls {
+  -webkit-app-region: no-drag;
+}
+
+@theme inline {
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-overlay: var(--bg-overlay);
+  --color-bg-inset: var(--bg-inset);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-control-border: var(--control-border);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-accent-border: var(--accent-border);
+  --color-accent-text: var(--accent-text);
+  --color-on-identity: var(--on-identity-fill);
+
+  --color-git-added: var(--git-added);
+  --color-git-modified: var(--git-modified);
+  --color-git-deleted: var(--git-deleted);
+  --color-git-renamed: var(--git-renamed);
+  --color-git-untracked: var(--git-untracked);
+  --color-git-conflict: var(--git-conflict);
+
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-base: var(--text-base);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+
+  --font-ui: var(--font-ui);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-full: var(--radius-full);
+
+  --tracking-tight: var(--tracking-tight);
+  --tracking-wide: var(--tracking-wide);
+
+  --shadow-panel: var(--shadow-panel);
+  --shadow-popover: var(--shadow-popover);
+
+  --height-toolbar: var(--toolbar-height);
+  --height-row: var(--row-height);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    letter-spacing: var(--tracking-tight);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  code,
+  kbd,
+  pre,
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "calt" 0;
+    letter-spacing: 0;
+  }
+
+  .selectable {
+    user-select: text;
+    cursor: text;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: var(--radius-full);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-strong);
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  .ui-code-block {
+    max-height: 24rem;
+    tab-size: 2;
+  }
+
+  .ui-scroll-region:focus-visible {
+    outline-offset: -2px;
+  }
+
+  .ui-button[aria-busy="true"][data-variant="ghost"]:hover {
+    background: var(--bg-raised);
+    color: var(--text-primary);
+  }
+
+  .ui-button[aria-busy="true"][data-variant="secondary"]:hover {
+    border-color: var(--border-strong);
+  }
+
+  .ui-action-glyph {
+    position: absolute;
+    inset: 0;
+  }
+
+  .ui-text-button {
+    text-decoration-line: underline;
+    text-decoration-color: transparent;
+  }
+
+  .ui-text-button:not(:disabled):hover {
+    text-decoration-color: currentColor;
+  }
+
+  .ui-button[data-variant="secondary"] {
+    box-shadow:
+      inset 0 1px var(--control-highlight),
+      0 1px 2px rgb(0 0 0 / 0.08);
+  }
+
+  .ui-button:is([data-variant="primary"], [data-variant="identity"]) {
+    box-shadow:
+      inset 0 1px rgb(255 255 255 / 0.12),
+      0 1px 3px rgb(0 0 0 / 0.12);
+  }
+
+  .ui-button[data-variant="secondary"]:not(:disabled):hover {
+    background: color-mix(in srgb, var(--bg-raised) 92%, var(--text-primary));
+  }
+
+  .ui-button:focus-visible {
+    outline-offset: 3px;
+  }
+
+  .ui-control {
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+
+  .ui-control:focus-visible,
+  .ui-search:focus-within {
+    box-shadow: 0 0 0 3px var(--accent-muted);
+  }
+
+  .ui-control[aria-invalid="true"]:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--git-deleted) 15%, transparent);
+  }
+
+  .ui-segment-indicator {
+    position: absolute;
+    z-index: -1;
+    inset-block: 2px;
+    left: 2px;
+    width: calc((100% - 4px) / var(--segment-count));
+    border-radius: var(--radius-sm);
+    background: var(--bg-raised);
+    box-shadow:
+      inset 0 1px var(--control-highlight),
+      0 1px 3px rgb(0 0 0 / 0.12);
+  }
+
+  .ui-tab-indicator {
+    position: absolute;
+    bottom: -2px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    border-radius: var(--radius-full);
+    background: var(--accent);
+  }
+
+  .ui-disclosure::details-content {
+    display: flow-root;
+    overflow: clip;
+  }
+}
+
+@layer components {
+  .settings-card {
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 1rem 0;
+  }
+
+  .profile-avatar {
+    color: oklch(0.82 var(--avatar-chroma, 0.1) var(--avatar-hue));
+    background: var(--bg-raised);
+    box-shadow: inset 0 0 0 1px var(--control-highlight);
+  }
+
+  label:has(input:disabled) > .ui-hue {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  [data-appearance="light"] .profile-avatar {
+    color: oklch(0.42 var(--avatar-chroma, 0.13) var(--avatar-hue));
+  }
+
+  .checkbox-control {
+    appearance: none;
+    position: relative;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .checkbox-control::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1.5px solid var(--control-border);
+    border-radius: 4px;
+    background: var(--bg-inset);
+  }
+
+  .checkbox-control::after {
+    content: "";
+    width: 8px;
+    height: 5px;
+    position: relative;
+    border-left: 2px solid var(--text-inverse);
+    border-bottom: 2px solid var(--text-inverse);
+  }
+
+  .checkbox-control:checked::before,
+  .checkbox-control:indeterminate::before {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .checkbox-control:indeterminate::after {
+    width: 7px;
+    height: 0;
+    border-left: 0;
+  }
+
+  .checkbox-control:disabled {
+    cursor: not-allowed;
+  }
+
+  .ui-checkbox:has(input:disabled):not([aria-busy="true"] *),
+  .ui-checkbox:has(input[disabled]),
+  fieldset[disabled]:not([aria-busy="true"]) .ui-checkbox:has(input:disabled) {
+    color: var(--text-tertiary);
+  }
+
+  .ui-radio-card:has(input:disabled):not([aria-busy="true"] *),
+  .ui-radio-card:has(input[disabled]),
+  fieldset[disabled]:not([aria-busy="true"]) .ui-radio-card:has(input:disabled) {
+    opacity: 0.5;
+  }
+
+  .radio-control {
+    appearance: none;
+    position: relative;
+    display: inline-grid;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    place-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .radio-control::before {
+    content: "";
+    position: relative;
+    z-index: 1;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .radio-control::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 2px solid var(--control-border);
+    border-radius: 50%;
+    background: var(--bg-inset);
+  }
+
+  .radio-control:checked::after,
+  .radio-control[data-checked="true"]::after {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+  }
+
+  .slider-control {
+    appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(
+        to right,
+        var(--accent) 0 var(--slider-progress, 50%),
+        var(--bg-raised) var(--slider-progress, 50%) 100%
+      )
+      center / 100% 6px no-repeat;
+    box-sizing: content-box;
+    padding-block: 9px;
+    cursor: pointer;
+  }
+
+  .slider-control::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--bg-overlay);
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-border);
+  }
+
+  .slider-control::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--bg-overlay);
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-border);
+  }
+
+  .slider-control:not(:disabled):hover::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px var(--accent-muted);
+  }
+
+  .slider-control:not(:disabled):hover::-moz-range-thumb {
+    box-shadow: 0 0 0 4px var(--accent-muted);
+  }
+
+  .radio-control:disabled {
+    cursor: not-allowed;
+  }
+
+  .checkbox-control:not(:disabled):hover::before,
+  [aria-busy="true"] .checkbox-control:hover::before {
+    border-color: var(--accent);
+  }
+
+  .radio-control:not(:disabled):hover,
+  [aria-busy="true"] .radio-control:hover {
+    box-shadow: 0 0 0 3px var(--accent-muted);
+  }
+
+  .slider-control:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+  }
+
+  .slider-control:disabled {
+    cursor: not-allowed;
+  }
+
+  .disclosure-summary {
+    list-style: none;
+  }
+
+  .disclosure-summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+.profile-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) 72px 182px;
+  gap: 1rem;
+  align-items: center;
+}
+
+@layer components {
+  .gallery-nav {
+    background: color-mix(in srgb, var(--bg-base) 94%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .gallery-sample {
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.025);
+  }
+
+  .gallery-preview-row {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    align-items: center;
+    gap: 1rem;
+    padding-block: 1rem;
+  }
+
+  .gallery-preview-row:first-child {
+    padding-top: 0;
+  }
+
+  .gallery-preview-row:last-child {
+    padding-bottom: 0;
+  }
+
+  .gallery-preview-row + .gallery-preview-row {
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .gallery-icon:hover {
+    background: var(--bg-raised);
+    border-color: var(--border-default);
+  }
+}
+
+@media (max-width: 1000px) {
+  .gallery-preview-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .repository-overview {
+    column-gap: 1rem;
+  }
+}
+
+.profile-list-heading {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 1000px) {
+  .profile-list-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 1rem;
+  }
+
+  .profile-list-heading {
+    display: none;
+  }
+
+  .profile-list-author {
+    grid-column: 1;
+    grid-row: 2;
+    padding-left: 40px;
+  }
+
+  .profile-list-status {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .profile-list-actions {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-shell {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    padding: 0.5rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .settings-sidebar > div,
+  .settings-nav-group {
+    display: none;
+  }
+
+  .settings-sidebar nav {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+  }
+
+  .settings-sidebar nav > div {
+    flex-shrink: 0;
+  }
+
+  .settings-sidebar button {
+    margin: 0;
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -32px;
+  pointer-events: none;
+  background: var(--background-image) center / cover no-repeat;
+  filter: blur(var(--background-blur));
+  opacity: var(--background-strength);
+}
+
+#root {
+  position: relative;
+  isolation: isolate;
+}
+
+.app-surface-panel {
+  background-color: var(--bg-base);
+}
+
+html[data-custom-background="true"] .app-surface-panel {
+  background-color: var(--app-content-tint);
+}
+
+html[data-custom-background="true"] {
+  --app-tint-strength: 65%;
+  --app-chrome-tint: color-mix(in srgb, var(--bg-inset) 45%, transparent);
+  --app-content-tint: color-mix(in srgb, var(--bg-base) var(--app-tint-strength), transparent);
+  --app-code-tint: color-mix(in srgb, var(--bg-inset) var(--app-tint-strength), transparent);
+}
+
+html[data-custom-background="true"][data-appearance="light"] {
+  --app-tint-strength: 45%;
+}
+
+/* Apply the background tint once, behind the moving panels.
+   Tinting each translucent panel would change the image's brightness as they move. */
+html[data-custom-background="true"] .app-workspace-backdrop {
+  background-color: color-mix(in srgb, var(--bg-base) var(--app-tint-strength), transparent);
+  --app-chrome-tint: transparent;
+  --app-content-tint: transparent;
+  --app-code-tint: transparent;
+}
+
+html[data-custom-background="true"] .app-canvas {
+  background-color: transparent;
+}
+
+html[data-custom-background="true"] .app-surface-chrome {
+  background-color: var(--app-chrome-tint);
+}
+
+html[data-custom-background="true"] .app-surface-content {
+  background-color: var(--app-content-tint);
+}
+
+html[data-custom-background="true"] .app-surface-code {
+  background-color: var(--app-code-tint);
+}
+
+html[data-custom-background="true"] [role="dialog"] {
+  background-color: var(--bg-overlay);
+}
+
+:root {
+  --panel-rail-size: 28px;
+}
+
+html[data-custom-background="true"] .ui-select-trigger {
+  background-color: color-mix(in srgb, var(--bg-inset) 75%, transparent);
+}
+
+html[data-custom-background="true"] .ui-select-trigger:not(:disabled):hover,
+html[data-custom-background="true"] .ui-select-trigger[data-state="open"] {
+  background-color: color-mix(in srgb, var(--bg-raised) 85%, transparent);
+}
+
+.welcome-branches {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.welcome-branch {
+  position: absolute;
+  top: 50%;
+  width: clamp(180px, 27vw, 380px);
+  height: 100%;
+  transform: translateY(-50%);
+  color: var(--accent);
+}
+
+.welcome-branch > svg {
+  opacity: 0.5;
+}
+
+.welcome-branch-left {
+  left: -30px;
+}
+
+.welcome-branch-right {
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.welcome-nodes {
+  fill: var(--bg-base);
+}
+
+.welcome-symbol {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 128px;
+}
+
+.welcome-symbol svg {
+  position: relative;
+}
+
+@media (max-width: 800px) {
+  .welcome-branch-left {
+    left: -130px;
+  }
+
+  .welcome-branch-right {
+    right: 0;
+    width: clamp(70px, 16vw, 128px);
+  }
+
+  .welcome-branches[data-quiet="true"] {
+    display: none;
+  }
+}
+
+.welcome-branches[data-quiet="true"] .welcome-branch > svg {
+  opacity: 0.65;
+}
+
+.welcome-branches[data-quiet="true"] :is(.welcome-paths, .welcome-nodes) {
+  opacity: 0.18;
+}
+
+.welcome-route {
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - var(--route-progress));
+}
+
+.welcome-stations circle {
+  fill: var(--bg-base);
+  opacity: 0.25;
+}
+
+.welcome-stations circle[data-reached="true"] {
+  fill: var(--accent);
+  opacity: 1;
+}
+
+html[data-custom-background="true"] .onboarding-shell {
+  background: var(--app-content-tint);
+}
+
+.onboarding-background-controls {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.onboarding-background-controls[data-visible="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.welcome-line-0 {
+  stroke: var(--git-added);
+}
+
+.welcome-line-1 {
+  stroke: var(--git-modified);
+}
+
+.welcome-line-2 {
+  stroke: var(--accent);
+}
+
+.welcome-commit-popup {
+  position: absolute;
+  left: 12%;
+  max-width: 240px;
+  width: 84%;
+  opacity: 0;
+}
+
+.commit-message {
+  position: relative;
+  overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--bg-base) 70%, transparent);
+  backdrop-filter: blur(24px) saturate(140%);
+}
+
+.commit-message[data-commit-type] {
+  --commit-marker: var(--accent);
+  padding-left: 20px;
+}
+
+.commit-message[data-commit-type]::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: var(--commit-marker);
+}
+
+.commit-message:is([data-commit-type="feat"], [data-commit-type="test"]) {
+  --commit-marker: var(--git-added);
+}
+
+.commit-message:is([data-commit-type="fix"], [data-commit-type="perf"]) {
+  --commit-marker: var(--git-modified);
+}
+
+.commit-message:is([data-commit-type="docs"], [data-commit-type="refactor"]) {
+  --commit-marker: var(--git-renamed);
+}
+
+.commit-message:is(
+  [data-commit-type="chore"],
+  [data-commit-type="build"],
+  [data-commit-type="ci"]
+) {
+  --commit-marker: var(--text-tertiary);
+}
+
+.welcome-branch-right .welcome-commit-popup {
+  left: 4%;
+}
+
+@media (max-width: 800px) {
+  .welcome-commit-popup {
+    display: none;
+  }
+}
+
+.onboarding-shell[data-complete="true"] .welcome-branches {
+  display: block;
+}
+
+@media (max-width: 800px) {
+  .onboarding-shell[data-complete="true"] .welcome-branch {
+    width: 128px;
+  }
+
+  .onboarding-shell[data-complete="true"] .welcome-branch-left {
+    left: -10px;
+  }
+
+  .onboarding-shell[data-complete="true"] .welcome-branch-right {
+    right: -10px;
+  }
+}
+
+.welcome-branch circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleX(var(--node-aspect, 1));
+  vector-effect: non-scaling-stroke;
+}
+
+.activity-content {
+  --collapse-size: min(16rem, 40vh);
+}

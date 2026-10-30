@@ -1,0 +1,492 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { err, ok } from "@shared/errors";
+import { GitHubConnection } from "@renderer/features/connections/GitHubConnection";
+
+let root: Root;
+let container: HTMLDivElement;
+const status = {
+  configured: true,
+  secureStorage: true,
+  installationAvailable: true,
+  account: null,
+};
+const pending = {
+  id: "session",
+  userCode: "ABCD-EFGH",
+  intervalMs: 5000,
+  expiresAt: Date.now() + 900_000,
+};
+const github = {
+  status: vi.fn(),
+  repositoryAccess: vi.fn(),
+  begin: vi.fn(),
+  poll: vi.fn(),
+  cancel: vi.fn(),
+  openVerification: vi.fn(),
+  disconnect: vi.fn(),
+  openInstallations: vi.fn(),
+  profile: vi.fn(),
+  openProfile: vi.fn(),
+};
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  for (const method of Object.values(github)) method.mockReset();
+  github.status.mockResolvedValue(ok(status));
+  github.repositoryAccess.mockResolvedValue(ok({ accountId: "1", accounts: ["work-user"] }));
+  github.openInstallations.mockResolvedValue(ok(undefined));
+  github.begin.mockResolvedValue(ok(pending));
+  github.poll.mockResolvedValue(ok({ state: "pending", intervalMs: 10_000 }));
+  github.openVerification.mockResolvedValue(ok(undefined));
+  github.cancel.mockResolvedValue(ok(undefined));
+  github.disconnect.mockResolvedValue(ok(undefined));
+  github.profile.mockResolvedValue(
+    ok({
+      id: "1",
+      login: "work-user",
+      name: "Work User",
+      bio: "Building useful things.",
+      location: "Bangkok",
+      avatarDataUrl: "data:image/png;base64,AQID",
+    }),
+  );
+  github.openProfile.mockResolvedValue(ok(undefined));
+  vi.stubGlobal("eda", { github });
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+});
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+const button = (text: string) =>
+  [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === text || item.getAttribute("aria-label") === text,
+  )!;
+const render = () => act(async () => root.render(<GitHubConnection profileId="work" />));
+const click = (text: string) => act(async () => button(text).click());
+
+it("opens GitHub with the displayed verification code, honors polling intervals, and saves the connection", async () => {
+  await render();
+  await click("Sign in with GitHub");
+  expect(container.textContent).toContain("ABCD-EFGH");
+  expect(container.textContent).not.toContain("false");
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+  expect(github.openVerification).toHaveBeenCalledWith("work", "session");
+  expect(
+    container.querySelector('[aria-label="Waiting for GitHub"] .animate-spin-fast'),
+  ).not.toBeNull();
+  expect(
+    container.querySelector('[aria-label="Copy code"] .ui-action-visible .lucide-check'),
+  ).not.toBeNull();
+  expect(container.querySelector('[aria-label="Copy code"]')?.textContent).toBe("");
+  await click("Open GitHub");
+  expect(github.openVerification).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(github.poll).toHaveBeenCalledTimes(1);
+  await act(async () => vi.advanceTimersByTimeAsync(9999));
+  expect(github.poll).toHaveBeenCalledTimes(1);
+  github.poll.mockResolvedValue(
+    ok({
+      state: "connected",
+      status: { ...status, account: { id: "1", login: "work-user", state: "connected" } },
+    }),
+  );
+  github.status.mockResolvedValue(
+    ok({ ...status, account: { id: "1", login: "work-user", state: "connected" } }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(1));
+  expect(container.textContent).toContain("@work-user");
+  expect(container.textContent).toContain("Work User");
+  expect(container.textContent).toContain("Building useful things.");
+  expect(container.textContent).toContain("Bangkok");
+  expect(container.querySelector(".profile-avatar img")?.getAttribute("src")).toBe(
+    "data:image/png;base64,AQID",
+  );
+  expect(github.profile).toHaveBeenCalledWith("work");
+  await click("@work-user");
+  expect(github.openProfile).toHaveBeenCalledWith("work");
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Connected");
+  expect(button("Reconnect GitHub")).toBeUndefined();
+  expect(github.openInstallations).not.toHaveBeenCalled();
+  github.openInstallations.mockResolvedValue(ok(undefined));
+  await click("Manage access");
+  expect(github.openInstallations).toHaveBeenCalledWith("work");
+  expect(container.textContent).not.toContain("ABCD-EFGH");
+  github.status.mockResolvedValue(ok(status));
+  await click("Disconnect");
+  expect(github.disconnect).toHaveBeenCalledWith("work");
+  expect(container.textContent).not.toContain("work-user");
+  expect(container.querySelector(".profile-avatar img")).toBeNull();
+});
+
+it("does not claim the code was copied when opening GitHub fails", async () => {
+  github.openVerification.mockResolvedValue(
+    err({
+      kind: "unknown",
+      operation: "GitHub sign-in",
+      message: "Could not open GitHub.",
+    }),
+  );
+  await render();
+  await click("Sign in with GitHub");
+  expect(
+    container.querySelector('[aria-label="Copy code"] .ui-action-visible .lucide-copy'),
+  ).not.toBeNull();
+});
+
+it("cancels pending sign-in on close and does not accept a late response", async () => {
+  await render();
+  await click("Sign in with GitHub");
+  let finish!: (value: unknown) => void;
+  github.poll.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  await click("Cancel sign-in");
+  await act(async () => finish(ok({ state: "connected", status })));
+  expect(github.cancel).toHaveBeenCalledWith("work", "session");
+  expect(button("Sign in with GitHub")).toBeDefined();
+  expect(container.textContent).not.toContain("Not connected");
+  await act(async () => vi.advanceTimersByTimeAsync(60_000));
+  expect(github.poll).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the profile hidden while waiting for installation, and automatically completes without focus", async () => {
+  github.repositoryAccess.mockResolvedValue(ok({ accountId: "1", accounts: [] }));
+  github.poll.mockResolvedValue(
+    ok({ state: "authorized", status: { ...status, pendingAccountId: "1" } }),
+  );
+  await render();
+  await click("Sign in with GitHub");
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(github.openInstallations).toHaveBeenCalledExactlyOnceWith("work");
+  expect(
+    container.querySelector('[aria-label="Waiting for repository access"] .animate-spin-fast'),
+  ).not.toBeNull();
+  expect(container.textContent).not.toContain("work-user");
+  expect(github.profile).not.toHaveBeenCalled();
+  expect(button("Sign in with GitHub")).toBeUndefined();
+  expect(button("Enable access")).toBeDefined();
+  github.repositoryAccess.mockResolvedValue(ok({ accountId: "1", accounts: ["work-user"] }));
+  github.status.mockResolvedValue(
+    ok({ ...status, account: { id: "1", login: "work-user", state: "connected" } }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Connected");
+  expect(container.textContent).toContain("@work-user");
+  const calls = github.repositoryAccess.mock.calls.length;
+  await act(async () => vi.advanceTimersByTimeAsync(30_000));
+  expect(github.repositoryAccess).toHaveBeenCalledTimes(calls);
+});
+
+it("checks existing connections without reopening the browser and lets users finish repository access", async () => {
+  github.status.mockResolvedValue(
+    ok({
+      ...status,
+      account: { id: "1", login: "work-user", state: "connected" },
+    }),
+  );
+  github.repositoryAccess.mockResolvedValue(ok({ accountId: "1", accounts: [] }));
+  await render();
+  expect(github.openInstallations).not.toHaveBeenCalled();
+  expect(button("Sign in with GitHub")).toBeUndefined();
+  expect(
+    container.querySelector('[aria-label="Waiting for repository access"] .animate-spin-fast'),
+  ).not.toBeNull();
+  await click("Enable access");
+  expect(github.openInstallations).toHaveBeenCalledExactlyOnceWith("work");
+  github.repositoryAccess.mockResolvedValue(ok({ accountId: "1", accounts: ["work-user"] }));
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Connected");
+});
+
+it("shows the shared spinner while checking repository access", async () => {
+  github.status.mockResolvedValue(
+    ok({
+      ...status,
+      account: { id: "1", login: "work-user", state: "connected" },
+    }),
+  );
+  let finish!: (value: unknown) => void;
+  github.repositoryAccess.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await render();
+  expect(
+    container.querySelector('[aria-label="Checking access"] .animate-spin-fast'),
+  ).not.toBeNull();
+  expect(container.textContent).not.toContain("Checking access...");
+  await act(async () => finish(ok({ accountId: "1", accounts: ["work-user"] })));
+  expect(container.querySelector('[aria-label="Checking access"]')).toBeNull();
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Connected");
+});
+
+it("reveals the saved profile and access together, and keeps content mounted during background checks", async () => {
+  github.status.mockResolvedValue(
+    ok({
+      ...status,
+      account: { id: "1", login: "work-user", state: "connected" },
+    }),
+  );
+  let finishProfile!: (value: unknown) => void;
+  let finishAccess!: (value: unknown) => void;
+  github.profile.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishProfile = resolve;
+    }),
+  );
+  github.repositoryAccess.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishAccess = resolve;
+    }),
+  );
+  await render();
+  expect(container.querySelector(".profile-avatar")).toBeNull();
+  expect(button("Enable access")).toBeUndefined();
+  await act(async () => finishAccess(ok({ accountId: "1", accounts: ["work-user"] })));
+  expect(container.querySelector(".profile-avatar")).toBeNull();
+  await act(async () => finishProfile(ok({ id: "1", login: "work-user", name: "Work User" })));
+  expect(container.textContent).toContain("Work User");
+  expect(button("Manage access")).toBeDefined();
+  const avatar = container.querySelector(".profile-avatar");
+  const buttons = container.querySelectorAll("button").length;
+  github.repositoryAccess.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishAccess = resolve;
+    }),
+  );
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(container.querySelector(".profile-avatar")).toBe(avatar);
+  expect(container.querySelector(".ui-skeleton")).toBeNull();
+  expect(container.querySelectorAll("button").length).toBe(buttons);
+  await act(async () => finishAccess(ok({ accountId: "1", accounts: ["work-user"] })));
+  expect(container.querySelector(".profile-avatar")).toBe(avatar);
+  expect(container.querySelectorAll("button").length).toBe(buttons);
+});
+
+it("does not claim access is enabled after a failed check or accept a late check after disconnect", async () => {
+  github.status.mockResolvedValue(
+    ok({
+      ...status,
+      account: { id: "1", login: "work-user", state: "connected" },
+    }),
+  );
+  github.repositoryAccess.mockRejectedValueOnce(new Error("offline"));
+  await render();
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Access not verified");
+  let finish!: (value: unknown) => void;
+  github.repositoryAccess.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  github.status.mockResolvedValue(ok(status));
+  await click("Disconnect");
+  await act(async () => finish(ok({ accountId: "1", accounts: ["work-user"] })));
+  expect(button("Sign in with GitHub")).toBeDefined();
+  expect(container.textContent).not.toContain("Not connected");
+  expect(github.openInstallations).not.toHaveBeenCalled();
+});
+
+it("shows honest setup and keychain availability before requesting authorization", async () => {
+  github.status.mockResolvedValue(
+    ok({ configured: false, secureStorage: false, installationAvailable: false, account: null }),
+  );
+  await render();
+  expect(button("Sign in with GitHub").disabled).toBe(true);
+  expect(container.textContent).toContain("not configured");
+  expect(container.textContent).toContain("OS keychain");
+  expect(github.begin).not.toHaveBeenCalled();
+});
+
+it("offers reconnection when the saved login is rejected during repository access verification", async () => {
+  github.status.mockResolvedValue(
+    ok({
+      ...status,
+      account: { id: "1", login: "work-user", state: "connected" },
+    }),
+  );
+  github.status
+    .mockResolvedValueOnce(
+      ok({ ...status, account: { id: "1", login: "work-user", state: "connected" } }),
+    )
+    .mockResolvedValue(
+      ok({ ...status, account: { id: "1", login: "work-user", state: "expired" } }),
+    );
+  github.repositoryAccess.mockResolvedValue(
+    err({
+      kind: "github-auth-required",
+      operation: "GitHub sign-in",
+      message: "Your GitHub login expired.",
+    }),
+  );
+  await render();
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnect required");
+  expect(button("Reconnect GitHub")).toBeDefined();
+  expect(github.openInstallations).not.toHaveBeenCalled();
+});
+
+it("rechecks on the installation callback, deduplicates overlapping checks, and stops waiting after the deadline", async () => {
+  let installed!: (profileId: string) => void;
+  const unsubscribe = vi.fn();
+  vi.stubGlobal("eda", {
+    github,
+    events: {
+      onGitHubInstallationChanged: (listener: typeof installed) => {
+        installed = listener;
+        return unsubscribe;
+      },
+    },
+  });
+  github.status.mockResolvedValue(ok({ ...status, pendingAccountId: "1" }));
+  github.repositoryAccess.mockResolvedValue(ok({ accountId: "1", accounts: [] }));
+  await render();
+  const calls = github.repositoryAccess.mock.calls.length;
+  await act(async () => installed("personal"));
+  expect(github.repositoryAccess).toHaveBeenCalledTimes(calls);
+  let finish!: (value: unknown) => void;
+  github.repositoryAccess.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await act(async () => {
+    installed("work");
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(github.repositoryAccess).toHaveBeenCalledTimes(calls + 1);
+  await act(async () => finish(ok({ accountId: "1", accounts: [] })));
+  vi.setSystemTime(Date.now() + 15 * 60_000);
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(container.querySelector('[aria-label="Waiting for repository access"]')).toBeNull();
+  expect(button("Enable access")).toBeDefined();
+  const completedCalls = github.repositoryAccess.mock.calls.length;
+  await act(async () => vi.advanceTimersByTimeAsync(10_000));
+  expect(github.repositoryAccess).toHaveBeenCalledTimes(completedCalls);
+  await click("Enable access");
+  expect(container.querySelector('[aria-label="Waiting for repository access"]')).not.toBeNull();
+});
+
+async function toggleCard(open: boolean) {
+  await act(async () => {
+    const details = container.querySelector("details")!;
+    details.open = open;
+    details.dispatchEvent(new Event("toggle"));
+  });
+}
+
+it("starts compact sign-in on expansion and keeps the pending session when reopened", async () => {
+  await act(async () => root.render(<GitHubConnection profileId="work" compact />));
+  expect(container.querySelector("details")?.open).toBe(false);
+  expect(button("Connect")).toBeUndefined();
+  expect(github.begin).not.toHaveBeenCalled();
+  await toggleCard(true);
+  expect(github.begin).toHaveBeenCalledExactlyOnceWith("work");
+  expect(github.openVerification).toHaveBeenCalledWith("work", "session");
+  expect(container.textContent).toContain("ABCD-EFGH");
+  expect(button("Open GitHub").closest("footer")).not.toBeNull();
+  await toggleCard(false);
+  await toggleCard(true);
+  expect(github.begin).toHaveBeenCalledOnce();
+  await click("Cancel sign-in");
+  expect(container.querySelector("details")?.open).toBe(false);
+  await toggleCard(false);
+  await toggleCard(true);
+  expect(github.begin).toHaveBeenCalledTimes(2);
+});
+
+it("collapses compact sign-in after access is confirmed and allows reopening", async () => {
+  const connected = {
+    ...status,
+    account: { id: "1", login: "work-user", state: "connected" },
+  };
+  let finishAccess!: (value: unknown) => void;
+  github.repositoryAccess.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishAccess = resolve;
+    }),
+  );
+  await act(async () => root.render(<GitHubConnection profileId="work" compact />));
+  await toggleCard(true);
+  github.poll.mockResolvedValue(ok({ state: "connected", status: connected }));
+  github.status.mockResolvedValue(ok(connected));
+  await act(async () => vi.advanceTimersByTimeAsync(5000));
+  expect(container.querySelector("details")?.open).toBe(true);
+  await act(async () => finishAccess(ok({ accountId: "1", accounts: ["work-user"] })));
+  expect(container.querySelector("details")?.open).toBe(false);
+  expect(container.querySelector('summary [aria-label="GitHub connected"]')).not.toBeNull();
+  await toggleCard(true);
+  expect(container.querySelector("details")?.open).toBe(true);
+  expect(button("Manage access")).toBeDefined();
+  expect(github.begin).toHaveBeenCalledOnce();
+});
+
+it("expands connected details without starting sign-in and keeps status in the header", async () => {
+  github.status.mockResolvedValue(
+    ok({ ...status, account: { id: "1", login: "work-user", state: "connected" } }),
+  );
+  await act(async () => root.render(<GitHubConnection profileId="work" compact />));
+  await toggleCard(true);
+  expect(button("Manage access").closest("footer")).not.toBeNull();
+  await toggleCard(false);
+  expect(container.querySelector('summary [aria-label="GitHub connected"]')).not.toBeNull();
+  expect(github.begin).not.toHaveBeenCalled();
+  await toggleCard(true);
+  github.status.mockResolvedValue(ok(status));
+  await click("Disconnect GitHub");
+  expect(github.begin).not.toHaveBeenCalled();
+  expect(container.querySelector("details")).not.toBeNull();
+});
+
+it("waits for status when expanded during loading and honors closing before it arrives", async () => {
+  let finish!: (value: unknown) => void;
+  github.status.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await act(async () => root.render(<GitHubConnection profileId="work" compact />));
+  await toggleCard(true);
+  expect(github.begin).not.toHaveBeenCalled();
+  await toggleCard(false);
+  await act(async () => finish(ok(status)));
+  expect(github.begin).not.toHaveBeenCalled();
+  await toggleCard(true);
+  expect(github.begin).toHaveBeenCalledOnce();
+});
+
+it("keeps instructions and disabled actions visible while fetching the verification code", async () => {
+  let finish!: (value: unknown) => void;
+  github.begin.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await act(async () => root.render(<GitHubConnection profileId="work" compact />));
+  await toggleCard(true);
+  expect(container.textContent).toContain("Enter this code on GitHub.");
+  expect(button("Open GitHub").disabled).toBe(true);
+  expect(button("Cancel sign-in").disabled).toBe(true);
+  expect(button("Copy code").disabled).toBe(true);
+  const code = container.querySelector('[aria-label="GitHub verification code"]')!;
+  expect(code.querySelectorAll(".ui-skeleton")).toHaveLength(2);
+  expect(container.querySelector('summary [aria-label="Getting GitHub code"]')).not.toBeNull();
+  await act(async () => finish(ok(pending)));
+  expect(container.querySelector('[aria-label="GitHub verification code"]')).toBe(code);
+  expect(code.textContent).toBe("ABCD-EFGH");
+  expect(button("Open GitHub").disabled).toBe(false);
+  expect(button("Cancel sign-in").disabled).toBe(false);
+  expect(button("Copy code").disabled).toBe(false);
+  await click("Cancel sign-in");
+  expect(container.querySelector("details")?.open).toBe(false);
+});

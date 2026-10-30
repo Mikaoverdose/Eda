@@ -1,0 +1,216 @@
+import { t } from "@shared/i18n";
+import { useEffect, useState } from "react";
+import type { RepositorySummary } from "@shared/repository/repository";
+import { useAppStore } from "../../stores/app-store";
+import { useSessionStore } from "../../stores/session-store";
+import { RemoveRepositoryButton } from "../repositories/RemoveRepositoryButton";
+import {
+  ActionList,
+  Button,
+  Dialog,
+  Select,
+  Checkbox,
+  ErrorDialog,
+} from "../../components/ui/index";
+
+export function ProfileRepositoriesSettings() {
+  const active = useAppStore((state) => state.activeIdentity);
+  const profiles = useAppStore((state) => state.identities);
+  const repositories = useAppStore((state) => state.repositories);
+  const hasOtherProfiles = profiles.some((profile) => profile.id !== active?.id);
+
+  return (
+    <div className="flex flex-col gap-5 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-text-secondary">
+          {t("profileRepositoriesSettings.repositoryListFor", {
+            value1: active?.name ?? t("profileRepositoriesSettings.thisProfile"),
+          })}
+        </p>
+        <Button size="sm" onClick={() => void useAppStore.getState().addRepository()}>
+          {t("profileRepositoriesSettings.addFromDisk")}
+        </Button>
+      </div>
+      {repositories.length > 0 ? (
+        <ActionList
+          items={repositories.map((repository) => ({
+            id: repository.id,
+            title: (
+              <>
+                {repository.name}
+                <span className="ml-2 text-xs font-normal text-text-tertiary">
+                  {repository.available
+                    ? t("profileRepositoriesSettings.available")
+                    : t("profileRepositoriesSettings.missingFolder")}
+                </span>
+              </>
+            ),
+            description: (
+              <span className="mono break-all text-xs text-text-tertiary">{repository.path}</span>
+            ),
+            actions: (
+              <>
+                {hasOtherProfiles && <RepositoryProfileAction repository={repository} />}
+                <RemoveRepositoryButton repository={repository} />
+              </>
+            ),
+          }))}
+        />
+      ) : (
+        <p className="text-text-tertiary">
+          {t("profileRepositoriesSettings.noRepositoriesSavedAddARepositoryFolderToGetStarted")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RepositoryProfileAction({ repository }: { repository: RepositorySummary }) {
+  const profiles = useAppStore((state) => state.identities);
+  const active = useAppStore((state) => state.activeIdentity);
+  const [open, setOpen] = useState(false);
+  const [sourceId, setSourceId] = useState<string | undefined>(undefined);
+  const [target, setTarget] = useState("");
+  const [move, setMove] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const candidates = profiles.filter((profile) => profile.id !== active?.id);
+  const targetId = candidates.some((profile) => profile.id === target)
+    ? target
+    : (candidates[0]?.id ?? "");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (open) {
+      setSuggestion(null);
+      void window.eda.repository.suggestProfile(repository.path).then((result) => {
+        if (!cancelled && result.ok) setSuggestion(result.value?.name ?? null);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repository.path]);
+
+  const save = async () => {
+    if (!targetId) return;
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      if (!(await useSessionStore.getState().flush())) {
+        setError(
+          useSessionStore.getState().error ??
+            t("profileRepositoriesSettings.couldNotSaveTheCurrentSessionTryAgain"),
+        );
+        return;
+      }
+
+      if (useAppStore.getState().activeIdentity?.id !== sourceId) {
+        setError(
+          t("profileRepositoriesSettings.theActiveProfileChangedCloseThisDialogAndTryAgain"),
+        );
+        return;
+      }
+
+      const result = await window.eda.repository.assignProfile(repository.id, targetId, move);
+
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+
+      await useAppStore.getState().refreshRepositories();
+      setOpen(false);
+    } catch (failure) {
+      setError(String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="quiet"
+        onClick={() => {
+          setSourceId(active?.id);
+          setMove(false);
+          setError(null);
+          setOpen(true);
+        }}
+      >
+        {t("profileRepositoriesSettings.addToAnotherProfile")}
+      </Button>
+      {open && (
+        <Dialog
+          title={t("profileRepositoriesSettings.addRepositoryToProfile", { name: repository.name })}
+          onClose={() => {
+            if (!busy) setOpen(false);
+          }}
+          footer={
+            <>
+              <Button variant="quiet" disabled={busy} onClick={() => setOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button busy={busy} disabled={!targetId} onClick={() => void save()}>
+                {move
+                  ? t("profileRepositoriesSettings.moveToProfile")
+                  : t("profileRepositoriesSettings.addToProfile")}
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-4 text-sm">
+            <p className="mono break-all text-xs text-text-tertiary">{repository.path}</p>
+            <label className="flex items-center gap-2">
+              {t("profileRepositoriesSettings.addToProfile")}
+              <Select
+                aria-label={t("profileRepositoriesSettings.destinationProfile")}
+                value={targetId}
+                onValueChange={setTarget}
+                surface="surface"
+                compact
+                disabled={busy}
+              >
+                {candidates.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {suggestion && (
+              <p className="text-xs text-text-secondary">
+                {t("profileRepositoriesSettings.yourPathRulesSuggest", { suggestion: suggestion })}
+              </p>
+            )}
+            <p>{t("profileRepositoriesSettings.bothProfilesWillUseTheSameFilesAnd")}</p>
+            <Checkbox
+              checked={move}
+              disabled={busy}
+              onChange={(event) => setMove(event.target.checked)}
+            >
+              {t("profileRepositoriesSettings.alsoRemoveFrom", {
+                value1: active?.name ?? t("profileRepositoriesSettings.thisProfile"),
+              })}
+            </Checkbox>
+            <p className="text-xs text-text-secondary">
+              {move
+                ? t("profileRepositoriesSettings.thisDeletesTheSourceProfileSSavedDrafts")
+                : t(
+                    "profileRepositoriesSettings.theRepositoryStaysInThisProfileSListTooFilesStayInTheSameFolder",
+                  )}
+            </p>
+          </div>
+          <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+        </Dialog>
+      )}
+    </>
+  );
+}

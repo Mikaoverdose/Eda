@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+artifacts/
+src/main/persistence/migrations/
+pnpm-lock.yaml
+vendor/
+.cache/

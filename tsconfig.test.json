@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client", "vitest/globals"]
+  },
+  "include": [
+    "tests/main",
+    "tests/shared",
+    "tests/renderer",
+    "tests/helpers",
+    "tests/fixtures",
+    "src/renderer/env.d.ts"
+  ]
+}

@@ -1,0 +1,212 @@
+import { isPullStrategy } from "@shared/workflows/pull";
+import { t } from "@shared/i18n";
+import { ok } from "@shared/errors";
+import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
+import type { RemoteChange, TransportCredentials } from "@shared/integrations/remotes";
+import type { Services } from "../../services";
+import { broadcast, handle } from "../transport";
+import { requireAbsolutePath, requireId, requireRecord, requireString } from "../validate";
+import { invalidRequest } from "../request-errors";
+
+function boolean(value: unknown): boolean {
+  if (typeof value !== "boolean")
+    throw invalidRequest(t("main.remoteHandlers.chooseAnExplicitOption"));
+  return value;
+}
+
+function credentials(value: unknown): TransportCredentials | undefined {
+  if (value === undefined) return undefined;
+  const input = requireRecord(value, t("main.remoteHandlers.hTtpsCredentials"));
+  return {
+    username: requireString(input["username"], t("fields.username"), 256),
+    password: requireString(input["password"], t("fields.token"), 4096),
+  };
+}
+
+export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Services): void {
+  handle(IPC_CHANNELS.backgroundFetchInspect, async (_event, id) =>
+    ok(await backgroundFetch.inspect(requireId(id))),
+  );
+
+  handle(IPC_CHANNELS.backgroundFetchConfigure, async (_event, id, minutes) => {
+    if (minutes !== null && typeof minutes !== "number")
+      throw invalidRequest(t("main.remoteHandlers.chooseAFetchInterval"));
+    backgroundFetch.configure(requireId(id), minutes);
+    return ok(undefined);
+  });
+
+  handle(IPC_CHANNELS.backgroundFetchRetry, async (_event, rawId, remote) => {
+    const id = requireId(rawId);
+
+    try {
+      await backgroundFetch.retry(id, requireString(remote, t("fields.remote")));
+      return ok(undefined);
+    } finally {
+      broadcast(IPC_EVENTS.repositoryChanged, id);
+    }
+  });
+
+  handle(IPC_CHANNELS.pullPreference, async (_event, id) => ok(pull.preference(requireId(id))));
+
+  handle(IPC_CHANNELS.pullSetPreference, async (_event, id, strategy) => {
+    if (strategy !== null && !isPullStrategy(strategy))
+      throw invalidRequest(t("main.remoteHandlers.chooseAPullStrategy"));
+    pull.setPreference(requireId(id), strategy);
+    return ok(undefined);
+  });
+
+  handle(IPC_CHANNELS.pullPrepare, async (_event, raw) => {
+    const value = requireRecord(raw, t("main.remoteHandlers.pullRequest"));
+    const id = requireId(value["repositoryId"]);
+    const strategy = value["strategy"];
+
+    if (!isPullStrategy(strategy))
+      throw invalidRequest(t("main.remoteHandlers.chooseAPullStrategy"));
+
+    const auth = credentials(value["credentials"]);
+
+    try {
+      return ok(
+        await pull.prepare({ repositoryId: id, strategy, ...(auth ? { credentials: auth } : {}) }),
+      );
+    } finally {
+      broadcast(IPC_EVENTS.repositoryChanged, id);
+    }
+  });
+
+  handle(IPC_CHANNELS.pullExecute, async (_event, rawId, rawToken) => {
+    const id = requireId(rawId);
+    const token = requireId(rawToken);
+
+    try {
+      return ok(await pull.execute(id, token));
+    } finally {
+      broadcast(IPC_EVENTS.repositoryChanged, id);
+    }
+  });
+
+  handle(IPC_CHANNELS.remotesInspect, async (_event, id) =>
+    ok(await remotes.inspect(requireId(id))),
+  );
+
+  handle(IPC_CHANNELS.remotesChange, async (_event, rawId, rawChange) => {
+    const id = requireId(rawId);
+    const value = requireRecord(rawChange, t("main.remoteHandlers.remoteChange"));
+    const name = requireString(value["name"], t("fields.remoteName"), 100);
+    let change: RemoteChange;
+
+    switch (value["kind"]) {
+      case "add":
+        change = { kind: "add", name, url: requireString(value["url"], "URL") };
+        break;
+      case "url":
+        change = {
+          kind: "url",
+          name,
+          url: requireString(value["url"], "URL"),
+          push: boolean(value["push"]),
+        };
+        break;
+      case "rename":
+        change = { kind: "rename", name, to: requireString(value["to"], t("fields.newName"), 100) };
+        break;
+      case "remove":
+        change = { kind: "remove", name };
+        break;
+      default:
+        throw invalidRequest(t("main.remoteHandlers.chooseARemoteConfigurationAction"));
+    }
+
+    await remotes.change(id, change);
+    broadcast(IPC_EVENTS.repositoryChanged, id);
+
+    return ok(undefined);
+  });
+
+  handle(IPC_CHANNELS.remotesTrack, async (_event, rawId, branch, upstream) => {
+    const id = requireId(rawId);
+
+    await remotes.track(
+      id,
+      requireString(branch, t("fields.branch")),
+      upstream === null ? null : requireString(upstream, t("fields.upstream")),
+    );
+    broadcast(IPC_EVENTS.repositoryChanged, id);
+
+    return ok(undefined);
+  });
+
+  handle(IPC_CHANNELS.remotesFetch, async (_event, raw) => {
+    const input = requireRecord(raw, t("main.remoteHandlers.fetch"));
+    const id = requireId(input["repositoryId"]);
+    const auth = credentials(input["credentials"]);
+
+    try {
+      return ok(
+        await remotes.fetch({
+          repositoryId: id,
+          remote:
+            input["remote"] === null ? null : requireString(input["remote"], t("fields.remote")),
+          prune: boolean(input["prune"]),
+          tags: boolean(input["tags"]),
+          ...(auth ? { credentials: auth } : {}),
+        }),
+      );
+    } finally {
+      broadcast(IPC_EVENTS.repositoryChanged, id);
+    }
+  });
+
+  handle(IPC_CHANNELS.remotesPreparePush, async (_event, raw) => {
+    const input = requireRecord(raw, t("main.remoteHandlers.pushPreview"));
+    const mode = input["mode"];
+
+    if (mode !== "normal" && mode !== "lease" && mode !== "force" && mode !== "delete")
+      throw invalidRequest(t("main.remoteHandlers.chooseASupportedPushMode"));
+
+    const refKind = input["refKind"] ?? "branch";
+
+    if (refKind !== "branch" && refKind !== "tag")
+      throw invalidRequest(t("main.remoteHandlers.chooseABranchOrTag"));
+
+    const auth = credentials(input["credentials"]);
+
+    return ok(
+      await remotes.preparePush({
+        repositoryId: requireId(input["repositoryId"]),
+        remote: requireString(input["remote"], t("fields.remote")),
+        branch: requireString(input["branch"], t("fields.sourceBranch")),
+        destination: requireString(input["destination"], t("fields.destinationBranch")),
+        setUpstream: boolean(input["setUpstream"]),
+        mode,
+        refKind,
+        ...(auth ? { credentials: auth } : {}),
+      }),
+    );
+  });
+
+  handle(IPC_CHANNELS.remotesPush, async (_event, rawId, token, auth) => {
+    const id = requireId(rawId);
+    try {
+      return ok(await remotes.push(id, requireId(token), credentials(auth)));
+    } finally {
+      broadcast(IPC_EVENTS.repositoryChanged, id);
+    }
+  });
+
+  handle(IPC_CHANNELS.remotesClone, async (_event, raw) => {
+    const input = requireRecord(raw, t("main.remoteHandlers.clone"));
+    const auth = credentials(input["credentials"]);
+    const result = await remotes.clone({
+      profileId: requireId(input["profileId"]),
+      url: requireString(input["url"], "URL"),
+      parent: requireAbsolutePath(input["parent"]),
+      name: requireString(input["name"], t("fields.folderName"), 200),
+      ...(auth ? { credentials: auth } : {}),
+    });
+
+    broadcast(IPC_EVENTS.repositoriesChanged);
+
+    return ok(result);
+  });
+}

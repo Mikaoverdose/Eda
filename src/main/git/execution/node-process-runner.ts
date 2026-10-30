@@ -1,0 +1,179 @@
+import { spawn } from "node:child_process";
+import type { ProcessRequest, ProcessResult, ProcessRunner } from "./process-runner";
+import { ProcessSpawnError } from "./process-runner";
+
+export class NodeProcessRunner implements ProcessRunner {
+  launch(
+    executable: string,
+    args: readonly string[],
+    cwd: string,
+    env: Record<string, string>,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(executable, [...args], {
+        cwd,
+        env,
+        shell: false,
+        windowsHide: true,
+        detached: true,
+        stdio: "ignore",
+      });
+
+      child.once("error", (error) => reject(new ProcessSpawnError(executable, error)));
+      child.once("spawn", () => {
+        child.unref();
+        resolve();
+      });
+    });
+  }
+
+  run(request: ProcessRequest): Promise<ProcessResult> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(request.executable, [...request.args], {
+        shell: false,
+        cwd: request.cwd,
+        env: { ...request.env },
+        detached: process.platform !== "win32",
+        windowsHide: true,
+      });
+
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+      const maxStdoutBytes = request.maxStdoutBytes ?? 16 * 1024 * 1024;
+      const maxStderrBytes = request.maxStderrBytes ?? 1024 * 1024;
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
+      let outputLimitExceeded: "stdout" | "stderr" | undefined;
+      let cancelled = false;
+      let settled = false;
+      let stderrLineBuffer = "";
+      let stopKillTimer: (() => void) | undefined;
+
+      const stop = () => {
+        stopKillTimer ??= killTree(child.pid);
+      };
+
+      const onAbort = () => {
+        cancelled = true;
+        stop();
+      };
+
+      if (request.signal) {
+        if (request.signal.aborted) {
+          onAbort();
+        } else {
+          request.signal.addEventListener("abort", onAbort, { once: true });
+        }
+      }
+
+      const cleanup = () => {
+        request.signal?.removeEventListener("abort", onAbort);
+        stopKillTimer?.();
+      };
+
+      const capture = (
+        chunk: Buffer,
+        chunks: Buffer[],
+        currentBytes: number,
+        limit: number,
+        stream: "stdout" | "stderr",
+      ): number => {
+        const remaining = Math.max(0, limit - currentBytes);
+
+        if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+
+        const nextBytes = currentBytes + Math.min(chunk.length, remaining);
+
+        if (chunk.length > remaining && outputLimitExceeded === undefined) {
+          outputLimitExceeded = stream;
+          stop();
+        }
+
+        return nextBytes;
+      };
+
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdoutBytes = capture(chunk, stdoutChunks, stdoutBytes, maxStdoutBytes, "stdout");
+      });
+
+      child.stderr?.on("data", (chunk: Buffer) => {
+        const previousBytes = stderrBytes;
+
+        stderrBytes = capture(chunk, stderrChunks, stderrBytes, maxStderrBytes, "stderr");
+
+        if (!request.onStderrLine) return;
+
+        stderrLineBuffer += chunk.subarray(0, stderrBytes - previousBytes).toString("utf8");
+
+        const lines = stderrLineBuffer.split(/\r\n|\r|\n/);
+
+        stderrLineBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.length > 0) request.onStderrLine(line);
+        }
+      });
+
+      child.on("error", (error: NodeJS.ErrnoException) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new ProcessSpawnError(request.executable, error));
+      });
+
+      child.on("close", (code) => {
+        if (settled) return;
+
+        settled = true;
+        cleanup();
+
+        if (stderrLineBuffer.length > 0) request.onStderrLine?.(stderrLineBuffer);
+
+        resolve({
+          exitCode: code ?? (cancelled ? 130 : 1),
+          stdout: Buffer.concat(stdoutChunks),
+          stderr: Buffer.concat(stderrChunks),
+          cancelled,
+          ...(outputLimitExceeded !== undefined && { outputLimitExceeded }),
+        });
+      });
+
+      if (request.stdin !== undefined) {
+        child.stdin?.end(request.stdin);
+      } else {
+        child.stdin?.end();
+      }
+    });
+  }
+}
+
+function killTree(pid: number | undefined): () => void {
+  if (pid === undefined) return () => {};
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+        shell: false,
+        windowsHide: true,
+      }).once("error", () => {
+        try {
+          process.kill(pid);
+        } catch {}
+      });
+    } else {
+      process.kill(-pid, "SIGTERM");
+      timer = setTimeout(() => {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {}
+      }, 1500);
+      timer.unref();
+    }
+  } catch {}
+
+  return () => {
+    if (timer) clearTimeout(timer);
+  };
+}

@@ -1,0 +1,66 @@
+import { useAvatar } from "../../../hooks/useAvatar";
+import { accentComponents, type AccentColor } from "@shared/preferences/accent";
+import { useState, type CSSProperties } from "react";
+import { cx } from "../cx";
+
+export function ProfileAvatar({
+  name,
+  hue,
+  imageUrl: providedUrl,
+  email,
+  compact = false,
+  small = false,
+}: {
+  name: string;
+  hue: AccentColor;
+  imageUrl?: string | undefined;
+  email?: string | undefined;
+  compact?: boolean;
+  small?: boolean;
+}) {
+  const cachedUrl = useAvatar(email);
+  const imageUrl = email ? cachedUrl : providedUrl;
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const accent = accentComponents(hue);
+
+  return (
+    <span
+      aria-hidden="true"
+      style={
+        {
+          "--avatar-hue": accent.hue,
+          ...(typeof hue === "string" && { "--avatar-chroma": accent.chroma }),
+        } as CSSProperties
+      }
+      className={cx(
+        "profile-avatar relative overflow-hidden flex shrink-0 items-center justify-center rounded-full font-semibold",
+        compact ? "size-5 text-[9px]" : small ? "size-7 text-xs" : "size-11 text-base",
+      )}
+    >
+      {initials}
+      {imageUrl && failedUrl !== imageUrl && (
+        <img
+          key={imageUrl}
+          src={imageUrl}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={cx(
+            "absolute inset-0 size-full object-cover",
+            loadedUrl !== imageUrl && "invisible",
+          )}
+          onLoad={() => setLoadedUrl(imageUrl)}
+          onError={() => setFailedUrl(imageUrl)}
+        />
+      )}
+    </span>
+  );
+}

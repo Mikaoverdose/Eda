@@ -1,0 +1,13 @@
+name: Set up Eda
+description: Install the project Node.js, pinned pnpm and locked dependencies
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    - uses: pnpm/action-setup@v6
+      with:
+        cache: true
+    - run: pnpm install --frozen-lockfile
+      shell: bash
