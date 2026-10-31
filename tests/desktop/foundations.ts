@@ -234,7 +234,8 @@ try {
   const tag = page.getByRole("dialog", { name: "Verify tag" });
 
   await tag.getByText("Created in desktop gate", { exact: true }).waitFor();
-  await page.keyboard.press("Escape");
+  await tag.getByRole("button", { name: "Close", exact: true }).click();
+  await tag.waitFor({ state: "hidden" });
   await page
     .getByRole("button", { name: "Inspect tag release/new", exact: true })
     .click({ button: "right" });

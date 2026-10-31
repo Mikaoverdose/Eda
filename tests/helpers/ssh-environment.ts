@@ -1,22 +1,23 @@
 import { access } from "node:fs/promises";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { bundledGitEnvironment, bundledGitLocation } from "@main/git/execution/bundled-git";
+import { execFileSync } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
 
 export async function sshTestEnvironment(): Promise<Record<string, string>> {
   if (process.platform !== "win32") return {};
 
-  const root = bundledGitLocation(false, fileURLToPath(new URL("../../", import.meta.url)), "");
-  try {
-    await Promise.all(
-      ["ssh", "ssh-agent", "ssh-add", "ssh-keygen", "sh"].map((tool) =>
-        access(join(root, "usr/bin", `${tool}.exe`)),
-      ),
-    );
-  } catch (cause) {
-    throw new Error("Run node scripts/prepare-git.ts before Windows SSH integration tests.", {
-      cause,
-    });
+  const gitPaths = execFileSync("where.exe", ["git"], { encoding: "utf8" }).trim().split(/\r?\n/);
+  for (const gitPath of gitPaths) {
+    const bin = resolve(dirname(gitPath), "../usr/bin");
+    try {
+      await Promise.all(
+        ["ssh", "ssh-agent", "ssh-add", "ssh-keygen", "sh"].map((tool) =>
+          access(join(bin, `${tool}.exe`)),
+        ),
+      );
+      return { PATH: `${bin};${process.env["PATH"] ?? process.env["Path"] ?? ""}` };
+    } catch {}
   }
-  return { PATH: bundledGitEnvironment(root)["PATH"]! };
+  throw new Error(
+    "Install Git for Windows with its SSH tools and add Git to PATH before running SSH integration tests.",
+  );
 }

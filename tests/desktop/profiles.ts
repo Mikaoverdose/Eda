@@ -245,6 +245,7 @@ try {
   assert.equal(await page.getByRole("button", { name: /^Remove (local|both local)/ }).count(), 0);
 
   await page.getByRole("button", { name: "Use this profile", exact: true }).click();
+  await page.getByText("Profile saved for this repository.", { exact: true }).waitFor();
   await page.waitForFunction(async (id) => {
     const result = await window.eda.identity.inspectGit(id);
 
