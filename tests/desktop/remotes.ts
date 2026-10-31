@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import { chooseSelect } from "./select-control.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
@@ -185,11 +186,7 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Fixture");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("fixture@example.com");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: "Clone repository", exact: true }).click();
 
   const clone = page.getByRole("dialog", { name: "Clone repository", exact: true });

@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { execFileSync } from "node:child_process";
@@ -125,11 +126,7 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
   assert.equal(
     (await page.evaluate((path) => window.eda.repository.open(path), repository)).ok,
@@ -198,7 +195,7 @@ try {
   await page
     .getByRole("button", { name: "View commit diff for image file.bin", exact: true })
     .click();
-  await page.getByText("Binary file changed — no text preview.", { exact: true }).waitFor();
+  await page.getByText("Binary file changed: no text preview.", { exact: true }).waitFor();
   assert.equal(await graph.isVisible(), false, "Selecting a file replaces history with its diff");
 
   await page.getByRole("button", { name: "Back to history", exact: true }).click();
@@ -351,7 +348,7 @@ try {
   assert.match((await photo.getAttribute("src")) ?? "", /^data:image\/jpeg;base64,/);
   await page.screenshot({ path: resolve("screenshots/image-preview-working.png") });
   await page.getByRole("button", { name: "Unstaged main.txt, status M", exact: true }).click();
-  await page.getByText("Working tree · main.txt", { exact: true }).waitFor();
+  await page.getByText("Working tree, main.txt", { exact: true }).waitFor();
   assert.equal(
     await page.getByRole("textbox", { name: "Commit title" }).inputValue(),
     "Preserve this draft",
@@ -442,17 +439,17 @@ try {
       await drawer
         .getByRole("button", { name: "Inspect tag v1.0", exact: true })
         .click({ button: "right" });
-      await page.getByRole("dialog", { name: "Tag details", exact: true }).waitFor();
+      await page.getByRole("menu", { name: "Tag actions", exact: true }).waitFor();
       await page.keyboard.press("Escape");
       await page
-        .getByRole("dialog", { name: "Tag details", exact: true })
+        .getByRole("menu", { name: "Tag actions", exact: true })
         .waitFor({ state: "hidden" });
       assert.equal(await drawer.isVisible(), true);
 
       await page.keyboard.press("Escape");
       await drawer.waitFor({ state: "hidden" });
       await page.getByRole("button", { name: "Maximize diff viewer", exact: true }).click();
-      await page.getByRole("button", { name: "Commit draft…", exact: true }).click();
+      await page.getByRole("button", { name: "Commit draft...", exact: true }).click();
 
       const commitDrawer = page.getByRole("dialog", { name: "Commit draft", exact: true });
 

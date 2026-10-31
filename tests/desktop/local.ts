@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import type { OperationState } from "../../src/shared/operations.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
@@ -79,11 +80,7 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("work@eda.invalid");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
   assert.equal(
     (await page.evaluate((path) => window.eda.repository.open(path), repository)).ok,
@@ -100,7 +97,7 @@ try {
   await picker.getByRole("button", { name: /^local-workflow / }).press("Enter");
   await picker.waitFor({ state: "hidden" });
   await page.getByRole("heading", { name: "local-workflow", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Inspect working changes", exact: true }).click();
+  await page.getByRole("button", { name: "Unstaged file.txt, status M", exact: true }).click();
   await page.getByRole("button", { name: "Stage hunk 1", exact: true }).click();
   await waitForOperation(page, "Apply selected changes", "succeeded");
   assert.equal(
@@ -122,7 +119,7 @@ try {
   await draft.fill("Commit first hunk");
   await page.getByRole("textbox", { name: "Commit description" }).fill("");
   await page.getByRole("checkbox", { name: "Add Signed-off-by trailer" }).check();
-  await page.getByRole("button", { name: "Add co-author…" }).click();
+  await page.getByRole("button", { name: "Add co-author..." }).click();
   await page.getByRole("textbox", { name: "Co-author name" }).fill("Eda");
   await page.getByRole("textbox", { name: "Co-author email" }).fill("second@eda.invalid");
   await page.getByRole("button", { name: "Insert trailer", exact: true }).click();
@@ -207,6 +204,10 @@ try {
   await draft.fill("Keep failed draft");
   await page.getByRole("button", { name: "Commit", exact: true }).click();
   await waitForOperation(page, "Commit", "failed");
+  await page
+    .getByRole("dialog", { name: "Could not complete the action", exact: true })
+    .getByRole("button", { name: "Dismiss", exact: true })
+    .click();
   assert.equal(await draft.inputValue(), "Keep failed draft");
 
   const records = await page.evaluate(async () => {
@@ -238,6 +239,10 @@ try {
   await page.getByText(/Waiting in fixture hook/).waitFor();
   await page.getByRole("button", { name: "Cancel operation", exact: true }).click();
   await waitForOperation(page, "Commit", "interrupted");
+  await page
+    .getByRole("dialog", { name: "Could not complete the action", exact: true })
+    .getByRole("button", { name: "Dismiss", exact: true })
+    .click();
   assert.equal(git("rev-parse", "HEAD"), beforeCancel);
   assert.equal(git("ls-files", "--stage", "-z"), indexBeforeCancel);
   assert.equal(await draft.inputValue(), "Keep failed draft");
@@ -252,7 +257,7 @@ try {
   const beforeDiscardIndex = git("ls-files", "--stage", "-z");
   const beforeDiscardFile = await readFile(join(repository, "file.txt"));
 
-  await page.getByRole("button", { name: "Discard all…", exact: true }).click();
+  await page.getByRole("button", { name: "Discard all files", exact: true }).click();
 
   const discard = page.getByRole("dialog", { name: "Discard working changes" });
 
@@ -263,7 +268,7 @@ try {
   assert.equal(git("diff"), "");
   await assert.rejects(readFile(join(repository, "scratch.log")));
 
-  await page.getByRole("button", { name: "Recovery…", exact: true }).click();
+  await page.getByRole("button", { name: "Recovery", exact: true }).click();
   await page.getByRole("button", { name: "Restore 2 files", exact: true }).click();
   await page.getByRole("dialog", { name: "Recover local files" }).waitFor({ state: "hidden" });
   assert.deepEqual(await readFile(join(repository, "file.txt")), beforeDiscardFile);
@@ -281,14 +286,14 @@ try {
   assert.equal(git("diff", "--", "file.txt"), "");
   assert.equal(git("ls-files", "--stage", "-z"), beforeDiscardIndex);
 
-  await page.getByRole("button", { name: "Recovery…", exact: true }).click();
+  await page.getByRole("button", { name: "Recovery", exact: true }).click();
   await page.getByRole("button", { name: "Restore 1 files", exact: true }).click();
   await page.getByRole("dialog", { name: "Recover local files" }).waitFor({ state: "hidden" });
   assert.deepEqual(await readFile(join(repository, "file.txt")), beforeDiscardFile);
   assert.equal(git("ls-files", "--stage", "-z"), beforeDiscardIndex);
 
   await page.getByText("scratch.log", { exact: true }).first().click();
-  await page.getByRole("button", { name: "Ignore…", exact: true }).click();
+  await page.getByRole("button", { name: "Ignore...", exact: true }).click();
 
   const ignore = page.getByRole("dialog", { name: "Ignore rules", exact: true });
 

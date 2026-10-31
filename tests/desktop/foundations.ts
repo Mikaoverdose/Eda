@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import { chooseSelect } from "./select-control.ts";
 import type { ProfileSession } from "../../src/shared/identity/profile-session.ts";
 import assert from "node:assert/strict";
@@ -98,21 +99,18 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: "Inspect branch feature/work", exact: true }).waitFor();
   await page
     .getByRole("button", { name: "Inspect tag v1", exact: true })
     .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Verify tag signature...", exact: true }).click();
   await page
-    .getByRole("dialog", { name: "Tag details" })
+    .getByRole("dialog", { name: "Verify tag" })
     .getByText("Release annotation", { exact: true })
     .waitFor();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Columns…", exact: true }).click();
+  await page.getByRole("button", { name: "Columns...", exact: true }).click();
 
   const columns = page.getByRole("dialog", { name: "History columns" });
 
@@ -177,7 +175,7 @@ try {
     .check();
   await visibility.getByRole("radio", { name: "Pin refs/heads/feature/work", exact: true }).check();
   await visibility.getByRole("button", { name: "Apply graph view", exact: true }).click();
-  await page.getByRole("button", { name: "Filtered graph…", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Filtered graph...", exact: true }).waitFor();
 
   const filtered = await savedSession(
     (session) => session.views[repositoryId]?.graphFilter?.pinnedOid === head,
@@ -195,7 +193,8 @@ try {
     .getByRole("button", { name: "Inspect branch feature/work", exact: true })
     .click({ button: "right" });
 
-  const branch = page.getByRole("dialog", { name: "Branch actions" });
+  await page.getByRole("menuitem", { name: "Rename branch...", exact: true }).click();
+  const branch = page.getByRole("dialog", { name: "Rename branch", exact: true });
 
   await branch.getByRole("textbox", { name: "Rename branch to" }).fill("feature/renamed");
   await branch.getByRole("button", { name: "Rename branch", exact: true }).click();
@@ -211,7 +210,7 @@ try {
   await page
     .getByRole("button", { name: "Inspect branch main", exact: true })
     .click({ button: "right" });
-  await branch.getByRole("button", { name: "Check out branch", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Check out branch", exact: true }).click();
   await page.getByRole("button", { name: /On branch main/ }).waitFor();
   await command("Create tag at selection or HEAD");
   await page.getByRole("textbox", { name: "Tag name", exact: true }).fill("release/new");
@@ -226,17 +225,22 @@ try {
     .getByRole("button", { name: "Inspect tag release/new", exact: true })
     .click({ button: "right" });
 
-  const tag = page.getByRole("dialog", { name: "Tag details" });
+  await page.getByRole("menuitem", { name: "Verify tag signature...", exact: true }).click();
+  const tag = page.getByRole("dialog", { name: "Verify tag" });
 
   await tag.getByText("Created in desktop gate", { exact: true }).waitFor();
-  await tag.getByRole("button", { name: "Check out tag (detached HEAD)", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "Inspect tag release/new", exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Check out tag (detached HEAD)", exact: true }).click();
   await page.getByText(/^Detached HEAD /).waitFor();
   assert.equal(git("branch", "--show-current").trim(), "");
 
   await page
     .getByRole("button", { name: "Inspect branch main", exact: true })
     .click({ button: "right" });
-  await branch.getByRole("button", { name: "Check out branch", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Check out branch", exact: true }).click();
   await page.getByRole("button", { name: /On branch main/ }).waitFor();
   await command("Manage local references");
 
@@ -304,7 +308,7 @@ try {
   await app.evaluate(({ dialog }, path) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
   }, initial);
-  await create.getByRole("button", { name: "Browse…", exact: true }).click();
+  await create.getByRole("button", { name: "Browse...", exact: true }).click();
   await create.getByRole("textbox", { name: "Initial branch", exact: true }).fill("trunk");
   await chooseSelect(create.getByRole("combobox", { name: "Ignore template" }), "node");
   await chooseSelect(create.getByRole("combobox", { name: "License file" }), "MIT");
@@ -350,8 +354,8 @@ try {
     .getByRole("button", { name: "Inspect branch workflow-topic", exact: true })
     .click({ button: "right" });
   await page
-    .getByRole("dialog", { name: "Branch actions" })
-    .getByRole("button", { name: "Merge into current branch…", exact: true })
+    .getByRole("menu", { name: "Branch actions" })
+    .getByRole("menuitem", { name: "Merge into current branch...", exact: true })
     .click();
 
   const mergeReview = page.getByRole("dialog", { name: "Merge into current branch", exact: true });
@@ -377,7 +381,7 @@ try {
   const conflictIndex = git("ls-files", "--stage");
   const conflictWorking = await readFile(join(repository, "file.txt"), "utf8");
 
-  await conflict.getByRole("button", { name: "Open external merge tool…", exact: true }).click();
+  await conflict.getByRole("button", { name: "Open external merge tool...", exact: true }).click();
   await conflict.getByRole("status").filter({ hasText: "External tool finished" }).waitFor();
   assert.equal(git("ls-files", "--stage"), conflictIndex);
   assert.equal(await readFile(join(repository, "file.txt"), "utf8"), conflictWorking);
@@ -444,7 +448,7 @@ try {
 
   const abortPage = await foundationWindow(app);
 
-  await abortPage.getByRole("button", { name: "Abort merge…", exact: true }).click();
+  await abortPage.getByRole("button", { name: "Abort merge...", exact: true }).click();
 
   const abortDialog = abortPage.getByRole("dialog", { name: "Abort merge", exact: true });
 
@@ -464,7 +468,7 @@ try {
   const recovery = abortPage.getByRole("dialog", { name: "Recover local files" });
 
   await recovery
-    .getByRole("button", { name: "Save index stage 2 copy of file.txt…", exact: true })
+    .getByRole("button", { name: "Save index stage 2 copy of file.txt...", exact: true })
     .waitFor();
   await recovery.getByRole("button", { name: "Restore 1 files", exact: true }).click();
   await recovery.waitFor({ state: "hidden" });
@@ -480,8 +484,8 @@ try {
     .getByRole("button", { name: "Inspect branch abort-topic", exact: true })
     .click({ button: "right" });
   await abortPage
-    .getByRole("dialog", { name: "Branch actions" })
-    .getByRole("button", { name: "Merge into current branch…", exact: true })
+    .getByRole("menu", { name: "Branch actions" })
+    .getByRole("menuitem", { name: "Merge into current branch...", exact: true })
     .click();
 
   const squashReview = abortPage.getByRole("dialog", {
@@ -551,7 +555,7 @@ try {
   const beforeFileRestore = git("show", ":file.txt");
 
   await chooseSelect(stashes.getByRole("combobox", { name: "Stash file to restore" }), "file.txt");
-  await stashes.getByRole("button", { name: "Restore file…", exact: true }).click();
+  await stashes.getByRole("button", { name: "Restore file...", exact: true }).click();
 
   const fileRestore = squashPage.getByRole("dialog", { name: "Restore stash file", exact: true });
 
@@ -686,8 +690,8 @@ try {
     .getByRole("button", { name: "Inspect branch rebase-base", exact: true })
     .click({ button: "right" });
   await stashPage
-    .getByRole("dialog", { name: "Branch actions" })
-    .getByRole("button", { name: "Rebase current branch onto this…", exact: true })
+    .getByRole("menu", { name: "Branch actions" })
+    .getByRole("menuitem", { name: "Rebase current branch onto this...", exact: true })
     .click();
 
   const rebaseReview = stashPage.getByRole("dialog", {
@@ -742,22 +746,22 @@ try {
   await rebaseConflict.getByRole("button", { name: "Save and mark resolved", exact: true }).click();
   await rebaseConflict.getByRole("status").filter({ hasText: "Resolved file.txt" }).waitFor();
   await rebaseConflict.getByRole("button", { name: "Close", exact: true }).click();
-  await rebasePage.getByRole("button", { name: "Continue rebase…", exact: true }).click();
+  await rebasePage.getByRole("button", { name: "Continue rebase...", exact: true }).click();
 
   const rebaseContinue = rebasePage.getByRole("dialog", { name: "Continue rebase", exact: true });
 
   await rebaseContinue.getByRole("checkbox", { name: "I reviewed this rebase action" }).check();
   await rebaseContinue.getByRole("button", { name: "Continue rebase", exact: true }).click();
   await rebaseContinue.waitFor({ state: "hidden" });
-  await rebasePage.getByRole("button", { name: "Amend paused commit…", exact: true }).waitFor();
+  await rebasePage.getByRole("button", { name: "Amend paused commit...", exact: true }).waitFor();
   await app.close();
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
   rebasePage = await foundationWindow(app);
-  await rebasePage.getByRole("button", { name: "Amend paused commit…", exact: true }).waitFor();
+  await rebasePage.getByRole("button", { name: "Amend paused commit...", exact: true }).waitFor();
   await writeFile(join(repository, "plan-edit.txt"), "after edit\n");
   git("add", "plan-edit.txt");
   await rebasePage.getByRole("button", { name: "Refresh repository", exact: true }).click();
-  await rebasePage.getByRole("button", { name: "Amend paused commit…", exact: true }).click();
+  await rebasePage.getByRole("button", { name: "Amend paused commit...", exact: true }).click();
 
   const amendReview = rebasePage.getByRole("dialog", { name: "Amend paused commit", exact: true });
 
@@ -769,7 +773,7 @@ try {
   await amendReview.waitFor({ state: "hidden" });
   assert.equal(git("show", "HEAD:plan-edit.txt"), "after edit\n");
 
-  await rebasePage.getByRole("button", { name: "Continue rebase…", exact: true }).click();
+  await rebasePage.getByRole("button", { name: "Continue rebase...", exact: true }).click();
 
   const finishEdit = rebasePage.getByRole("dialog", { name: "Continue rebase", exact: true });
 
@@ -812,7 +816,7 @@ try {
   await writeFile(join(repository, "file.txt"), "original_branch_advanced\n");
   git("add", "file.txt");
   git("commit", "-m", "Advance original branch");
-  await branchStashes.getByRole("button", { name: "Create branch…", exact: true }).click();
+  await branchStashes.getByRole("button", { name: "Create branch...", exact: true }).click();
 
   const stashBranchDialog = rebasePage.getByRole("dialog", {
     name: "Create branch from stash",
@@ -837,7 +841,7 @@ try {
 
   const stashStructure = git("show", "-s", "--format=%T %P", "stash@{0}");
 
-  await branchStashes.getByRole("button", { name: "Rename…", exact: true }).click();
+  await branchStashes.getByRole("button", { name: "Rename...", exact: true }).click();
 
   const renameStash = rebasePage.getByRole("dialog", { name: "Rename stash", exact: true });
 
@@ -981,7 +985,7 @@ try {
   await stashGraphPage
     .getByRole("button", { name: new RegExp(`^Replay first\\. ${replayFirst.slice(0, 8)}\\.`) })
     .click({ button: "right" });
-  await stashGraphPage.getByRole("menuitem", { name: "Cherry-pick…", exact: true }).click();
+  await stashGraphPage.getByRole("menuitem", { name: "Cherry-pick...", exact: true }).click();
 
   const pickReview = stashGraphPage.getByRole("dialog", {
     name: "Cherry-pick commits",
@@ -1013,7 +1017,7 @@ try {
   await pickConflict.getByRole("button", { name: "Save and mark resolved", exact: true }).click();
   await pickConflict.getByRole("status").filter({ hasText: "Resolved file.txt" }).waitFor();
   await pickConflict.getByRole("button", { name: "Close", exact: true }).click();
-  await replayPage.getByRole("button", { name: "Continue cherry-pick…", exact: true }).click();
+  await replayPage.getByRole("button", { name: "Continue cherry-pick...", exact: true }).click();
 
   const pickContinue = replayPage.getByRole("dialog", {
     name: "Continue cherry-pick",
@@ -1034,7 +1038,7 @@ try {
   await replayPage
     .getByRole("button", { name: new RegExp(`^Replay second\\. ${pickedSecond.slice(0, 8)}\\.`) })
     .click({ button: "right" });
-  await replayPage.getByRole("menuitem", { name: "Revert…", exact: true }).click();
+  await replayPage.getByRole("menuitem", { name: "Revert...", exact: true }).click();
 
   const revertReview = replayPage.getByRole("dialog", { name: "Revert commits", exact: true });
 
@@ -1055,7 +1059,7 @@ try {
       name: new RegExp(`^Resolve large binary merge\\. ${replayBase.slice(0, 8)}\\.`),
     })
     .click({ button: "right" });
-  await replayPage.getByRole("menuitem", { name: "Revert…", exact: true }).click();
+  await replayPage.getByRole("menuitem", { name: "Revert...", exact: true }).click();
 
   const mergeRevert = replayPage.getByRole("dialog", { name: "Revert commits", exact: true });
 
@@ -1090,7 +1094,7 @@ try {
       .getByRole("button", { name: `${resetSubject}. ${resetBase.slice(0, 8)}.`, exact: false })
       .click({ button: "right" });
     await replayPage
-      .getByRole("menuitem", { name: "Reset current branch here…", exact: true })
+      .getByRole("menuitem", { name: "Reset current branch here...", exact: true })
       .click();
 
     const resetDialog = replayPage.getByRole("dialog", { name: "Reset to commit", exact: true });

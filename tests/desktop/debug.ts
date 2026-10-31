@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -32,11 +33,7 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
   await mkdir("screenshots", { recursive: true });
   await page.keyboard.press(`${modifier}+,`);

@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { execFileSync } from "node:child_process";
@@ -167,15 +168,10 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
   assert.equal(globalEmail(), "work@example.com");
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await section("Profile: Appearance");
   await page
     .getByRole("radiogroup", { name: "Appearance mode", exact: true })
@@ -401,7 +397,7 @@ try {
       return { canceled: false, filePaths: [path] };
     };
   }, paths.alpha);
-  await page.getByRole("button", { name: "Locate repository…", exact: true }).click();
+  await page.getByRole("button", { name: "Locate repository...", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Update repository location?" })
     .getByRole("button", { name: "Use this folder", exact: true })

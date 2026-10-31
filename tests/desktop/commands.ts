@@ -1,3 +1,4 @@
+import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { execFileSync } from "node:child_process";
@@ -42,11 +43,7 @@ try {
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
   await page.getByRole("textbox", { name: /^Git email/ }).fill("work@example.com");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Start using Eda", exact: true }).click();
-  await page.getByRole("heading", { name: "Welcome to Eda.", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Open workspace", exact: true }).click();
+  await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
 
   const palette = page.getByRole("dialog", { name: "Command palette", exact: true });
@@ -61,7 +58,12 @@ try {
   assert.match(await refresh.innerText(), /Select a repository first/);
 
   await page.keyboard.press("Tab");
-  assert.equal(await search.evaluate((input) => document.activeElement === input), true);
+  assert.equal(
+    await palette
+      .getByRole("button", { name: "Close dialog", exact: true })
+      .evaluate((button) => document.activeElement === button),
+    true,
+  );
 
   await page.keyboard.press("Shift+Tab");
   assert.equal(await search.evaluate((input) => document.activeElement === input), true);
@@ -151,7 +153,7 @@ try {
   await diffFocus.waitFor();
   await search.press("Enter");
   await palette.waitFor({ state: "hidden" });
-  await page.getByRole("button", { name: "Restore diff", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Restore diff viewer", exact: true }).waitFor();
   await page.keyboard.press(`${modifier}+Shift+p`);
   await search.fill("diff focus");
   await diffFocus.waitFor();
@@ -179,7 +181,16 @@ try {
     true,
   );
 
-  await palette.getByRole("alert").filter({ hasText: "profile or repository changed" }).waitFor();
+  const staleError = page.getByRole("dialog", {
+    name: "Could not complete the action",
+    exact: true,
+  });
+
+  await staleError
+    .getByRole("alert")
+    .filter({ hasText: "profile or repository changed" })
+    .waitFor();
+  await staleError.getByRole("button", { name: "Dismiss", exact: true }).click();
   assert.equal(await palette.getByRole("option").first().getAttribute("aria-disabled"), "true");
 
   await page.keyboard.press("Enter");
