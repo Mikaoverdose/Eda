@@ -3,12 +3,14 @@ import { prepareGit } from "./scripts/prepare-git.ts";
 import { readBuildInfo } from "./scripts/version.ts";
 import { UPDATE_FEED_BASE } from "./src/shared/updates.ts";
 
+const buildInfo = readBuildInfo();
+
 export default {
   appId: "cafe.kirameki.eda",
   productName: "Eda",
   publish: { provider: "generic", url: `${UPDATE_FEED_BASE}\${os}/\${arch}/`, channel: "latest" },
-  releaseInfo: { releaseName: `Eda ${readBuildInfo().displayVersion}` },
-  artifactName: "Eda-${version}-${os}-${arch}.${ext}",
+  releaseInfo: { releaseName: `Eda ${buildInfo.displayVersion}` },
+  artifactName: `Eda-${buildInfo.version}-${buildInfo.commit?.slice(0, 12) ?? "unknown"}-\${os}-\${arch}.\${ext}`,
   forceCodeSigning: process.env["EDA_RELEASE"] === "1",
   protocols: [{ name: "Eda repository links", schemes: ["eda"] }],
   directories: { output: "release" },

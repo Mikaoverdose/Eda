@@ -33,7 +33,7 @@ jobs:
           - name: Component inventory
             command: node scripts/generate-component-inventory.ts --check
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: ${{ matrix.command }}
 
@@ -47,7 +47,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         project: [main, renderer]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Record Git version
         run: git --version
@@ -63,17 +63,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: pnpm build
       - name: Package desktop app
         run: pnpm exec electron-builder --config electron-builder.config.ts --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Read artifact version
+        id: artifact
+        shell: bash
+        run: |
+          node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { readBuildInfo } from "./scripts/version.ts"; const { version, commit } = readBuildInfo(); if (!commit) throw new Error("Artifact naming requires a Git commit."); appendFileSync(process.env.GITHUB_OUTPUT, `name=Eda-${version}-${commit.slice(0, 12)}\n`);'
       - name: Upload desktop installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: Eda-${{ runner.os }}-${{ runner.arch }}
+          name: ${{ steps.artifact.outputs.name }}-${{ runner.os }}-${{ runner.arch }}
           path: |
             release/*.exe
             release/*.dmg
@@ -89,11 +94,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: pnpm build
       - name: Share Windows desktop build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-windows
           path: |
@@ -119,15 +124,15 @@ jobs:
           - name: Merge, stashes and history recovery
             suites: foundations
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: desktop-windows
       - run: pnpm test:desktop ${{ matrix.suites }}
       - name: Save desktop failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.name }}-failure
           path: screenshots/
