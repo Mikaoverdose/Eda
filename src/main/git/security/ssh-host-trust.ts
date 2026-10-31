@@ -88,6 +88,8 @@ export class SshHostTrustRunner implements ProcessRunner {
             controller.abort();
             throw error;
           }
+        } finally {
+          await rm(directory, { recursive: true, force: true });
         }
       })();
       // Attach a handler now so watcher failures don't become unhandled rejections.

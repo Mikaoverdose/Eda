@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ssh2, { type Connection, type Server } from "ssh2";
@@ -19,6 +19,38 @@ const toolEnvironment = await sshTestEnvironment();
 
 const fingerprint = `SHA256:${"a".repeat(43)}`;
 const prompt = `The authenticity of host '[localhost]:2222 (127.0.0.1)' can't be established.\nED25519 key fingerprint is ${fingerprint}.\nAre you sure you want to continue connecting (yes/no/[fingerprint])? `;
+
+it("releases askpass on cancellation before waiting for the process to close", async () => {
+  const controller = new AbortController();
+  const confirm = vi.fn(() => {
+    controller.abort();
+    return new Promise<boolean>(() => {});
+  });
+  const runner = new SshHostTrustRunner(
+    {
+      run: async (request) => {
+        const directory = request.env["EDA_SSH_TRUST_DIR"]!;
+        const path = join(directory, "request.12345678");
+        await mkdir(path);
+        await writeFile(join(path, "prompt"), prompt);
+        await writeFile(join(path, "ready"), "");
+        await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+        await vi.waitFor(() => expect(access(directory)).rejects.toMatchObject({ code: "ENOENT" }));
+        return { exitCode: 130, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), cancelled: true };
+      },
+    },
+    confirm,
+  );
+
+  await expect(
+    runner.run({
+      executable: "ssh",
+      args: [],
+      env: { EDA_SSH_HOST_TRUST: "1" },
+      signal: controller.signal,
+    }),
+  ).resolves.toMatchObject({ cancelled: true });
+});
 
 it("extracts only the first-contact host and its complete SHA256 fingerprint", () => {
   expect(parseSshHostPrompt(prompt)).toEqual({
