@@ -2,6 +2,7 @@ import { t, setLocale } from "@shared/i18n";
 import { configureGraphics } from "./application/graphics";
 import { app, BrowserWindow, dialog, Menu, shell, session } from "electron";
 import { join, dirname } from "node:path";
+import { mkdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { registerIpcHandlers } from "./ipc/register";
 import { createServices } from "./services";
@@ -27,6 +28,12 @@ app.on("open-url", (event, url) => {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+
+if (isDev && process.env["VITE_DEV_SERVER_URL"]) {
+  const developmentData = join(app.getPath("appData"), "eda-dev");
+  mkdirSync(developmentData, { recursive: true });
+  app.setPath("userData", developmentData);
+}
 
 const CSP = [
   "default-src 'self'",
