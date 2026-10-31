@@ -482,7 +482,7 @@ export function GitHubConnection({
       }
     >
       <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
-      {loading && !compact ? (
+      {loading ? (
         <div aria-hidden="true" className="space-y-3">
           <div className="flex items-center gap-3">
             <Skeleton className="size-11 shrink-0 rounded-full" />
@@ -501,7 +501,7 @@ export function GitHubConnection({
         <p className="text-xs text-text-secondary">
           {t("settings.gitHubConnection.allowRepositoryAccessOnGitHub")}
         </p>
-      ) : account && !compact ? (
+      ) : account ? (
         <div key={account.id} className="space-y-2">
           <div className="flex min-w-0 items-center gap-3">
             <ProfileAvatar
