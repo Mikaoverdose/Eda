@@ -8,6 +8,9 @@ import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 import { GitService } from "@main/git/git-service";
 import { buildGitEnvironment } from "@main/git/execution/environment";
 import { FakeProcessRunner } from "../../helpers/fake-process-runner";
+import { sshTestEnvironment } from "../../helpers/ssh-environment";
+
+const toolEnvironment = await sshTestEnvironment();
 
 const agents: SshAgent[] = [];
 const directories: string[] = [];
@@ -71,13 +74,13 @@ it("reports missing tools without falling back to inherited credentials", async 
 
 it("unlocks a disposable encrypted key for real Git signing and stops only its own agent", async () => {
   const runner = new NodeProcessRunner();
-  const inherited = new SshAgent("builtin");
+  const inherited = new SshAgent("builtin", "ssh-agent", toolEnvironment);
   agents.push(inherited);
   await inherited.start();
   expect(inherited.unavailableReason).toBeUndefined();
   const inheritedSocket = inherited.environment["SSH_AUTH_SOCK"]!;
   vi.stubEnv("SSH_AUTH_SOCK", inheritedSocket);
-  const agent = new SshAgent("builtin");
+  const agent = new SshAgent("builtin", "ssh-agent", toolEnvironment);
   agents.push(agent);
   await Promise.all([agent.start(), agent.start()]);
   expect(agent.unavailableReason).toBeUndefined();
@@ -86,14 +89,17 @@ it("unlocks a disposable encrypted key for real Git signing and stops only its o
   const home = await mkdtemp(join(tmpdir(), "eda-agent-key-"));
   directories.push(home);
   const key = join(home, "key");
-  const env = buildGitEnvironment({ overrides: { ...agent.environment, HOME: home } });
+  const env = buildGitEnvironment({
+    overrides: { ...toolEnvironment, ...agent.environment, HOME: home },
+  });
   const generated = await runner.run({
     executable: "ssh-keygen",
     args: ["-q", "-t", "ed25519", "-f", key, "-N", "disposable-test-passphrase"],
     env,
   });
   expect(generated.exitCode).toBe(0);
-  const ssh = new SshService(runner, home, agent.environment, agent);
+  const transportEnvironment = Object.assign(agent.environment, toolEnvironment);
+  const ssh = new SshService(runner, home, transportEnvironment, agent);
   expect(await ssh.getAgentStatus()).toMatchObject({ available: true, keys: [] });
   const status = await ssh.unlockKey(
     { keyPath: key, lifetimeSeconds: 60 },
@@ -101,6 +107,7 @@ it("unlocks a disposable encrypted key for real Git signing and stops only its o
   );
   expect(status.available && status.keys.length).toBe(1);
   const git = new GitService(runner, engine, {
+    ...toolEnvironment,
     ...agent.environment,
     HOME: home,
     GIT_CONFIG_GLOBAL: "/dev/null",
@@ -133,7 +140,7 @@ it("unlocks a disposable encrypted key for real Git signing and stops only its o
   const systemKeys = await runner.run({
     executable: "ssh-add",
     args: ["-l"],
-    env: buildGitEnvironment({ overrides: inherited.environment }),
+    env: buildGitEnvironment({ overrides: { ...toolEnvironment, ...inherited.environment } }),
   });
   expect(systemKeys.exitCode).toBe(1);
   await agent.reset();
@@ -149,7 +156,7 @@ it("unlocks a disposable encrypted key for real Git signing and stops only its o
       await runner.run({
         executable: "ssh-add",
         args: ["-l"],
-        env: buildGitEnvironment({ overrides: inherited.environment }),
+        env: buildGitEnvironment({ overrides: { ...toolEnvironment, ...inherited.environment } }),
       })
     ).exitCode,
   ).toBe(1);

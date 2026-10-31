@@ -51,6 +51,9 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Record Git version
         run: git --version
+      - name: Prepare Windows SSH test tools
+        if: runner.os == 'Windows' && matrix.project == 'main'
+        run: node scripts/prepare-git.ts
       - run: pnpm exec vitest run --project ${{ matrix.project }}
 
   build:
@@ -115,7 +118,7 @@ jobs:
         with:
           name: desktop-windows
       - run: pnpm test:desktop ${{ matrix.suites }}
-      - name: Save desktop failure screenshots
+      - name: Save desktop failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:

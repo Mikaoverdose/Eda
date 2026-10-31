@@ -13,6 +13,9 @@ import {
 } from "@main/git/security/ssh-host-trust";
 import type { ProcessRunner } from "@main/git/execution/process-runner";
 import { SshService } from "@main/ssh/ssh-service";
+import { sshTestEnvironment } from "../../helpers/ssh-environment";
+
+const toolEnvironment = await sshTestEnvironment();
 
 const fingerprint = `SHA256:${"a".repeat(43)}`;
 const prompt = `The authenticity of host '[localhost]:2222 (127.0.0.1)' can't be established.\nED25519 key fingerprint is ${fingerprint}.\nAre you sure you want to continue connecting (yes/no/[fingerprint])? `;
@@ -52,7 +55,7 @@ describe("host trust during real SSH connections", () => {
   beforeEach(async () => {
     home = await mkdtemp(join(tmpdir(), "eda host trust-"));
     const raw = new NodeProcessRunner();
-    const env = buildGitEnvironment();
+    const env = buildGitEnvironment({ overrides: toolEnvironment });
     key = join(home, "client");
     const hostKey = join(home, "host");
     wrongHostKey = join(home, "other-host");
@@ -70,7 +73,7 @@ describe("host trust during real SSH connections", () => {
     const config = join(home, "ssh_config");
     await writeFile(
       config,
-      `Host *\n  UserKnownHostsFile "${knownHosts}"\n  GlobalKnownHostsFile /dev/null\n`,
+      `Host *\n  UserKnownHostsFile "${knownHosts.replaceAll("\\", "/")}"\n  GlobalKnownHostsFile /dev/null\n`,
     );
     configuredRunner = {
       run: (request) =>
@@ -79,10 +82,11 @@ describe("host trust during real SSH connections", () => {
           args: request.executable === "ssh" ? ["-F", config, ...request.args] : request.args,
           env: {
             ...request.env,
+            ...toolEnvironment,
             ...(request.env["GIT_SSH_COMMAND"] && {
               GIT_SSH_COMMAND: request.env["GIT_SSH_COMMAND"].replace(
                 /^ssh\b/,
-                `ssh -F "${config}"`,
+                `ssh -F "${config.replaceAll("\\", "/")}"`,
               ),
             }),
           },
@@ -147,13 +151,13 @@ describe("host trust during real SSH connections", () => {
     );
     const ssh = new SshService(new SshHostTrustRunner(configuredRunner, confirm), home);
     const pending = ssh.testConnection(destination(), key);
-    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce(), { timeout: 10_000 });
     expect(authenticated).toBe(0);
     expect(await readFile(knownHosts, "utf8").catch(() => "")).toBe("");
     const actualFingerprint = await new NodeProcessRunner().run({
       executable: "ssh-keygen",
       args: ["-lf", join(home, "host.pub"), "-E", "sha256"],
-      env: buildGitEnvironment(),
+      env: buildGitEnvironment({ overrides: toolEnvironment }),
     });
     expect(actualFingerprint.stdout.toString()).toContain(confirm.mock.calls[0]![0].fingerprint);
     approve!(true);
@@ -222,7 +226,7 @@ describe("host trust during real SSH connections", () => {
       env: buildGitEnvironment({ overrides: { EDA_SSH_HOST_TRUST: "1" } }),
       signal: controller.signal,
     });
-    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce(), { timeout: 10_000 });
     controller.abort();
     expect(await pending).toMatchObject({ cancelled: true });
     expect(promptSignal?.aborted).toBe(true);
@@ -242,9 +246,9 @@ describe("host trust during real SSH connections", () => {
     const pendingFirst = runner.run({ ...request, signal: first.signal });
     let pendingSecond: ReturnType<typeof runner.run> | undefined;
     try {
-      await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce(), { timeout: 10_000 });
       pendingSecond = runner.run({ ...request, signal: second.signal });
-      await vi.waitFor(() => expect(clients.size).toBe(2));
+      await vi.waitFor(() => expect(clients.size).toBe(2), { timeout: 10_000 });
       second.abort();
       expect(await pendingSecond).toMatchObject({ cancelled: true });
       expect(confirm).toHaveBeenCalledOnce();
