@@ -361,6 +361,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "components/ui/overlays/MenuItem.tsx": ["MenuItem"],
   "components/ui/overlays/ModalSurface.tsx": [
     "ModalBehaviorContext",
+    "ModalSurfaceContext",
     "ModalSurface",
     "ModalTitle",
     "ModalDescription",

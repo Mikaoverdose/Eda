@@ -1,5 +1,6 @@
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { createPortal } from "react-dom";
 import { hasOpenOverlay } from "@renderer/components/ui/overlays/overlay-presence";
 import { ModalBehaviorContext } from "@renderer/components/ui/overlays/ModalSurface";
 import { Dialog } from "@renderer/components/ui/overlays/Dialog";
@@ -48,4 +49,33 @@ it("tracks nested surfaces independently across StrictMode cleanup and rerenders
   expect(hasOpenOverlay()).toBe(true);
   await act(async () => root.render(<Example dialog={false} popover={false} />));
   expect(hasOpenOverlay()).toBe(false);
+});
+
+it("Escape dismisses a portaled menu without closing its parent dialog", async () => {
+  const closeDialog = vi.fn();
+  const closeMenu = vi.fn();
+  await act(async () => {
+    root.render(
+      <ModalBehaviorContext value={false}>
+        <Dialog title="References" onClose={closeDialog}>
+          {createPortal(
+            <PopoverSurface role="menu" onClose={closeMenu}>
+              <button role="menuitem">Copy name</button>
+            </PopoverSurface>,
+            document.body,
+          )}
+        </Dialog>
+      </ModalBehaviorContext>,
+    );
+  });
+
+  const item = document.querySelector<HTMLElement>('[role="menuitem"]')!;
+  item.focus();
+  await act(async () => {
+    item.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  expect(closeMenu).toHaveBeenCalledOnce();
+  expect(closeDialog).not.toHaveBeenCalled();
 });

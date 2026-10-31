@@ -28,6 +28,7 @@ export function useMenuKeyboard(
 
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         dismiss.current();
         opener?.focus();
         return;
@@ -62,11 +63,11 @@ export function useMenuKeyboard(
     };
 
     document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
 
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
     };
   }, [active, ref]);
 }

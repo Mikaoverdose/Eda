@@ -1,9 +1,10 @@
-import { createContext, useContext, useRef, type ReactNode } from "react";
+import { createContext, useContext, useRef, type ReactNode, type RefObject } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cx } from "../cx";
 import { useOverlayPresence } from "../hooks/useOverlayPresence";
 
 export const ModalBehaviorContext = createContext(true);
+export const ModalSurfaceContext = createContext<RefObject<HTMLDivElement | null> | null>(null);
 
 export function ModalSurface({
   onClose,
@@ -19,6 +20,7 @@ export function ModalSurface({
   children: ReactNode;
 }) {
   const modal = useContext(ModalBehaviorContext);
+  const surface = useRef<HTMLDivElement>(null);
   useOverlayPresence();
   const opener = useRef(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -33,6 +35,7 @@ export function ModalSurface({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="ui-overlay-in fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]" />
         <DialogPrimitive.Content
+          ref={surface}
           onInteractOutside={(event) => {
             if (!modal) event.preventDefault();
           }}
@@ -49,7 +52,7 @@ export function ModalSurface({
             className,
           )}
         >
-          {children}
+          <ModalSurfaceContext value={surface}>{children}</ModalSurfaceContext>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

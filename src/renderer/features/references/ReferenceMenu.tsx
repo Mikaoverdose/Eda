@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { copyText } from "../../utils/clipboard";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Copy, GitBranch, GitMerge, GitPullRequestArrow, Link, Pencil, Trash2 } from "lucide-react";
 import type {
@@ -29,6 +29,7 @@ import {
 } from "../../components/ui/index";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { RebaseDialog } from "../workflows/RebaseDialog";
+import { ModalSurfaceContext } from "../../components/ui/overlays/ModalSurface";
 
 export type ReferenceTarget = (
   { kind: "branch"; ref: BranchSummary } | { kind: "tag"; ref: TagSummary }
@@ -55,6 +56,7 @@ export function ReferenceMenu({
   target: ReferenceTarget;
   onClose: () => void;
 }) {
+  const modalSurface = useContext(ModalSurfaceContext)?.current;
   const [context] = useState(() => captureRepositoryCommand(repositoryId));
   const dispatch = repositoryCommandDispatcher(context);
   useRepositoryStore((state) => state.writing);
@@ -182,6 +184,8 @@ export function ReferenceMenu({
     );
 
   const top = Math.max(8, Math.min(target.y, window.innerHeight - 460));
+  const left = Math.max(8, Math.min(target.x, window.innerWidth - 320));
+  const bounds = modalSurface?.getBoundingClientRect();
 
   return createPortal(
     <PopoverSurface
@@ -193,8 +197,9 @@ export function ReferenceMenu({
       }
       onClose={close}
       style={{
-        left: Math.max(8, Math.min(target.x, window.innerWidth - 320)),
-        top,
+        position: modalSurface ? "absolute" : "fixed",
+        left: left - (bounds?.left ?? 0) + (modalSurface?.scrollLeft ?? 0),
+        top: top - (bounds?.top ?? 0) + (modalSurface?.scrollTop ?? 0),
         maxHeight: `calc(100vh - ${top + 8}px)`,
       }}
       className="fixed w-[312px] overflow-y-auto p-1"
@@ -577,6 +582,6 @@ export function ReferenceMenu({
       {unavailable && <p className="px-2 py-1 text-xs text-text-tertiary">{unavailable}</p>}
       {error && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
     </PopoverSurface>,
-    document.body,
+    modalSurface ?? document.body,
   );
 }
