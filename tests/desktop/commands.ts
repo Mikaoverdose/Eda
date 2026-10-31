@@ -1,6 +1,7 @@
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
+import { expect } from "playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -34,6 +35,7 @@ const modifier = process.platform === "darwin" ? "Meta" : "Control";
 
 try {
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
+  await app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
 
   const page = await app.firstWindow();
 
@@ -58,15 +60,10 @@ try {
   assert.match(await refresh.innerText(), /Select a repository first/);
 
   await page.keyboard.press("Tab");
-  assert.equal(
-    await palette
-      .getByRole("button", { name: "Close dialog", exact: true })
-      .evaluate((button) => document.activeElement === button),
-    true,
-  );
+  await expect(palette.getByRole("button", { name: "Close dialog", exact: true })).toBeFocused();
 
   await page.keyboard.press("Shift+Tab");
-  assert.equal(await search.evaluate((input) => document.activeElement === input), true);
+  await expect(search).toBeFocused();
 
   await page.keyboard.press("Enter");
   assert.equal(await palette.isVisible(), true);
@@ -74,13 +71,8 @@ try {
   await search.fill("no-such-command");
   await palette.getByRole("status").waitFor();
   await page.keyboard.press("Escape");
-  await palette.waitFor({ state: "hidden" });
-  assert.equal(
-    await page
-      .getByRole("button", { name: "Command palette", exact: true })
-      .evaluate((button) => document.activeElement === button),
-    true,
-  );
+  await expect(palette).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Command palette", exact: true })).toBeFocused();
 
   await page.keyboard.press(`${modifier}+Shift+p`);
   await search.fill("manage profiles");
@@ -101,7 +93,9 @@ try {
   assert.equal(await page.getByRole("dialog").count(), 1);
 
   await page.keyboard.press("Escape");
+  await expect(help).toHaveCount(0);
   await page.keyboard.press(`${modifier}+,`);
+  await expect(page.getByRole("navigation", { name: "Settings sections" })).toHaveCount(0);
 
   assert.equal(
     (await page.evaluate((path) => window.eda.repository.open(path), repository)).ok,
@@ -226,6 +220,10 @@ try {
 } catch (error) {
   if (app) {
     await mkdir("screenshots", { recursive: true });
+    await app
+      .context()
+      .tracing.stop({ path: resolve("screenshots/commands-trace.zip") })
+      .catch(() => {});
     await app
       .windows()[0]
       ?.screenshot({ path: resolve("screenshots/commands-gate-failure.png") })

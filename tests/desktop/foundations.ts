@@ -3,6 +3,7 @@ import { chooseSelect } from "./select-control.ts";
 import type { ProfileSession } from "../../src/shared/identity/profile-session.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { expect } from "playwright/test";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, readFile, realpath, rm } from "node:fs/promises";
@@ -51,6 +52,7 @@ const errors: string[] = [];
 const modifier = process.platform === "darwin" ? "Meta" : "Control";
 
 async function foundationWindow(running: ElectronApplication): Promise<Page> {
+  await running.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await running.firstWindow();
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -119,6 +121,7 @@ try {
   await columns.getByRole("slider", { name: "sha column width" }).focus();
   await page.keyboard.press("ArrowRight");
   await columns.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(columns).toHaveCount(0);
 
   const saved = await savedSession(
     (session) => session.views[session.selectedRepositoryId ?? ""]?.graphColumns?.[1]?.id === "sha",
@@ -130,8 +133,9 @@ try {
     mergeToolScript,
     "const fs = require('node:fs'); const [base,current,incoming,result] = process.argv.slice(2); fs.writeFileSync(result, fs.readFileSync(incoming));",
   );
-  await page.keyboard.press(`${modifier}+,`);
-  await page.getByRole("button", { name: "Global settings: Application", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("navigation", { name: "Settings sections", exact: true });
+  await settings.getByRole("button", { name: "Global settings: Application", exact: true }).click();
   await page
     .locator("#settings-application")
     .getByText("Advanced options", { exact: true })
@@ -144,7 +148,8 @@ try {
     .fill([mergeToolScript, "{base}", "{current}", "{incoming}", "{result}"].join("\n"));
   await page.getByRole("button", { name: "Save merge tool", exact: true }).click();
   await page.getByText("Merge tool saved.", { exact: true }).waitFor();
-  await page.keyboard.press(`${modifier}+,`);
+  await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  await expect(settings).toHaveCount(0);
 
   const savedColumns = saved.views[repositoryId]?.graphColumns;
 
@@ -1746,6 +1751,10 @@ try {
 } catch (error) {
   if (app) {
     await mkdir("screenshots", { recursive: true });
+    await app
+      .context()
+      .tracing.stop({ path: resolve("screenshots/foundations-trace.zip") })
+      .catch(() => {});
     await app
       .windows()[0]
       ?.screenshot({ path: resolve("screenshots/foundations-failure.png") })

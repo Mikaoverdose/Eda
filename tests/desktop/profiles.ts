@@ -1,5 +1,6 @@
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
+import { expect } from "playwright/test";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { execFileSync } from "node:child_process";
 import {
@@ -442,21 +443,11 @@ try {
     await create.getByRole("textbox", { name: /^Git email/ }).inputValue(),
     "typing@example.com",
   );
-  assert.equal(
-    await create
-      .getByRole("textbox", { name: /^Git email/ })
-      .evaluate((input) => document.activeElement === input),
-    true,
-  );
+  await expect(create.getByRole("textbox", { name: /^Git email/ })).toBeFocused();
 
   await page.keyboard.press("Escape");
-  await create.waitFor({ state: "hidden" });
-  assert.equal(
-    await page
-      .getByRole("button", { name: "New profile", exact: true })
-      .evaluate((button) => document.activeElement === button),
-    true,
-  );
+  await expect(create).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "New profile", exact: true })).toBeFocused();
 
   await page.getByRole("button", { name: "New profile", exact: true }).click();
   await create.getByRole("textbox", { name: /^Profile name/ }).fill("Home");
