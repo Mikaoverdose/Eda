@@ -16,6 +16,7 @@ export function useScopedSetting<K extends SettingKey>(
   repositoryId?: string,
 ) {
   const profileId = useAppStore((state) => state.activeIdentity?.id);
+  const switching = useAppStore((state) => state.switchingIdentityId);
   const values = usePreferencesStore((state) => state.values);
   const contextKey = JSON.stringify([
     key,
@@ -36,6 +37,7 @@ export function useScopedSetting<K extends SettingKey>(
         : { kind: "application" };
 
   useEffect(() => {
+    if (switching !== null) return;
     let cancelled = false;
 
     setReading(true);
@@ -69,7 +71,7 @@ export function useScopedSetting<K extends SettingKey>(
     return () => {
       cancelled = true;
     };
-  }, [key, owner, profileId, repositoryId, values, contextKey]);
+  }, [key, owner, profileId, repositoryId, values, contextKey, switching]);
 
   const valid = () =>
     owner === "application" ||

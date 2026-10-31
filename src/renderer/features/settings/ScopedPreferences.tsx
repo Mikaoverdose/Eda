@@ -25,6 +25,7 @@ export function ScopedPreferences(props: ScopedPreferencesProps) {
 
 function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPreferencesProps) {
   const active = useAppStore((state) => state.activeIdentity);
+  const switching = useAppStore((state) => state.switchingIdentityId);
   const values = usePreferencesStore((state) => state.values);
   const loading = usePreferencesStore((state) => state.loading);
   const saving = usePreferencesStore((state) => state.saving);
@@ -40,6 +41,7 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
       : { kind: "application" };
 
   useEffect(() => {
+    if (switching !== null) return;
     let cancelled = false;
 
     setReading(true);
@@ -76,7 +78,7 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
     return () => {
       cancelled = true;
     };
-  }, [owner, active, values]);
+  }, [owner, active, values, switching]);
 
   useEffect(() => {
     if (preview && !reading) previewAppearance(theme.value);

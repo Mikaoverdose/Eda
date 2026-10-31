@@ -85,6 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           })();
         });
         window.eda.events.onSettingChanged((change) => {
+          if (get().switchingIdentityId !== null) return;
           const { activeIdentity, selectedRepositoryId } = get();
 
           if (change.scope.kind !== "application" && change.scope.profileId !== activeIdentity?.id)

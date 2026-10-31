@@ -4,11 +4,15 @@ import { builtInSetting } from "@shared/preferences/settings";
 import { ok } from "@shared/errors";
 import { useScopedSetting } from "@renderer/features/settings/hooks/useScopedSetting";
 
-const profile = vi.hoisted(() => ({ id: "first" }));
+const profile = vi.hoisted(() => ({ id: "first", switching: null as string | null }));
 vi.mock("@renderer/stores/app-store", () => ({
   useAppStore: Object.assign(
-    (select: (state: { activeIdentity: { id: string } }) => unknown) =>
-      select({ activeIdentity: profile }),
+    (
+      select: (state: {
+        activeIdentity: { id: string };
+        switchingIdentityId: string | null;
+      }) => unknown,
+    ) => select({ activeIdentity: profile, switchingIdentityId: profile.switching }),
     { getState: () => ({ activeIdentity: profile }) },
   ),
 }));
@@ -71,6 +75,49 @@ it("keeps scoped preferences disabled and reports a rejected read", async () => 
     );
   } finally {
     await act(async () => root.unmount());
+    usePreferencesStore.setState(previous, true);
+    vi.unstubAllGlobals();
+  }
+});
+
+it("ignores reads from a profile being removed and resumes after the transition", async () => {
+  const { usePreferencesStore } = await import("@renderer/stores/preferences-store");
+  const previous = usePreferencesStore.getState();
+  let reject!: (reason: Error) => void;
+  const resolve = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    )
+    .mockResolvedValue(ok(builtInSetting("uiZoom")));
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("eda", { settings: { resolve } });
+  usePreferencesStore.setState({ error: null });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  function Example() {
+    const setting = useScopedSetting("uiZoom", "profile");
+    return <output>{setting.resolved.value}</output>;
+  }
+  try {
+    await act(async () => root.render(<Example />));
+    profile.switching = "first";
+    await act(async () => root.render(<Example />));
+    await act(async () => reject(new Error("profile deleted")));
+    expect(usePreferencesStore.getState().error).toBeNull();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    profile.id = "second";
+    profile.switching = null;
+    await act(async () => root.render(<Example />));
+    expect(resolve).toHaveBeenLastCalledWith("uiZoom", { profileId: "second" });
+    expect(container.textContent).toBe(String(builtInSetting("uiZoom").value));
+  } finally {
+    await act(async () => root.unmount());
+    profile.id = "first";
+    profile.switching = null;
     usePreferencesStore.setState(previous, true);
     vi.unstubAllGlobals();
   }
