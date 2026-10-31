@@ -56,7 +56,7 @@ jobs:
   build:
     name: Build / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +76,22 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 1
+      - name: Package desktop app
+        run: pnpm exec electron-builder --config electron-builder.config.ts --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Upload desktop installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Eda-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   desktop:
     name: Desktop UI tests / ${{ matrix.name }}
