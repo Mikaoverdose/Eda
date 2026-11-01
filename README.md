@@ -23,7 +23,7 @@ Follow a project through its visual commit history, then move straight into revi
 ## Get started
 
 > [!WARNING]
-> Eda is in active development.
+> Eda is in active development. Expect bugs, incomplete features, and breaking changes. Please report any issues you encounter. Feedback is welcome!
 
 To run from source, install [Node.js 24+](https://nodejs.org/) and [pnpm](https://pnpm.io/), then:
 
