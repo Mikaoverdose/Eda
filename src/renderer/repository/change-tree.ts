@@ -1,12 +1,14 @@
 import type { RepositoryChange } from "@shared/repository/repository-read";
 
-export interface ChangeTreeNode {
-  kind: "directory" | "file";
+interface ChangeTreeEntry {
   name: string;
   path: string;
   children: ChangeTreeNode[];
-  change?: RepositoryChange;
 }
+
+export type ChangeTreeNode = ChangeTreeEntry &
+  ({ kind: "directory" } | { kind: "file"; change: RepositoryChange });
+type ChangeDirectory = Extract<ChangeTreeNode, { kind: "directory" }>;
 
 export interface ChangeTreeRow {
   node: ChangeTreeNode;
@@ -14,9 +16,9 @@ export interface ChangeTreeRow {
 }
 
 export function buildChangeTree(changes: readonly RepositoryChange[]): ChangeTreeNode[] {
-  const root: ChangeTreeNode = { kind: "directory", name: "", path: "", children: [] };
+  const root: ChangeDirectory = { kind: "directory", name: "", path: "", children: [] };
 
-  const directories = new Map<string, ChangeTreeNode>();
+  const directories = new Map<string, ChangeDirectory>();
 
   for (const change of changes) {
     const segments = change.path.split("/").filter((segment) => segment.length > 0);

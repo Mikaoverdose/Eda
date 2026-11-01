@@ -1,10 +1,10 @@
 import { useId, type ComponentPropsWithRef, type ReactNode } from "react";
 import { cx } from "../cx";
-import { controlAppearance, controlSize } from "./controlStyles";
+import { controlAppearance, controlSize, type ControlSize } from "./controlStyles";
 
 export interface InputProps extends Omit<ComponentPropsWithRef<"input">, "size" | "className"> {
   mono?: boolean;
-  size?: "sm" | "md";
+  size?: ControlSize;
   invalid?: boolean;
 }
 

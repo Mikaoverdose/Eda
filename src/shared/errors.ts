@@ -184,13 +184,6 @@ function validText(value: unknown): value is ErrorText {
   );
 }
 
-export function errorReference(error: unknown, fallback: ErrorText): ErrorText {
-  if (error instanceof AppError) return error.text;
-  if (error && typeof error === "object" && "text" in error && validText(error.text))
-    return error.text;
-  return fallback;
-}
-
 export type Result<T> = { ok: true; value: T } | { ok: false; error: GitErrorData };
 export const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 export const err = (error: GitError | GitErrorInput): Result<never> => ({

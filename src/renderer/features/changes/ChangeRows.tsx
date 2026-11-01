@@ -152,7 +152,7 @@ export function ChangeRow({
         onClick={onSelect}
         title={`${change.path}${change.originalPath ? t("changes.changeRows.from", { originalPath: change.originalPath }) : ""}${change.submodule !== "N..." ? t("changes.changeRows.submodule", { submodule: change.submodule }) : ""}`}
         aria-label={t("changes.changeRows.status", {
-          value1: CHANGE_AREA_LABELS[area],
+          value1: t(CHANGE_AREA_LABELS[area]),
           path: change.path,
           value3: area === "staged" ? change.index : change.worktree,
           value4: change.originalPath

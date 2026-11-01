@@ -1,6 +1,9 @@
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { isRecord } from "@shared/validation";
+
+export { isRecord } from "@shared/validation";
 
 function reject(message: ErrorText, suggestedAction: ErrorText): never {
   throw new GitError({
@@ -47,7 +50,7 @@ export function requireString(value: unknown, field: string, maxLength = 4096): 
 
 export function requireId(value: unknown, field = "id"): string {
   const text = requireString(value, field, 64);
-  if (!/^[0-9a-f-]{36}$/i.test(text)) {
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(text)) {
     reject(
       errorText("main.validate.isNotAValidIdentifier", { field: field }),
       errorText("main.validate.thisIsABugInEdaPleaseReportIt"),
@@ -58,7 +61,8 @@ export function requireId(value: unknown, field = "id"): string {
 
 export function requireAbsolutePath(value: unknown, field = "path"): string {
   const text = requireString(value, field);
-  const isAbsolute = text.startsWith("/") || /^[A-Za-z]:[\\/]/.test(text);
+  const isAbsolute =
+    text.startsWith("/") || /^[A-Za-z]:[\\/]/.test(text) || text.startsWith("\\\\");
   if (!isAbsolute) {
     reject(
       errorText("main.validate.mustBeAFullPath", { field: field }),
@@ -126,18 +130,19 @@ export function optionalInteger(
 ): number | undefined {
   if (value === undefined) return undefined;
 
-  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < minimum ||
+    value > maximum
+  ) {
     reject(
       errorText("main.validate.isOutsideTheSupportedRange", { field: field }),
       errorText("main.validate.useAWholeNumberFromTo", { minimum: minimum, maximum: maximum }),
     );
   }
 
-  return value as number;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return value;
 }
 
 export function requireRecord(value: unknown, label: string): Record<string, unknown> {

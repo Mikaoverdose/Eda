@@ -4,11 +4,13 @@ import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import {
   HISTORY_PAGE_SIZE,
+  type ChangeArea,
   type HistoryPage,
   type RepositoryChange,
   type RepositoryStatus,
   type UnifiedDiff,
 } from "@shared/repository/repository-read";
+import type { SavedSelection } from "@shared/identity/profile-session";
 import { create } from "zustand";
 import { layoutCommitPage, type DagBoundary } from "../repository/dag-layout";
 
@@ -20,10 +22,9 @@ export { HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
 export const MAX_HISTORY_PAGES = 3;
 export const MAX_STATUS_CHANGES = 5_000;
 
-export type ChangeArea = "staged" | "unstaged" | "conflicted" | "untracked";
+export type { ChangeArea } from "@shared/repository/repository-read";
 
-export type RepositorySelection =
-  { kind: "change"; path: string; area: ChangeArea } | { kind: "commit"; oid: string } | null;
+export type RepositorySelection = SavedSelection;
 
 interface RepositoryReadState {
   commandDialog: {

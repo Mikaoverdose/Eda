@@ -123,7 +123,7 @@ export function registerRepositoryHandlers(services: Services): void {
         requireId(rawId),
         requireId(rawSnapshot),
         path,
-        stage as number | undefined,
+        stage,
       );
 
       const window = BrowserWindow.fromWebContents(event.sender);

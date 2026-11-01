@@ -1,19 +1,22 @@
-import { t } from "@shared/i18n";
+import type { MessageKey } from "@shared/i18n";
 import type { FileView } from "@shared/preferences/file-view";
-import type { RepositoryChange } from "@shared/repository/repository-read";
-import type { ChangeArea } from "../../stores/repository-store";
+import {
+  CHANGE_AREAS,
+  type ChangeArea,
+  type RepositoryChange,
+} from "@shared/repository/repository-read";
 import {
   buildChangeTree,
   flattenChangeTree,
   type ChangeTreeNode,
 } from "../../repository/change-tree";
 
-export const CHANGE_AREA_LABELS: Record<ChangeArea, string> = {
-  conflicted: t("changes.changeListModel.conflicts"),
-  staged: t("changes.changeListModel.staged"),
-  unstaged: t("changes.changeListModel.unstaged"),
-  untracked: t("changes.changeListModel.untracked"),
-};
+export const CHANGE_AREA_LABELS = {
+  conflicted: "changes.changeListModel.conflicts",
+  staged: "changes.changeListModel.staged",
+  unstaged: "changes.changeListModel.unstaged",
+  untracked: "changes.changeListModel.untracked",
+} satisfies Record<ChangeArea, MessageKey>;
 
 export type ChangeListRow =
   | { kind: "heading"; area: ChangeArea }
@@ -26,7 +29,7 @@ export function buildChangeRows(
 ): ChangeListRow[] {
   const collapsedDirs = new Set(files.collapsed);
 
-  return (Object.keys(CHANGE_AREA_LABELS) as ChangeArea[]).flatMap((area): ChangeListRow[] => {
+  return CHANGE_AREAS.flatMap((area): ChangeListRow[] => {
     if (categories[area].length === 0) return [];
 
     const heading = { kind: "heading" as const, area };
@@ -48,7 +51,7 @@ export function buildChangeRows(
       heading,
       ...flattenChangeTree(buildChangeTree(categories[area]), collapsedForArea, 0).map((row) =>
         row.node.kind === "file"
-          ? { kind: "change" as const, area, change: row.node.change!, depth: row.depth }
+          ? { kind: "change" as const, area, change: row.node.change, depth: row.depth }
           : { kind: "directory" as const, area, node: row.node, depth: row.depth },
       ),
     ];

@@ -7,6 +7,7 @@ import {
   HISTORY_PAGE_SIZE,
   MAX_HISTORY_PAGE_SIZE,
   type CommitInspection,
+  type DiffArea,
   type HistoryPage,
   type RepositoryStatus,
   type UnifiedDiff,
@@ -417,7 +418,7 @@ export class GitService {
 
   async workingDiff(
     path: string,
-    options: { area: "unstaged" | "staged"; paths?: readonly string[] },
+    options: { area: DiffArea; paths?: readonly string[] },
   ): Promise<UnifiedDiff> {
     const paths = literalPathspecs(options.paths, t("operations.readWorkingDiff"));
     const args = [

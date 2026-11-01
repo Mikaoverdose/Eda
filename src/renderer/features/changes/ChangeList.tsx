@@ -78,7 +78,7 @@ export function ChangeList({
                 key={`${row.area}:${index}`}
                 className="flex h-9 items-center gap-2 px-3 text-xs font-semibold text-text-tertiary"
               >
-                <span>{CHANGE_AREA_LABELS[row.area]}</span>
+                <span>{t(CHANGE_AREA_LABELS[row.area])}</span>
                 <span className="mono">{categories[row.area].length}</span>
                 {(row.area === "staged" || row.area === "unstaged" || row.area === "untracked") && (
                   <Button

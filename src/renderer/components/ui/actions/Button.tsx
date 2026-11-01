@@ -1,6 +1,6 @@
 import { ButtonBase } from "./ButtonBase";
 import { useEffect, useState, type ComponentPropsWithRef, type ReactNode } from "react";
-import { ActionIndicator } from "./ActionIndicator";
+import { ActionIndicator, type ActionOutcome } from "./ActionIndicator";
 import { accentComponents, type AccentColor } from "@shared/preferences/accent";
 import { cx } from "../cx";
 import { ACTION_FEEDBACK } from "../../../motion";
@@ -44,7 +44,7 @@ export interface ButtonProps extends Omit<ComponentPropsWithRef<"button">, "clas
   icon?: ReactNode;
   busy?: boolean;
   busyIndicator?: boolean;
-  feedback?: "idle" | "success" | "error";
+  feedback?: ActionOutcome;
   hue?: AccentColor | undefined;
   className?: string | undefined;
   children?: ReactNode;
@@ -67,7 +67,7 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const [showSpinner, setShowSpinner] = useState(false);
-  const [outcome, setOutcome] = useState<"idle" | "success" | "error">("idle");
+  const [outcome, setOutcome] = useState<ActionOutcome>("idle");
 
   useEffect(() => {
     setOutcome(busy ? "idle" : (feedback ?? "idle"));

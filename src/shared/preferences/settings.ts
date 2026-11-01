@@ -6,6 +6,7 @@ import { isCommitIdentity, type CommitIdentity } from "../identity/identity";
 import type { SshAgentMode } from "../identity/ssh";
 import type { GitEnginePreference } from "../integrations/git-engine";
 import { defaultMergeTool, isMergeTool, type MergeTool } from "../integrations/merge-tool";
+import { isOneOf, isRecord } from "../validation";
 import type { DiffMode } from "../repository/repository-read";
 import { isPullStrategy, type PullStrategy } from "../workflows/pull";
 import { isHexColor, type AccentColor } from "./accent";
@@ -25,8 +26,6 @@ interface Definition<T> {
   defaultValue: T;
   scopes: readonly SettingScope["kind"][];
   validate: (value: unknown) => value is T;
-  invalidates: "appearance" | "identity" | "environment" | "repository";
-  secret: false;
 }
 
 const define = <T>(definition: Definition<T>): Definition<T> => definition;
@@ -40,10 +39,8 @@ export const THEME_FAMILIES = [
   { name: "Nord", light: "nord-light", dark: "nord" },
 ] as const;
 
-export const AVAILABLE_THEME_FAMILIES = THEME_FAMILIES;
-
 export const LIGHT_THEME_IDS = THEME_FAMILIES.map((family) => family.light);
-export const THEME_IDS = THEME_FAMILIES.flatMap((family) => [family.light, family.dark]);
+export const DARK_THEME_IDS = THEME_FAMILIES.map((family) => family.dark);
 
 export interface ThemePreference {
   mode: "system" | "light" | "dark";
@@ -52,24 +49,20 @@ export interface ThemePreference {
 }
 
 export function themeForAppearance(value: ThemePreference, systemDark: boolean): string {
-  const preference = value;
-  return preference.mode === "dark" || (preference.mode === "system" && systemDark)
-    ? preference.dark
-    : preference.light;
+  return value.mode === "dark" || (value.mode === "system" && systemDark)
+    ? value.dark
+    : value.light;
 }
 
 function isThemePreference(value: unknown): value is ThemePreference {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (!isRecord(value)) return false;
 
-  const preference = value as Record<string, unknown>;
+  const preference = value;
 
   return (
-    ["system", "light", "dark"].includes(String(preference["mode"])) &&
-    typeof preference["light"] === "string" &&
-    (LIGHT_THEME_IDS as readonly string[]).includes(preference["light"]) &&
-    typeof preference["dark"] === "string" &&
-    !(LIGHT_THEME_IDS as readonly string[]).includes(preference["dark"]) &&
-    (THEME_IDS as readonly string[]).includes(preference["dark"])
+    isOneOf(preference["mode"], ["system", "light", "dark"]) &&
+    isOneOf(preference["light"], LIGHT_THEME_IDS) &&
+    isOneOf(preference["dark"], DARK_THEME_IDS)
   );
 }
 
@@ -99,29 +92,21 @@ export const SETTING_DEFINITIONS = {
     scopes: application,
     validate: (value): value is string =>
       typeof value === "string" && (value === "system" || supportedLocales.includes(value)),
-    invalidates: "environment",
-    secret: false,
   }),
   automaticUpdateChecks: define<boolean>({
     defaultValue: true,
     scopes: application,
     validate: boolean,
-    invalidates: "environment",
-    secret: false,
   }),
   repositoryCommitIdentity: define<CommitIdentity | null>({
     defaultValue: null,
     scopes: ["repository"],
     validate: (value): value is CommitIdentity | null => value === null || isCommitIdentity(value),
-    invalidates: "identity",
-    secret: false,
   }),
   conventionalCommitsEnabled: define<boolean>({
     defaultValue: false,
     scopes: profile,
     validate: boolean,
-    invalidates: "repository",
-    secret: false,
   }),
   commitPrefixes: define<string[]>({
     defaultValue: DEFAULT_COMMIT_PREFIXES,
@@ -132,8 +117,6 @@ export const SETTING_DEFINITIONS = {
       value.length <= 50 &&
       value.every(isCommitPrefix) &&
       new Set(value).size === value.length,
-    invalidates: "repository",
-    secret: false,
   }),
   accentHue: define<AccentColor>({
     defaultValue: 210,
@@ -141,63 +124,53 @@ export const SETTING_DEFINITIONS = {
     validate: (value): value is AccentColor =>
       isHexColor(value) ||
       (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 360),
-    invalidates: "appearance",
-    secret: false,
   }),
   background: define<BackgroundPreference>({
     defaultValue: { image: "", strength: 20, blur: 2 },
     scopes: profile,
     validate: (value): value is BackgroundPreference => {
-      if (!value || typeof value !== "object") return false;
+      if (!isRecord(value)) return false;
 
-      const v = value as BackgroundPreference;
+      const v = value;
 
       return (
-        typeof v.image === "string" &&
-        (v.image === "" ||
-          (v.image.length <= MAX_BACKGROUND_IMAGE_LENGTH &&
-            /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(v.image))) &&
-        percentage(v.strength) &&
-        typeof v.blur === "number" &&
-        Number.isInteger(v.blur) &&
-        v.blur >= 0 &&
-        v.blur <= MAX_BACKGROUND_BLUR
+        typeof v["image"] === "string" &&
+        (v["image"] === "" ||
+          (v["image"].length <= MAX_BACKGROUND_IMAGE_LENGTH &&
+            /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(v["image"]))) &&
+        percentage(v["strength"]) &&
+        typeof v["blur"] === "number" &&
+        Number.isInteger(v["blur"]) &&
+        v["blur"] >= 0 &&
+        v["blur"] <= MAX_BACKGROUND_BLUR
       );
     },
-    invalidates: "appearance",
-    secret: false,
   }),
   windowTransparency: define<WindowTransparency>({
     defaultValue: { enabled: false, opacity: 95 },
     scopes: profile,
     validate: (value): value is WindowTransparency => {
-      if (!value || typeof value !== "object") return false;
-      const v = value as WindowTransparency;
-      return boolean(v.enabled) && percentage(v.opacity) && v.opacity >= MIN_WINDOW_OPACITY;
+      if (!isRecord(value)) return false;
+      const v = value;
+      return (
+        boolean(v["enabled"]) && percentage(v["opacity"]) && v["opacity"] >= MIN_WINDOW_OPACITY
+      );
     },
-    invalidates: "appearance",
-    secret: false,
   }),
   mergeTool: define<MergeTool>({
     defaultValue: defaultMergeTool(),
     scopes: profile,
     validate: isMergeTool,
-    invalidates: "environment",
-    secret: false,
   }),
   fetchPrune: define<boolean>({
     defaultValue: false,
     scopes: repository,
     validate: boolean,
-    invalidates: "repository",
-    secret: false,
   }),
   fetchTags: define<boolean>({
     defaultValue: false,
     scopes: repository,
     validate: boolean,
-    invalidates: "repository",
-    secret: false,
   }),
   backgroundFetchMinutes: define<number>({
     defaultValue: 5,
@@ -206,15 +179,11 @@ export const SETTING_DEFINITIONS = {
       typeof value === "number" &&
       Number.isInteger(value) &&
       (value === 0 || (value >= 1 && value <= 1440)),
-    invalidates: "repository",
-    secret: false,
   }),
   pullStrategy: define<PullStrategy>({
     defaultValue: "ff",
     scopes: repository,
     validate: isPullStrategy,
-    invalidates: "repository",
-    secret: false,
   }),
   editorExecutable: define<string>({
     defaultValue: "",
@@ -225,50 +194,36 @@ export const SETTING_DEFINITIONS = {
         (value.length <= 4096 &&
           /^(?:[A-Za-z]:[\\/]|\/|\\\\)/.test(value) &&
           !/[\x00-\x1f]/.test(value))),
-    invalidates: "environment",
-    secret: false,
   }),
   hardwareAcceleration: define<boolean>({
     defaultValue: true,
     scopes: application,
     validate: boolean,
-    invalidates: "environment",
-    secret: false,
   }),
   sshAgent: define<SshAgentMode>({
     defaultValue: "builtin",
     scopes: application,
     validate: (value): value is SshAgentMode => value === "builtin" || value === "system",
-    invalidates: "environment",
-    secret: false,
   }),
   gitEngine: define<GitEnginePreference>({
     defaultValue: "bundled",
     scopes: application,
     validate: (value): value is GitEnginePreference => value === "bundled" || value === "system",
-    invalidates: "environment",
-    secret: false,
   }),
   theme: define<ThemePreference>({
     defaultValue: { mode: "system", light: "eda-light", dark: "eda-dark" },
     scopes: profile,
     validate: isThemePreference,
-    invalidates: "appearance",
-    secret: false,
   }),
   syncGlobalGitConfig: define<boolean>({
     defaultValue: true,
     scopes: profile,
     validate: boolean,
-    invalidates: "identity",
-    secret: false,
   }),
   reducedMotion: define<boolean>({
     defaultValue: false,
     scopes: profile,
     validate: boolean,
-    invalidates: "appearance",
-    secret: false,
   }),
   uiZoom: define<number>({
     defaultValue: 100,
@@ -278,15 +233,11 @@ export const SETTING_DEFINITIONS = {
       Number.isInteger(v) &&
       v >= UI_ZOOM_RANGE.min &&
       v <= UI_ZOOM_RANGE.max,
-    invalidates: "appearance",
-    secret: false,
   }),
   diffMode: define<DiffMode>({
     defaultValue: "unified",
     scopes: repository,
     validate: (v): v is DiffMode => v === "unified" || v === "split",
-    invalidates: "repository",
-    secret: false,
   }),
 } as const;
 
@@ -309,7 +260,7 @@ export interface SettingChanged {
 export function builtInSetting<K extends SettingKey>(key: K): ResolvedSetting<K> {
   return {
     key,
-    value: SETTING_DEFINITIONS[key].defaultValue as SettingValues[K],
+    value: structuredClone(SETTING_DEFINITIONS[key].defaultValue) as SettingValues[K],
     source: { kind: "built-in" },
     hasOverride: false,
   };

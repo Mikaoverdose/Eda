@@ -3,6 +3,10 @@ import type { WorkflowState } from "../workflows/workflow";
 export type ObjectId = string;
 export type DiffMode = "unified" | "split";
 
+export const CHANGE_AREAS = ["conflicted", "staged", "unstaged", "untracked"] as const;
+export type ChangeArea = (typeof CHANGE_AREAS)[number];
+export type DiffArea = Extract<ChangeArea, "staged" | "unstaged">;
+
 export const HISTORY_PAGE_SIZE = 100;
 export const MAX_HISTORY_PAGE_SIZE = 200;
 
@@ -134,7 +138,7 @@ export interface RepositoryPathsRequest {
 }
 
 export interface WorkingDiffRequest extends RepositoryPathsRequest {
-  area: "unstaged" | "staged";
+  area: DiffArea;
 }
 
 export interface CommitDiffRequest extends RepositoryPathsRequest {

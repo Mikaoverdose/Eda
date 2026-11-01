@@ -1,4 +1,11 @@
-import { MAX_FILE_VIEW_PATHS, defaultFileView, type FileView } from "@shared/preferences/file-view";
+import { isOneOf } from "@shared/validation";
+import {
+  FILE_VIEW_MODES,
+  FILE_VIEW_STATUSES,
+  MAX_FILE_VIEW_PATHS,
+  defaultFileView,
+  type FileView,
+} from "@shared/preferences/file-view";
 import { t } from "@shared/i18n";
 import { copyText } from "../../utils/clipboard";
 import { createPortal } from "react-dom";
@@ -247,7 +254,9 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           compact
           surface="surface"
           className="max-w-32"
-          onValueChange={(value) => updateFiles({ status: value })}
+          onValueChange={(value) => {
+            if (isOneOf(value, FILE_VIEW_STATUSES)) updateFiles({ status: value });
+          }}
         >
           <option value="">{t("changesPanel.allStatuses")}</option>
           {Object.entries({
@@ -270,7 +279,9 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           value={files.mode}
           compact
           surface="surface"
-          onValueChange={(value) => updateFiles({ mode: value as FileView["mode"] })}
+          onValueChange={(value) => {
+            if (isOneOf(value, FILE_VIEW_MODES)) updateFiles({ mode: value });
+          }}
         >
           <option value="flat">{t("changesPanel.flat")}</option>
           <option value="path">{t("changesPanel.paths")}</option>

@@ -3,7 +3,7 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import type { AccentColor } from "@shared/preferences/accent";
 import { BackgroundChoice } from "./BackgroundChoice";
 import type { BackgroundPreference, ThemePreference } from "@shared/preferences/settings";
-import { AVAILABLE_THEME_FAMILIES } from "@shared/preferences/settings";
+import { THEME_FAMILIES } from "@shared/preferences/settings";
 import { BUILT_IN_THEMES } from "../../styles/themes";
 import { Checkbox, HuePicker, RadioCard, SegmentedControl } from "../../components/ui/index";
 
@@ -73,7 +73,7 @@ export function AppearanceStep({
           aria-label={t("onboarding.appearanceStep.themeFamily")}
           className="grid grid-cols-3 gap-2"
         >
-          {AVAILABLE_THEME_FAMILIES.map((family) => {
+          {THEME_FAMILIES.map((family) => {
             const selected = theme.light === family.light && theme.dark === family.dark;
             const light =
               theme.mode === "light" ||

@@ -2,7 +2,7 @@ import { t } from "@shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button, type ButtonProps } from "./Button";
-import { ActionIndicator } from "./ActionIndicator";
+import { ActionIndicator, type ActionState } from "./ActionIndicator";
 import { ACTION_FEEDBACK } from "../../../motion";
 
 export function AsyncButton({
@@ -17,7 +17,7 @@ export function AsyncButton({
   onAction: () => Promise<boolean>;
   completed?: boolean;
 }) {
-  const [state, setState] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [state, setState] = useState<ActionState>("idle");
   const running = useRef(false);
   const mounted = useRef(true);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

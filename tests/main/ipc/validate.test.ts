@@ -90,6 +90,17 @@ describe("requireAbsolutePath", () => {
   });
 });
 
+it("rejects malformed identifiers even when every character is a hex digit or hyphen", () => {
+  for (const value of ["-".repeat(36), "a".repeat(36), "3d7cbfac-c1224457-9e8c-5040dbb7832f-"])
+    rejects(() => requireId(value));
+});
+
+it("accepts Windows network paths while rejecting drive-relative paths", () => {
+  const path = String.raw`\\server\share\repository`;
+  expect(requireAbsolutePath(path)).toBe(path);
+  rejects(() => requireAbsolutePath(String.raw`C:repository`));
+});
+
 describe("requireEmail", () => {
   it("accepts ordinary addresses", () => {
     expect(requireEmail("dev@example.com")).toBe("dev@example.com");

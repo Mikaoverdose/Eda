@@ -2,13 +2,10 @@ import type { ReactNode } from "react";
 import { Check, LoaderCircle, X } from "lucide-react";
 import { cx } from "../cx";
 
-export function ActionIndicator({
-  state,
-  idleIcon,
-}: {
-  state: "idle" | "pending" | "success" | "error";
-  idleIcon?: ReactNode;
-}) {
+export type ActionState = "idle" | "pending" | "success" | "error";
+export type ActionOutcome = Exclude<ActionState, "pending">;
+
+export function ActionIndicator({ state, idleIcon }: { state: ActionState; idleIcon?: ReactNode }) {
   return (
     <span className="relative block size-4" aria-hidden="true">
       <span className={cx("ui-action-glyph", state === "idle" && "ui-action-visible")}>

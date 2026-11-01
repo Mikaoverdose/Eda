@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import { emptyView, type RepositoryView } from "@shared/identity/profile-session";
+import { emptyView, type PanelId, type RepositoryView } from "@shared/identity/profile-session";
 import { useSessionStore } from "./session-store";
 
-export type PanelId = "graph" | "diff" | "rail";
+export type { PanelId } from "@shared/identity/profile-session";
 
 interface LayoutState {
   maximized: PanelId | null;

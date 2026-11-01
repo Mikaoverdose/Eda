@@ -1,3 +1,5 @@
+import { isOneOf, isRecord } from "../validation";
+
 export type GraphColumnId = "author" | "date" | "sha";
 
 export interface GraphFilter {
@@ -16,9 +18,9 @@ export const defaultGraphFilter = (): GraphFilter => ({
 });
 
 export function isGraphFilter(value: unknown): value is GraphFilter {
-  if (!value || typeof value !== "object") return false;
+  if (!isRecord(value)) return false;
 
-  const item = value as Record<string, unknown>;
+  const item = value;
   const ref = (name: unknown) =>
     typeof name === "string" &&
     /^refs\/(heads|remotes|tags)\//.test(name) &&
@@ -56,16 +58,16 @@ export function isGraphColumns(value: unknown): value is GraphColumn[] {
   return (
     Array.isArray(value) &&
     value.length === 3 &&
-    new Set(value.map((item) => item?.id)).size === 3 &&
+    new Set(value.map((item: unknown) => (isRecord(item) ? item["id"] : undefined))).size === 3 &&
     value.every(
-      (item) =>
-        item &&
-        typeof item === "object" &&
-        ["author", "date", "sha"].includes(item.id) &&
-        typeof item.visible === "boolean" &&
-        Number.isInteger(item.width) &&
-        item.width >= 48 &&
-        item.width <= 320 &&
+      (item: unknown) =>
+        isRecord(item) &&
+        isOneOf(item["id"], ["author", "date", "sha"]) &&
+        typeof item["visible"] === "boolean" &&
+        typeof item["width"] === "number" &&
+        Number.isInteger(item["width"]) &&
+        item["width"] >= 48 &&
+        item["width"] <= 320 &&
         Object.keys(item).every((key) => ["id", "visible", "width"].includes(key)),
     )
   );

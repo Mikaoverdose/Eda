@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { AVAILABLE_THEME_FAMILIES } from "@shared/preferences/settings";
+import { THEME_FAMILIES } from "@shared/preferences/settings";
 import { accentComponents, type AccentColor } from "@shared/preferences/accent";
 
 export const NEUTRAL_CHROMA = "0.02";
@@ -105,7 +105,7 @@ const PALETTES: Record<string, Record<string, string>> = {
   },
 };
 
-export const BUILT_IN_THEMES: readonly Theme[] = AVAILABLE_THEME_FAMILIES.flatMap((family) =>
+export const BUILT_IN_THEMES: readonly Theme[] = THEME_FAMILIES.flatMap((family) =>
   (["light", "dark"] as const).map((appearance): Theme => {
     const id = family[appearance];
     const tokens = PALETTES[id]!;

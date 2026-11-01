@@ -6,6 +6,9 @@ import {
 } from "../preferences/graph-view";
 import { isFileView, type FileView } from "../preferences/file-view";
 
+import { CHANGE_AREAS, type ChangeArea } from "../repository/repository-read";
+import { isOneOf, isRecord } from "../validation";
+
 export type PanelId = "graph" | "diff" | "rail";
 
 export type SavedSelection =
@@ -13,7 +16,7 @@ export type SavedSelection =
   | {
       kind: "change";
       path: string;
-      area: "staged" | "unstaged" | "conflicted" | "untracked";
+      area: ChangeArea;
     }
   | null;
 
@@ -121,8 +124,6 @@ export const emptyView = (): RepositoryView => ({
   grouped: false,
 });
 
-const record = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 const only = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).every((key) => keys.includes(key));
 const panel = (value: unknown): value is PanelId =>
@@ -135,7 +136,7 @@ const id = (value: unknown): value is string =>
 
 export function isSelection(value: unknown): value is SavedSelection {
   if (value === null) return true;
-  if (!record(value)) return false;
+  if (!isRecord(value)) return false;
 
   if (value["kind"] === "commit")
     return (
@@ -149,13 +150,13 @@ export function isSelection(value: unknown): value is SavedSelection {
     value["kind"] === "change" &&
     typeof value["path"] === "string" &&
     value["path"].length <= 4096 &&
-    ["staged", "unstaged", "conflicted", "untracked"].includes(String(value["area"]))
+    isOneOf(value["area"], CHANGE_AREAS)
   );
 }
 
 export function isView(value: unknown): value is RepositoryView {
   if (
-    !record(value) ||
+    !isRecord(value) ||
     !only(value, [
       "selection",
       "maximized",
@@ -180,7 +181,7 @@ export function isView(value: unknown): value is RepositoryView {
 
   if (
     references !== undefined &&
-    (!record(references) ||
+    (!isRecord(references) ||
       !only(references, ["hidden", "locals", "remotes", "tags"]) ||
       !["hidden", "locals", "remotes", "tags"].every((key) => typeof references[key] === "boolean"))
   )
@@ -189,7 +190,7 @@ export function isView(value: unknown): value is RepositoryView {
   const collapsed = value["collapsed"];
 
   if (
-    !record(collapsed) ||
+    !isRecord(collapsed) ||
     !only(collapsed, ["graph", "diff", "rail"]) ||
     !["graph", "diff", "rail"].every((key) => typeof collapsed[key] === "boolean") ||
     ["graph", "diff", "rail"].every((key) => collapsed[key] === true)
@@ -199,7 +200,7 @@ export function isView(value: unknown): value is RepositoryView {
   const splits = value["splits"];
 
   return (
-    record(splits) &&
+    isRecord(splits) &&
     Object.keys(splits).length <= 20 &&
     Object.entries(splits).every(
       ([key, fraction]) =>
@@ -214,7 +215,7 @@ export function isView(value: unknown): value is RepositoryView {
 
 export function isDraft(value: unknown): value is CommitDraft {
   return (
-    record(value) &&
+    isRecord(value) &&
     only(value, ["version", "message", "amend", "signOff"]) &&
     (value["signOff"] === undefined || typeof value["signOff"] === "boolean") &&
     value["version"] === 1 &&
@@ -226,7 +227,7 @@ export function isDraft(value: unknown): value is CommitDraft {
 
 export function isSession(value: unknown): value is ProfileSession {
   if (
-    !record(value) ||
+    !isRecord(value) ||
     !only(value, ["version", "tabs", "selectedRepositoryId", "views"]) ||
     value["version"] !== 1 ||
     !Array.isArray(value["tabs"]) ||
@@ -246,14 +247,14 @@ export function isSession(value: unknown): value is ProfileSession {
   const views = value["views"];
 
   return (
-    record(views) &&
+    isRecord(views) &&
     Object.keys(views).length <= 2000 &&
     Object.entries(views).every(([key, view]) => id(key) && isView(view))
   );
 }
 
 export function isSessionChange(value: unknown): value is SessionChange {
-  if (!record(value)) return false;
+  if (!isRecord(value)) return false;
 
   if (value["kind"] === "tabs")
     return isSession({

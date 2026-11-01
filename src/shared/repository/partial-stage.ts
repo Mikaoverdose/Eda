@@ -1,7 +1,9 @@
+import type { DiffArea } from "./repository-read";
+
 export interface PartialStageRequest {
   repositoryId: string;
   path: string;
-  area: "staged" | "unstaged";
+  area: DiffArea;
   hunks?: number[];
   lines?: { hunk: number; line: number }[];
 }

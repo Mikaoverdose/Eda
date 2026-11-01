@@ -1,3 +1,4 @@
+import { isRecord } from "../validation";
 import type { SessionSnapshot } from "./profile-session";
 import type { AccentColor } from "../preferences/accent";
 
@@ -16,18 +17,18 @@ export interface CommitIdentity {
 
 /** Git removes these characters when saving an identity. */
 export function isCommitIdentity(value: unknown): value is CommitIdentity {
-  if (!value || typeof value !== "object") return false;
-  const identity = value as CommitIdentity;
+  if (!isRecord(value)) return false;
+  const { name, email } = value;
   return (
-    typeof identity.name === "string" &&
-    identity.name.length > 0 &&
-    identity.name.length <= 128 &&
-    identity.name.trim() === identity.name &&
-    !/[<>\x00-\x1f\x7f]/.test(identity.name) &&
-    typeof identity.email === "string" &&
-    identity.email.length <= 254 &&
-    /^[^\s<>@]+@[^\s<>@]+$/.test(identity.email) &&
-    !/[\x00-\x1f\x7f]/.test(identity.email)
+    typeof name === "string" &&
+    name.length > 0 &&
+    name.length <= 128 &&
+    name.trim() === name &&
+    !/[<>\x00-\x1f\x7f]/.test(name) &&
+    typeof email === "string" &&
+    email.length <= 254 &&
+    /^[^\s<>@]+@[^\s<>@]+$/.test(email) &&
+    !/[\x00-\x1f\x7f]/.test(email)
   );
 }
 

@@ -1,10 +1,11 @@
 import type { ComponentPropsWithRef } from "react";
 import { Search } from "lucide-react";
 import { cx } from "../cx";
+import type { ControlSize } from "./controlStyles";
 
 export interface SearchFieldProps extends Omit<ComponentPropsWithRef<"input">, "type" | "size"> {
   "aria-label": string;
-  size?: "sm" | "md";
+  size?: ControlSize;
   className?: string;
 }
 
