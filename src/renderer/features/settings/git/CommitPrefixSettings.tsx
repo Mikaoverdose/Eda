@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { RotateCcw } from "lucide-react";
-import { defaultCommitPrefixes } from "@shared/preferences/commit-prefix";
+import { defaultCommitPrefixes, parseCommitPrefixes } from "@shared/preferences/commit-prefix";
 import { useEffect, useId, useState } from "react";
 import {
   SETTING_DEFINITIONS,
@@ -44,10 +44,7 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
 
   if (!enabled || !prefixes) return null;
 
-  const parsed = text
-    .split(/[\n,]/)
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const parsed = parseCommitPrefixes(text);
   const valid = SETTING_DEFINITIONS.commitPrefixes.validate(parsed);
   const changed = JSON.stringify(parsed) !== JSON.stringify(prefixes.value);
 

@@ -3,13 +3,6 @@ import { CommitMessage } from "../history/CommitMessage";
 import { defaultCommitPrefixes } from "@shared/preferences/commit-prefix";
 import { RadioCard, SegmentedControl } from "../../components/ui/index";
 
-export function parsePrefixes(text: string): string[] {
-  return text
-    .split(/[\n,]/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
 export function CommitStyleStep({
   enabled,
   prefixes,

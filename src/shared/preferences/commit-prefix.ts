@@ -1,20 +1,27 @@
-export const DEFAULT_COMMIT_PREFIXES = [
-  "feat",
-  "fix",
-  "build",
-  "chore",
-  "ci",
-  "docs",
-  "style",
-  "refactor",
-  "perf",
-  "test",
-];
+const COMMIT_TYPES = [
+  { name: "feat", emoji: "✨" },
+  { name: "fix", emoji: "🐛" },
+  { name: "build", emoji: "📦" },
+  { name: "chore", emoji: "🔧" },
+  { name: "ci", emoji: "👷" },
+  { name: "docs", emoji: "📚" },
+  { name: "style", emoji: "🎨" },
+  { name: "refactor", emoji: "♻️" },
+  { name: "perf", emoji: "🚀" },
+  { name: "test", emoji: "🧪" },
+] as const;
 
-const EMOJIS = ["✨", "🐛", "📦", "🔧", "👷", "📚", "🎨", "♻️", "🚀", "🧪"];
+export const DEFAULT_COMMIT_PREFIXES = COMMIT_TYPES.map((type) => type.name);
 
 export function defaultCommitPrefixes(emojis: boolean): string[] {
-  return DEFAULT_COMMIT_PREFIXES.map((type, index) => (emojis ? `${EMOJIS[index]} ${type}` : type));
+  return COMMIT_TYPES.map(({ name, emoji }) => (emojis ? `${emoji} ${name}` : name));
+}
+
+export function parseCommitPrefixes(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 export function isCommitPrefix(value: unknown): value is string {

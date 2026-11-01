@@ -1,6 +1,7 @@
 import { errorText } from "@shared/error-codes";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { parseCommitPrefixes } from "@shared/preferences/commit-prefix";
 import {
   builtInSetting,
   SETTING_DEFINITIONS,
@@ -20,7 +21,7 @@ import {
   usePreferencesStore,
 } from "../../stores/preferences-store";
 import { AppearanceStep } from "./AppearanceStep";
-import { CommitStyleStep, parsePrefixes } from "./CommitStyleStep";
+import { CommitStyleStep } from "./CommitStyleStep";
 import { ConnectionsStep } from "./ConnectionsStep";
 import { Welcome, WelcomeBranches, WelcomeComplete } from "./Welcome";
 
@@ -129,7 +130,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gitEmail.trim());
   const emailError = touchedEmail && gitEmail !== "" && !emailValid;
   const canSave = name.trim() !== "" && gitName.trim() !== "" && emailValid;
-  const parsedPrefixes = parsePrefixes(prefixes);
+  const parsedPrefixes = parseCommitPrefixes(prefixes);
   const prefixesValid = SETTING_DEFINITIONS.commitPrefixes.validate(parsedPrefixes);
   const go = (next: number) => {
     if (savingRef.current) return;
