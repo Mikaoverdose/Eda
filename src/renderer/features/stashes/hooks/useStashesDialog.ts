@@ -1,5 +1,6 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { diffPaths } from "@shared/repository/diff-paths";
 import type {
   StashArea,
   StashContents,
@@ -162,13 +163,7 @@ export function useStashesDialog(repositoryId: string) {
   };
 
   const diff = inspection?.[area];
-  const restorePaths = [
-    ...new Set(
-      diff?.files
-        .flatMap((file) => [file.oldPath, file.newPath])
-        .filter((path): path is string => path !== undefined && path !== "/dev/null") ?? [],
-    ),
-  ];
+  const restorePaths = diffPaths(diff ?? null);
 
   const selectedRestorePath = restorePaths.includes(restorePath)
     ? restorePath

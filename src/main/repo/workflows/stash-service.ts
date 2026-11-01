@@ -1,6 +1,7 @@
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { diffPaths } from "@shared/repository/diff-paths";
 import { boundDiff } from "@shared/repository/diff-limits";
 import {
   MAX_STASH_ENTRIES,
@@ -316,18 +317,11 @@ export class StashService {
       fingerprint: listed.fingerprint,
       expires: Date.now() + 300_000,
       trees: { tracked: oid, staged: parents[1]!, untracked: parents[2] ?? null },
-      paths: Object.fromEntries(
-        Object.entries({ tracked, staged, untracked }).map(([area, diff]) => [
-          area,
-          [
-            ...new Set(
-              diff?.files
-                .flatMap((file) => [file.oldPath, file.newPath])
-                .filter((path) => path !== "/dev/null") ?? [],
-            ),
-          ],
-        ]),
-      ) as Record<StashArea, string[]>,
+      paths: {
+        tracked: diffPaths(tracked),
+        staged: diffPaths(staged),
+        untracked: diffPaths(untracked),
+      },
     });
 
     while (this.previews.size > 8) this.previews.delete(this.previews.keys().next().value!);
