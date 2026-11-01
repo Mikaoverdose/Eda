@@ -3,9 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*.*.*"]
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
   pull_request:
-  workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -72,8 +73,10 @@ jobs:
       - name: Check release tag
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          node --input-type=module -e 'import { readFileSync } from "node:fs"; const { version } = JSON.parse(readFileSync("package.json", "utf8")); if (process.env.GITHUB_REF_NAME !== `v${version}`) throw new Error("Release tag must match package.json version.");'
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; const { version } = JSON.parse(readFileSync("package.json", "utf8")); if (process.env.RELEASE_TAG !== version) throw new Error("Release tag must match package.json version (X.Y.Z, without a prefix).");'
       - name: Package desktop app and update feed
         run: pnpm package --${{ matrix.arch }}
         env:
@@ -170,4 +173,10 @@ jobs:
       - name: Publish installers, packages, and JSON feeds together
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --title "Eda $GITHUB_REF_NAME" --generate-notes
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Eda $RELEASE_TAG" --generate-notes --prerelease
+          fi
