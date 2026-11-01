@@ -196,15 +196,23 @@ describe("host trust during real SSH connections", () => {
           });
           session.on("exec", (accept, _reject, info) => {
             const stream = accept();
+
             if (info.command.startsWith("git-upload-pack")) {
+              stream.on("end", () => {
+                stream.exit(0);
+                stream.end();
+              });
+
+              stream.resume();
               stream.write("0000");
-              stream.exit(0);
-            } else {
-              stream.stderr.write(
-                "Hi fixture! You've successfully authenticated, but this server does not provide shell access.\n",
-              );
-              stream.exit(1);
+
+              return;
             }
+
+            stream.stderr.write(
+              "Hi fixture! You've successfully authenticated, but this server does not provide shell access.\n",
+            );
+            stream.exit(1);
             stream.end();
           });
         });
