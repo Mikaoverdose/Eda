@@ -2,7 +2,7 @@ import { redactDiagnostic } from "@shared/diagnostics";
 import { errorMessage, GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { app, BrowserWindow, dialog, Menu, session, shell } from "electron";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { configureGraphics } from "./application/graphics";
@@ -34,10 +34,13 @@ app.on("open-url", (event, url) => {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 
-if (isDev && process.env["VITE_DEV_SERVER_URL"]) {
-  const developmentData = join(app.getPath("appData"), "eda-dev");
-  mkdirSync(developmentData, { recursive: true });
-  app.setPath("userData", developmentData);
+if (!app.commandLine.hasSwitch("user-data-dir")) {
+  const name = isDev && process.env["VITE_DEV_SERVER_URL"] ? "Eda-Dev" : "Eda";
+  const userData = join(app.getPath("appData"), name);
+  const legacyData = join(app.getPath("appData"), name.toLowerCase());
+  if (!existsSync(userData) && existsSync(legacyData)) renameSync(legacyData, userData);
+  mkdirSync(userData, { recursive: true });
+  app.setPath("userData", userData);
 }
 
 const CSP = [
