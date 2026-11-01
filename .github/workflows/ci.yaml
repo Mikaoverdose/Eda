@@ -58,6 +58,8 @@ jobs:
     needs: [quality, test, desktop]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.cache/nuget/packages
     strategy:
       fail-fast: false
       matrix:
@@ -66,9 +68,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+        with:
+          target-arch: ${{ matrix.arch }}
+
+      - name: Cache bundled Git archives
+        uses: actions/cache@v5
+        with:
+          path: .cache/bundled-git
+          key: bundled-git-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.arch }}-${{ hashFiles('scripts/bundled-git.json') }}
+          restore-keys: |
+            bundled-git-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.arch }}-
+
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
+
+      - name: Cache Velopack NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: velopack-nuget-v1-${{ runner.os }}-${{ runner.arch }}-dotnet10-${{ hashFiles('.config/dotnet-tools.json') }}
+          restore-keys: |
+            velopack-nuget-v1-${{ runner.os }}-${{ runner.arch }}-dotnet10-
+
       - run: dotnet tool restore
       - name: Check release tag
         if: startsWith(github.ref, 'refs/tags/')
@@ -112,6 +134,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+
+      - name: Cache bundled Git archives
+        uses: actions/cache@v5
+        with:
+          path: .cache/bundled-git
+          key: bundled-git-v1-${{ runner.os }}-${{ runner.arch }}-x64-${{ hashFiles('scripts/bundled-git.json') }}
+          restore-keys: |
+            bundled-git-v1-${{ runner.os }}-${{ runner.arch }}-x64-
+
       - run: pnpm build
       - name: Share Windows desktop build
         uses: actions/upload-artifact@v7

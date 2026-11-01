@@ -1,5 +1,12 @@
 name: Set up Eda
 description: Install the project Node.js, pinned pnpm and locked dependencies
+
+inputs:
+  target-arch:
+    description: Package architecture, when this job also downloads cross-platform packaging tools
+    required: false
+    default: host
+
 runs:
   using: composite
   steps:
@@ -9,5 +16,20 @@ runs:
     - uses: pnpm/action-setup@v6
       with:
         cache: true
+
+    - name: Cache Electron and packaging downloads
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cache/electron
+          ~/.cache/electron-builder
+          ~/Library/Caches/electron
+          ~/Library/Caches/electron-builder
+          ~/AppData/Local/electron/Cache
+          ~/AppData/Local/electron-builder/Cache
+        key: desktop-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          desktop-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-arch }}-
+
     - run: pnpm install --frozen-lockfile
       shell: bash
