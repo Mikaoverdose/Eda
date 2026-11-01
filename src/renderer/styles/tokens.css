@@ -64,6 +64,7 @@
   --accent-border: oklch(var(--accent-l) var(--identity-chroma) var(--identity-hue) / 0.42);
   --accent-text: oklch(0.82 var(--identity-chroma) var(--identity-hue));
   --on-identity-fill: #ffffff;
+  --sponsor-bg: #cf4f96;
 
   --git-added: oklch(0.72 0.15 150);
   --git-modified: oklch(0.76 0.13 85);
@@ -117,6 +118,7 @@
   --accent-border: oklch(var(--accent-l) var(--identity-chroma) var(--identity-hue) / 0.4);
   --accent-text: oklch(0.45 var(--identity-chroma) var(--identity-hue));
   --on-identity-fill: #ffffff;
+  --sponsor-bg: #c83e8d;
 
   --git-added: oklch(0.52 0.15 150);
   --git-modified: oklch(0.58 0.13 75);

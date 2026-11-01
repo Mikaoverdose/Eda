@@ -1,5 +1,6 @@
 export const GITHUB_INSTALLATION_POLL_MS = 5000;
 export const GITHUB_INSTALLATION_WAIT_MS = 15 * 60_000;
+export const MAINTAINER_GITHUB_LOGIN = "YuzuZensai";
 
 export interface GitHubAccount {
   id: string;

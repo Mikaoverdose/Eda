@@ -11,6 +11,17 @@ import { missingIdentity } from "../request-errors";
 
 export function registerGitHubHandlers(services: Services): void {
   const { identity, identities, github } = services;
+
+  handle(IPC_CHANNELS.githubMaintainerProfile, async () => {
+    const details = await github.maintainerProfile();
+
+    if (!details) return ok(null);
+
+    const avatar = await services.avatars.getGitHub(details.id);
+
+    return ok({ ...details, avatarDataUrl: avatar.dataUrl });
+  });
+
   github.onInstallationChanged((profileId) => {
     if (identity.getActive()?.id === profileId)
       broadcast(IPC_EVENTS.githubInstallationChanged, profileId);

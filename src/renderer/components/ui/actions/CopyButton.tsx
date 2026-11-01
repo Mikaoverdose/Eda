@@ -7,10 +7,12 @@ export function CopyButton({
   value,
   copied = false,
   label = t("common.copy"),
+  size = "icon-sm",
 }: {
   value: string;
   copied?: boolean;
   label?: string;
+  size?: "icon-sm" | "icon-xs";
 }) {
   const copy = async () => {
     await copyText(value);
@@ -20,7 +22,7 @@ export function CopyButton({
   return (
     <AsyncButton
       key={value}
-      size="icon-sm"
+      size={size}
       variant="ghost"
       label={label}
       title={label}

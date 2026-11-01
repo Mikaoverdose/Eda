@@ -1,16 +1,9 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { UPDATE_DOWNLOAD_PAGE, type UpdateState } from "@shared/updates";
+import type { UpdateState } from "@shared/updates";
 import { Download, RotateCw } from "lucide-react";
 import { useState } from "react";
-import {
-  AsyncButton,
-  Button,
-  Checkbox,
-  Disclosure,
-  ExternalLinkButton,
-  NoticeBanner,
-} from "../../components/ui/index";
+import { AsyncButton, Button, Checkbox, Disclosure, NoticeBanner } from "../../components/ui/index";
 import { useSessionStore } from "../../stores/session-store";
 import { formatDateTime } from "../../utils/format";
 import { useScopedSetting } from "../settings/hooks/useScopedSetting";
@@ -75,7 +68,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
           </p>
         </Disclosure>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 empty:hidden">
         {state.capability === "automatic" &&
           !["available", "downloading", "ready", "installing"].includes(state.phase) && (
             <AsyncButton
@@ -110,9 +103,6 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
         {state.phase === "installing" && (
           <Button busy>{t("settings.updatesSettings.restartingEda")}</Button>
         )}
-        <ExternalLinkButton href={UPDATE_DOWNLOAD_PAGE}>
-          {t("settings.updatesSettings.downloadPage")}
-        </ExternalLinkButton>
       </div>
       {state.checkedAt && (
         <p className="text-xs text-text-tertiary">

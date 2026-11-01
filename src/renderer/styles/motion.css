@@ -9,6 +9,7 @@
   --duration-fade: 240ms;
   --duration-route: 650ms;
   --duration-skeleton: 1.8s;
+  --duration-heartbeat: 500ms;
   --duration-welcome-branches: 1.2s;
   --duration-welcome-symbol: 1s;
   --duration-welcome-reveal: 900ms;
@@ -39,6 +40,17 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes ui-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.16);
   }
 }
 
@@ -167,6 +179,11 @@ html[data-navigation-motion="back"] {
 }
 
 @layer components {
+  .ui-heartbeat {
+    transform-origin: center;
+    animation: ui-heartbeat var(--duration-heartbeat) ease-in-out infinite;
+  }
+
   .ui-overlay-in {
     animation: ui-overlay-in var(--duration-fast) var(--ease-out) both;
   }

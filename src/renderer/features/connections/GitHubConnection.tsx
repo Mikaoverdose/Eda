@@ -10,9 +10,9 @@ import {
   GITHUB_INSTALLATION_POLL_MS,
   GITHUB_INSTALLATION_WAIT_MS,
 } from "@shared/integrations/github";
-import { Copy, ExternalLink, MapPin } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
+import { GitHubProfile } from "./GitHubProfile";
 import {
   ActionIndicator,
   Button,
@@ -20,7 +20,6 @@ import {
   CopyButton,
   ErrorDialog,
   Skeleton,
-  TextButton,
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
@@ -503,37 +502,16 @@ export function GitHubConnection({
           {t("settings.gitHubConnection.allowRepositoryAccessOnGitHub")}
         </p>
       ) : account ? (
-        <div key={account.id} className="space-y-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <ProfileAvatar
-              name={details?.name ?? account.login}
-              hue={hue}
-              imageUrl={details?.avatarDataUrl ?? undefined}
-            />
-            <div className="min-w-0">
-              {details?.name && <p className="break-words text-sm font-medium">{details.name}</p>}
-              <TextButton
-                onClick={() => void openProfile()}
-                aria-label={t("settings.gitHubConnection.viewOnGitHub", { login: login })}
-              >
-                @{login}
-              </TextButton>
-            </div>
-          </div>
-          {details?.bio && (
-            <p className="whitespace-pre-line break-words text-xs text-text-secondary">
-              {details.bio}
-            </p>
-          )}
-          <div className="space-y-1 text-xs text-text-tertiary">
-            {details?.location && (
-              <p className="flex items-start gap-1.5">
-                <MapPin size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
-                <span className="min-w-0 break-words">{details.location}</span>
-              </p>
-            )}
-          </div>
-        </div>
+        <GitHubProfile
+          key={account.id}
+          login={login ?? account.login}
+          name={details?.name}
+          bio={details?.bio}
+          location={details?.location}
+          avatarDataUrl={details?.avatarDataUrl}
+          hue={hue}
+          onOpenProfile={() => void openProfile()}
+        />
       ) : null}
       {status && !status.secureStorage && (
         <p className="text-xs text-git-modified">

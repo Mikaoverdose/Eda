@@ -10,6 +10,7 @@ const api: EdaApi = {
     install: () => ipcRenderer.invoke(IPC_CHANNELS.updatesInstall),
   },
   github: {
+    maintainerProfile: () => ipcRenderer.invoke(IPC_CHANNELS.githubMaintainerProfile),
     status: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubStatus, profileId),
     repositoryAccess: (profileId) =>
       ipcRenderer.invoke(IPC_CHANNELS.githubRepositoryAccess, profileId),

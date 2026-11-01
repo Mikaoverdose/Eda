@@ -269,6 +269,7 @@ export interface EdaApi {
     retry(id: string): Promise<Result<void>>;
   };
   github: {
+    maintainerProfile(): Promise<Result<GitHubAccountProfile | null>>;
     status(profileId: string): Promise<Result<GitHubStatus>>;
     repositoryAccess(profileId: string): Promise<Result<GitHubRepositoryAccess>>;
     profile(profileId: string): Promise<Result<GitHubAccountProfile | null>>;
@@ -460,6 +461,7 @@ export const IPC_CHANNELS = {
   githubStatus: "github:status",
   githubRepositoryAccess: "github:repository-access",
   githubProfile: "github:profile",
+  githubMaintainerProfile: "github:maintainer-profile",
   githubOpenProfile: "github:open-profile",
   githubBegin: "github:begin",
   githubPoll: "github:poll",

@@ -1376,6 +1376,7 @@
   "settings.aboutSettings.eda": "Eda",
   "settings.aboutSettings.edaIsFreeSoftwareLicensedUnderTheGnu": "Eda is free software, licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later).",
   "settings.aboutSettings.license": "License",
+  "settings.aboutSettings.loadingMaintainerProfile": "Loading maintainer profile",
   "settings.aboutSettings.maintainer": "Maintainer",
   "settings.aboutSettings.readTheLicense": "Read the license",
   "settings.aboutSettings.sourceCode": "Source code",

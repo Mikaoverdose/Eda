@@ -86,6 +86,7 @@ export const FEATURE_COMPONENTS = [
     files: [
       "features/connections/ConnectionCard.tsx",
       "features/connections/GitHubConnection.tsx",
+      "features/connections/GitHubProfile.tsx",
       "features/connections/GitHubSignInDialog.tsx",
       "features/connections/ProviderIcon.tsx",
       "features/connections/ServiceAccountCard.tsx",
@@ -397,6 +398,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   ],
   "features/connections/ConnectionCard.tsx": ["ConnectionCard"],
   "features/connections/GitHubConnection.tsx": ["GitHubConnection"],
+  "features/connections/GitHubProfile.tsx": ["GitHubProfile"],
   "features/connections/GitHubSignInDialog.tsx": ["GitHubSignInDialog"],
   "features/connections/ProviderIcon.tsx": ["ProviderIcon"],
   "features/connections/ServiceAccountCard.tsx": ["ServiceAccountCard"],

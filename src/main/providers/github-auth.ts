@@ -4,6 +4,7 @@ import { t } from "@shared/i18n";
 import { isOneOf, isRecord } from "@shared/validation";
 import {
   isGitHubHttps,
+  MAINTAINER_GITHUB_LOGIN,
   type GitHubAccountProfile,
   type GitHubRepositoryAccess,
   type GitHubSignIn,
@@ -18,6 +19,7 @@ import type {
 } from "../persistence/github-account-repository";
 import { secretKeys, type SecretStore } from "../secrets/secret-store";
 import { GitHubInstallationCallback } from "./github-installation-callback";
+import { GitHubProfileCache } from "./github-profile-cache";
 
 const DEVICE_URL = "https://github.com/login/device/code";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
@@ -67,10 +69,7 @@ export class GitHubAuth {
   private readonly committing = new Map<string, Promise<void>>();
   private readonly pending = new Map<string, Pending>();
   private readonly refreshing = new Map<string, Promise<Tokens>>();
-  private readonly profiles = new Map<
-    string,
-    { value: Omit<GitHubAccountProfile, "avatarDataUrl">; expiresAt: number }
-  >();
+  private readonly profiles: GitHubProfileCache;
 
   constructor(
     private readonly accounts: GitHubAccountRepository,
@@ -79,7 +78,9 @@ export class GitHubAuth {
     private readonly fetch: typeof globalThis.fetch,
     private readonly now = Date.now,
     private readonly appSlug = "",
-  ) {}
+  ) {
+    this.profiles = new GitHubProfileCache((url) => this.request(url), now);
+  }
 
   status(profileId: string): GitHubStatus {
     const account = this.accounts.find(profileId);
@@ -99,52 +100,18 @@ export class GitHubAuth {
     const account = this.accounts.find(profileId);
     if (this.authorized.has(profileId)) return null;
     if (!account || !/^[1-9][0-9]{0,15}$/.test(account.accountId)) return null;
-    const cached = this.profiles.get(account.accountId);
-    if (cached && cached.expiresAt > this.now()) return cached.value;
-    const fallback = cached?.value ?? {
-      id: account.accountId,
-      login: account.login,
-      name: null,
-      bio: null,
-      location: null,
-    };
-    let value = fallback;
-    let ttl = 60_000;
-    try {
-      const user = await this.request(`https://api.github.com/user/${account.accountId}`);
-      if (
-        !Number.isSafeInteger(user["id"]) ||
-        String(user["id"]) !== account.accountId ||
-        !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(text(user["login"]) ?? "")
-      )
-        throw fail(errorText("main.providers.githubAuth.gitHubReturnedADifferentAccountProfile"));
-      const field = (key: string, limit: number) =>
-        typeof user[key] === "string"
-          ? user[key]
-              .replace(/[\u0000-\u001f\u007f]/g, " ")
-              .trim()
-              .slice(0, limit) || null
-          : null;
-      value = {
-        id: account.accountId,
-        login: user["login"] as string,
-        name: field("name", 128),
-        bio: field("bio", 160),
-        location: field("location", 128),
-      };
-      ttl = 5 * 60_000;
-    } catch {}
-    this.profiles.delete(account.accountId);
-    this.profiles.set(account.accountId, { value, expiresAt: this.now() + ttl });
-    while (this.profiles.size > 128) this.profiles.delete(this.profiles.keys().next().value!);
-    return value;
+    return this.profiles.get({ id: account.accountId, login: account.login });
+  }
+
+  maintainerProfile(): Promise<Omit<GitHubAccountProfile, "avatarDataUrl"> | null> {
+    return this.profiles.get({ login: MAINTAINER_GITHUB_LOGIN });
   }
 
   profileUrl(profileId: string): string {
     const account = this.accounts.find(profileId);
     if (!account || this.authorized.has(profileId))
       throw fail(errorText("main.providers.githubAuth.connectAGitHubAccountFirst"));
-    const login = this.profiles.get(account.accountId)?.value.login ?? account.login;
+    const login = this.profiles.peek(account.accountId)?.login ?? account.login;
     if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(login))
       throw fail(errorText("main.providers.githubAuth.theGitHubAccountProfileIsInvalid"));
     return `https://github.com/${login}`;
@@ -422,7 +389,7 @@ export class GitHubAuth {
   async reset(): Promise<void> {
     this.cancelAll();
     await Promise.allSettled([...this.committing.values(), ...this.refreshing.values()]);
-    this.profiles.clear();
+    await this.profiles.clear();
   }
 
   async disconnect(profileId: string): Promise<void> {

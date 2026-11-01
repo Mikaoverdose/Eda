@@ -140,6 +140,13 @@ function setup() {
     },
     resetData: vi.fn(async () => {}),
     github: {
+      maintainerProfile: vi.fn(async () => ({
+        id: "7",
+        login: "YuzuZensai",
+        name: "Yuzu",
+        bio: "Public bio",
+        location: "Japan / Thailand",
+      })),
       repositoryAccess: vi.fn(async () => ({ accountId: "7", accounts: ["work-user"] })),
       status: vi.fn(() => ({ configured: true, secureStorage: true, account: null })),
       profile: vi.fn(async () => ({
@@ -218,6 +225,24 @@ describe("IPC registration", () => {
     for (const value of [null, 42, "bad\0value", "x".repeat(1_048_577)])
       expect(await invoke(IPC_CHANNELS.appCopyText, value)).toMatchObject({ ok: false });
     expect(electron.writeText).toHaveBeenCalledOnce();
+  });
+  it("loads the fixed public maintainer profile without requiring a connected account", async () => {
+    const { github, avatars, identity } = setup();
+    expect(await invoke(IPC_CHANNELS.githubMaintainerProfile)).toEqual({
+      ok: true,
+      value: {
+        id: "7",
+        login: "YuzuZensai",
+        name: "Yuzu",
+        bio: "Public bio",
+        location: "Japan / Thailand",
+        avatarDataUrl: "data:image/png;base64,AQID",
+      },
+    });
+    expect(github.maintainerProfile).toHaveBeenCalledExactlyOnceWith();
+    expect(github.profile).not.toHaveBeenCalled();
+    expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith("7");
+    expect(identity.getActive).not.toHaveBeenCalled();
   });
   it("loads the connected GitHub profile and cached avatar for the active owner, and opens its verified profile link", async () => {
     const { github, avatars } = setup();
