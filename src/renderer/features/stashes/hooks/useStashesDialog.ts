@@ -11,6 +11,8 @@ import { useRepositoryStore } from "../../../stores/repository-store";
 
 export function useStashesDialog(repositoryId: string) {
   const listRevision = useRef(0);
+  const running = useRef(false);
+  const mounted = useRef(false);
   const inspectionRevision = useRef(0);
   const contextRevision = useRef(0);
   const [list, setList] = useState<StashList>({ entries: [], truncated: false });
@@ -45,16 +47,31 @@ export function useStashesDialog(repositoryId: string) {
     setInspection(null);
     setConfirmed(false);
 
-    const result = await window.eda.stashes.list(repositoryId);
+    try {
+      const result = await window.eda.stashes.list(repositoryId);
 
-    if (revision !== listRevision.current) return;
-    if (result.ok) setList(result.value);
-    else setError(errorMessage(result.error));
+      if (revision !== listRevision.current) return;
+      if (result.ok) setList(result.value);
+      else setError(errorMessage(result.error));
+    } catch (error) {
+      if (revision === listRevision.current) setError(errorMessage(error));
+    }
   };
 
   useEffect(() => {
+    mounted.current = true;
+    running.current = false;
+    setList({ entries: [], truncated: false });
+    setBusy(false);
+    setError(null);
+    setNotice(null);
+    setSelectedPaths([]);
+    setRestoreDialog(false);
+    setBranchDialog(false);
+    setRenameDialog(false);
     void load();
     return () => {
+      mounted.current = false;
       listRevision.current++;
       inspectionRevision.current++;
       contextRevision.current++;
@@ -62,6 +79,7 @@ export function useStashesDialog(repositoryId: string) {
   }, [repositoryId]);
 
   const inspect = async (selector: string) => {
+    if (!mounted.current || running.current) return;
     const entry = list.entries.find((item) => item.selector === selector);
 
     if (!entry) return;
@@ -78,12 +96,16 @@ export function useStashesDialog(repositoryId: string) {
       if (revision !== inspectionRevision.current) return;
       if (result.ok) setInspection(result.value);
       else setError(errorMessage(result.error));
+    } catch (error) {
+      if (revision === inspectionRevision.current) setError(errorMessage(error));
     } finally {
       if (revision === inspectionRevision.current) setBusy(false);
     }
   };
 
   const run = async (action: "create" | "drop") => {
+    if (!mounted.current || running.current) return;
+    running.current = true;
     const context = contextRevision.current;
 
     setBusy(true);
@@ -116,6 +138,7 @@ export function useStashesDialog(repositoryId: string) {
       if (context !== contextRevision.current) return;
 
       await useRepositoryStore.getState().syncFromDisk();
+      if (context !== contextRevision.current) return;
 
       if (!result.ok) {
         setError(errorMessage(result.error));
@@ -128,8 +151,13 @@ export function useStashesDialog(repositoryId: string) {
       }
 
       await load();
+    } catch (error) {
+      if (context === contextRevision.current) setError(errorMessage(error));
     } finally {
-      if (context === contextRevision.current) setBusy(false);
+      if (context === contextRevision.current) {
+        running.current = false;
+        setBusy(false);
+      }
     }
   };
 
@@ -138,7 +166,7 @@ export function useStashesDialog(repositoryId: string) {
     ...new Set(
       diff?.files
         .flatMap((file) => [file.oldPath, file.newPath])
-        .filter((path) => path !== "/dev/null") ?? [],
+        .filter((path): path is string => path !== undefined && path !== "/dev/null") ?? [],
     ),
   ];
 
@@ -146,8 +174,8 @@ export function useStashesDialog(repositoryId: string) {
     ? restorePath
     : (restorePaths[0] ?? "");
   const apply = async (pop: boolean) => {
-    if (!inspection) return;
-
+    if (!inspection || !mounted.current || running.current) return;
+    running.current = true;
     const context = contextRevision.current;
 
     setBusy(true);
@@ -165,6 +193,7 @@ export function useStashesDialog(repositoryId: string) {
       if (context !== contextRevision.current) return;
 
       await useRepositoryStore.getState().syncFromDisk();
+      if (context !== contextRevision.current) return;
 
       if (!result.ok) {
         setError(errorMessage(result.error));
@@ -179,8 +208,13 @@ export function useStashesDialog(repositoryId: string) {
             : t("stashes.useStashesDialog.changesAppliedAndTheStashWasRemoved"),
       );
       await load();
+    } catch (error) {
+      if (context === contextRevision.current) setError(errorMessage(error));
     } finally {
-      if (context === contextRevision.current) setBusy(false);
+      if (context === contextRevision.current) {
+        running.current = false;
+        setBusy(false);
+      }
     }
   };
 
