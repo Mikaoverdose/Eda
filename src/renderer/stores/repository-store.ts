@@ -1,3 +1,7 @@
+import { errorText } from "@shared/error-codes";
+import type { GitErrorData } from "@shared/errors";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import {
   HISTORY_PAGE_SIZE,
   type HistoryPage,
@@ -5,14 +9,12 @@ import {
   type RepositoryStatus,
   type UnifiedDiff,
 } from "@shared/repository/repository-read";
-import { t } from "@shared/i18n";
 import { create } from "zustand";
 import { layoutCommitPage, type DagBoundary } from "../repository/dag-layout";
-import type { GitErrorData } from "@shared/errors";
 
 import { boundDiff } from "../repository/diff-model";
-import { useSessionStore } from "./session-store";
 import { useLayoutStore } from "./layout-store";
+import { useSessionStore } from "./session-store";
 
 export { HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
 export const MAX_HISTORY_PAGES = 3;
@@ -587,12 +589,12 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
 
       if (offset > 0 && !boundaries.has(offset)) {
         set({
-          historyError: {
+          historyError: new GitError({
             kind: "invalid-input",
             operation: t("operations.loadHistory"),
-            message: t("repositoryStore.earlierGraphCheckpointsHaveLeftTheBoundedCache"),
-            suggestedAction: t("repositoryStore.useRefreshToReturnToTheBeginningOfHistory"),
-          },
+            message: errorText("repositoryStore.earlierGraphCheckpointsHaveLeftTheBoundedCache"),
+            suggestedAction: errorText("repositoryStore.useRefreshToReturnToTheBeginningOfHistory"),
+          }).toData(),
         });
 
         return;

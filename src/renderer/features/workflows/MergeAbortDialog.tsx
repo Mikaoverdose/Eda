@@ -1,9 +1,10 @@
-import { t, getLocale } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
-import { useEffect, useRef, useState } from "react";
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
 import type { MergeAbortPreview } from "@shared/workflows/workflow";
+import { useEffect, useRef, useState } from "react";
+import { Checkbox, Dialog, ErrorDialog, ReviewActions } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Dialog, Checkbox, ErrorDialog, ReviewActions } from "../../components/ui/index";
 
 export function MergeAbortDialog({
   repositoryId,
@@ -32,9 +33,9 @@ export function MergeAbortDialog({
       const result = await window.eda.workflows.prepareAbort(repositoryId);
       if (generation !== request.current) return;
       if (result.ok) setPreview(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } catch (error) {
-      if (generation === request.current) setError(String(error));
+      if (generation === request.current) setError(errorMessage(error));
     } finally {
       if (generation === request.current) setBusy(false);
     }
@@ -64,14 +65,14 @@ export function MergeAbortDialog({
       if (generation !== request.current) return;
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setConfirmed(false);
         return;
       }
 
       onClose();
     } catch (error) {
-      if (generation === request.current) setError(String(error));
+      if (generation === request.current) setError(errorMessage(error));
     } finally {
       if (generation === request.current) setBusy(false);
     }

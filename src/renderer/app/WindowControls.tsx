@@ -1,9 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ErrorDialog } from "../components/ui/index";
-import { useEffect, useState, type ReactNode } from "react";
-import { Copy, GitBranch, Minus, Square, X } from "lucide-react";
 import type { EdaApi } from "@shared/ipc";
-import { WindowControlButton } from "../components/ui/index";
+import { Copy, GitBranch, Minus, Square, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ErrorDialog, WindowControlButton } from "../components/ui/index";
 
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
@@ -14,7 +14,7 @@ export function WindowControls() {
       if (result.ok) {
         setMaximized(result.value.maximized);
         setError(null);
-      } else setError(result.error.message);
+      } else setError(errorMessage(result.error));
     } catch {
       setError(t("windowControls.windowControlsAreUnavailableUseTheSystemWindowMenuToCloseEda"));
     }

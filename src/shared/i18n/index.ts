@@ -1,12 +1,23 @@
 import { createInstance, type i18n as I18n } from "i18next";
 import common from "../locales/en/common.json";
-import renderer from "../locales/en/renderer.json";
-import main from "../locales/en/main.json";
-import shared from "../locales/en/shared.json";
-import operations from "../locales/en/operations.json";
+import errors from "../locales/en/errors.json";
 import fields from "../locales/en/fields.json";
+import main from "../locales/en/main.json";
+import operations from "../locales/en/operations.json";
+import renderer from "../locales/en/renderer.json";
+import shared from "../locales/en/shared.json";
+import updateErrors from "../locales/en/update-errors.json";
 
-export const english = { ...common, ...renderer, ...main, ...shared, ...operations, ...fields };
+export const english = {
+  ...common,
+  ...renderer,
+  ...main,
+  ...shared,
+  ...operations,
+  ...fields,
+  ...updateErrors,
+  ...errors,
+};
 export type MessageKey = keyof typeof english;
 export type MessageValues = Readonly<Record<string, string | number | null | undefined>>;
 export type Translator = (key: MessageKey, values?: MessageValues) => string;

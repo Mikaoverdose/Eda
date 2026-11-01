@@ -1,6 +1,6 @@
 import type { Configuration } from "electron-builder";
 import { prepareGit } from "./scripts/prepare-git.ts";
-import { readBuildInfo } from "./scripts/version.ts";
+import { readBuildInfo } from "./scripts/build.ts";
 import { UPDATE_FEED_BASE } from "./src/shared/updates.ts";
 
 const buildInfo = readBuildInfo();

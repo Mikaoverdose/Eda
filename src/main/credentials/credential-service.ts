@@ -1,7 +1,8 @@
-import { t } from "@shared/i18n";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
-import type { AgentStatus, SecretMetadata, UnlockCredentialRequest } from "@shared/identity/ssh";
+import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
+import type { AgentStatus, SecretMetadata, UnlockCredentialRequest } from "@shared/identity/ssh";
 import type { IdentityRepository } from "../persistence/identity-repository";
 import type { SecretStore } from "../secrets/secret-store";
 import { secretKeys } from "../secrets/secret-store";
@@ -38,8 +39,8 @@ export class CredentialService {
 
     if (!identity.sshKeyPath) {
       throw invalid(
-        t("main.credentials.credentialService.thisIdentityHasNoAssignedSshKey"),
-        t("main.credentials.credentialService.assignAKeyThenTryAgain"),
+        errorText("main.credentials.credentialService.thisIdentityHasNoAssignedSshKey"),
+        errorText("main.credentials.credentialService.assignAKeyThenTryAgain"),
       );
     }
 
@@ -49,8 +50,10 @@ export class CredentialService {
 
     if (!passphrase) {
       throw invalid(
-        t("main.credentials.credentialService.enterTheKeySPassphrase"),
-        t("main.credentials.credentialService.theRememberedPassphraseIsUnavailableOrWasRemoved"),
+        errorText("main.credentials.credentialService.enterTheKeySPassphrase"),
+        errorText(
+          "main.credentials.credentialService.theRememberedPassphraseIsUnavailableOrWasRemoved",
+        ),
       );
     }
 
@@ -80,14 +83,14 @@ export class CredentialService {
     const identity = id ? this.identities.findById(id) : undefined;
     if (!identity)
       throw invalid(
-        t("main.credentials.credentialService.thereIsNoActiveIdentity"),
-        t("main.credentials.credentialService.selectAnIdentityAndTryAgain"),
+        errorText("main.credentials.credentialService.thereIsNoActiveIdentity"),
+        errorText("main.credentials.credentialService.selectAnIdentityAndTryAgain"),
       );
     return identity;
   }
 }
 
-function invalid(message: string, suggestedAction: string): GitError {
+function invalid(message: ErrorText, suggestedAction: ErrorText): GitError {
   return new GitError({
     kind: "invalid-input",
     operation: t("operations.unlockSshKey"),

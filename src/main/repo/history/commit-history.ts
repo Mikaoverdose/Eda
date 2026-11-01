@@ -1,13 +1,14 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { randomUUID, createHash } from "node:crypto";
 import type { Identity } from "@shared/identity/identity";
 import type { CommitResult } from "@shared/repository/repository-write";
-import { GitError } from "@shared/errors";
+import { createHash, randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
 import { repositoryCommonDirectory } from "../lifecycle/repository-location";
-import { pruneHistoryRecords } from "./history-retention";
 import { workflowFingerprint } from "../workflows/workflow-fingerprint";
+import { pruneHistoryRecords } from "./history-retention";
 import { isPublishedCommit } from "./shared-history";
 
 export class CommitHistory {
@@ -233,10 +234,15 @@ create ${recoveryRef}/after-index ${afterTree}
         throw new GitError({
           kind: "unknown",
           operation: t("operations.recordCommitRecovery"),
-          message: t("main.commitHistory.commitWasCreatedButRecordingItsRecoveryStateFailed", {
-            afterHead: record.refChange.afterHead,
-          }),
-          suggestedAction: t("main.commitHistory.refreshAndInspectHeadBeforeRetryingTheCommit"),
+          message: errorText(
+            "main.commitHistory.commitWasCreatedButRecordingItsRecoveryStateFailed",
+            {
+              afterHead: record.refChange.afterHead,
+            },
+          ),
+          suggestedAction: errorText(
+            "main.commitHistory.refreshAndInspectHeadBeforeRetryingTheCommit",
+          ),
         });
       }
 

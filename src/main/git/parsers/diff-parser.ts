@@ -1,6 +1,7 @@
-import { t } from "@shared/i18n";
-import type { DiffHunk, DiffLine, FileDiff, UnifiedDiff } from "@shared/repository/repository-read";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import { boundDiff } from "@shared/repository/diff-limits";
+import type { DiffHunk, DiffLine, FileDiff, UnifiedDiff } from "@shared/repository/repository-read";
 
 export function parseUnifiedDiff(output: Buffer): UnifiedDiff {
   const text = output.toString("utf8");
@@ -60,7 +61,7 @@ export function parseUnifiedDiff(output: Buffer): UnifiedDiff {
     } else if (line.startsWith("@@ ")) {
       const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(line);
 
-      if (!match) throw new Error(t("main.git.diffParser.malformedGitUnifiedDiffOutput"));
+      if (!match) throw new AppError(ERROR_CODE.INVALID_DIFF_OUTPUT);
 
       oldLine = Number(match[1]);
       newLine = Number(match[3]);
@@ -117,7 +118,7 @@ function unquotePath(value: string): string {
   try {
     return JSON.parse(value) as string;
   } catch {
-    throw new Error(t("main.git.diffParser.malformedGitUnifiedDiffPath"));
+    throw new AppError(ERROR_CODE.INVALID_DIFF_PATH);
   }
 }
 

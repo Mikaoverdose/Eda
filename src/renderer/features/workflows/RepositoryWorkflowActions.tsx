@@ -1,15 +1,16 @@
-import { workflowLabel, replayActionLabel } from "@shared/i18n/labels";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
-import type { WorkflowState } from "@shared/workflows/workflow";
+import { replayActionLabel, workflowLabel } from "@shared/i18n/labels";
 import type { RebaseAction } from "@shared/workflows/rebase";
 import type { ReplayAction, ReplayKind } from "@shared/workflows/replay";
-import { useRepositoryStore } from "../../stores/repository-store";
+import type { WorkflowState } from "@shared/workflows/workflow";
+import { useState } from "react";
 import { ErrorDialog, TextButton } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { MergeAbortDialog } from "./MergeAbortDialog";
+import { MergeContinueDialog } from "./MergeContinueDialog";
 import { RebaseDialog } from "./RebaseDialog";
 import { ReplayDialog } from "./ReplayDialog";
-import { MergeContinueDialog } from "./MergeContinueDialog";
-import { MergeAbortDialog } from "./MergeAbortDialog";
 
 export function RepositoryWorkflowActions({
   repositoryId,
@@ -128,7 +129,7 @@ export function RepositoryWorkflowActions({
 
             try {
               const result = await window.eda.workflows.finishStash(repositoryId, workflow!.token);
-              if (!result.ok) setStashError(result.error.message);
+              if (!result.ok) setStashError(errorMessage(result.error));
               await useRepositoryStore.getState().syncFromDisk();
             } finally {
               setFinishingStash(false);

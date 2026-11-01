@@ -1,20 +1,21 @@
-import type { HistoryDirection } from "@shared/workflows/history-recovery";
-import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
-import type { GitService } from "../../git/git-service";
-import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
-import { workflowFingerprint } from "../workflows/workflow-fingerprint";
+import type { HistoryDirection } from "@shared/workflows/history-recovery";
+import { randomUUID } from "node:crypto";
 import {
   branchConfiguration,
   withBranchConfiguration,
   withBranchConfigurations,
 } from "../../git/configuration/branch-configuration";
+import type { GitService } from "../../git/git-service";
 import { readWorkflowState } from "../../git/operations/workflow-state";
+import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { workflowFingerprint } from "../workflows/workflow-fingerprint";
 import { ensureRecoveryRefs } from "./rewrite-history";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({
     kind: "invalid-input",
     operation: t("operations.reverseReferenceAction"),
@@ -53,7 +54,9 @@ async function branchTip(git: GitService, root: string, name: string): Promise<s
 
 async function requireBranch(git: GitService, root: string, name: string, tip: string) {
   if ((await branchTip(git, root, name)) !== tip)
-    throw invalid(t("main.refHistory.branchChangedAfterThisActionRefreshUndoRedo", { name: name }));
+    throw invalid(
+      errorText("main.refHistory.branchChangedAfterThisActionRefreshUndoRedo", { name: name }),
+    );
 }
 
 export class RefHistory {
@@ -78,7 +81,7 @@ export class RefHistory {
             ["undoing", "redoing"].includes(record.refOperation?.state ?? ""),
         ).length >= 100
     )
-      throw invalid(t("main.refHistory.thereAreTooManyUnfinishedReferenceActionsInspect"));
+      throw invalid(errorText("main.refHistory.thereAreTooManyUnfinishedReferenceActionsInspect"));
 
     const before = await this.git.status(root);
     const beforeFingerprint = await workflowFingerprint(this.git, root, before);
@@ -101,7 +104,7 @@ export class RefHistory {
       descriptor.kind === "branch-create" &&
       (await branchTip(this.git, root, descriptor.name)) !== null
     )
-      throw invalid(t("main.refHistory.theBranchAlreadyExistsRefreshBeforeCreatingIt"));
+      throw invalid(errorText("main.refHistory.theBranchAlreadyExistsRefreshBeforeCreatingIt"));
 
     if (descriptor.kind === "branch-delete")
       await requireBranch(this.git, root, descriptor.name, descriptor.tip);
@@ -109,7 +112,7 @@ export class RefHistory {
     if (descriptor.kind === "branch-rename") {
       await requireBranch(this.git, root, descriptor.from, descriptor.tip);
       if ((await branchTip(this.git, root, descriptor.to)) !== null)
-        throw invalid(t("main.refHistory.theDestinationBranchAlreadyExists"));
+        throw invalid(errorText("main.refHistory.theDestinationBranchAlreadyExists"));
     }
 
     const record: WorkflowJournalRecord = {
@@ -215,22 +218,28 @@ export class RefHistory {
           break;
         case "branch-delete":
           if ((await branchTip(this.git, root, descriptor.name)) !== null)
-            throw invalid(t("main.refHistory.branchWasNotDeleted", { name: descriptor.name }));
+            throw invalid(
+              errorText("main.refHistory.branchWasNotDeleted", { name: descriptor.name }),
+            );
           break;
         case "branch-rename":
           if ((await branchTip(this.git, root, descriptor.from)) !== null)
             throw invalid(
-              t("main.refHistory.thePreviousBranchNameStillExists", { from: descriptor.from }),
+              errorText("main.refHistory.thePreviousBranchNameStillExists", {
+                from: descriptor.from,
+              }),
             );
           await requireBranch(this.git, root, descriptor.to, descriptor.tip);
           break;
         case "checkout":
           if (descriptor.name) {
             if (after.branch.head !== descriptor.name || after.branch.detached)
-              throw invalid(t("main.refHistory.gitDidNotCheckOut", { name: descriptor.name }));
+              throw invalid(
+                errorText("main.refHistory.gitDidNotCheckOut", { name: descriptor.name }),
+              );
             await requireBranch(this.git, root, descriptor.name, descriptor.tip);
           } else if (!after.branch.detached || after.branch.oid !== descriptor.tip)
-            throw invalid(t("main.refHistory.gitDidNotCheckOutTheSelectedCommit"));
+            throw invalid(errorText("main.refHistory.gitDidNotCheckOutTheSelectedCommit"));
           break;
       }
 
@@ -303,7 +312,7 @@ async function validateReferenceObjects(git: GitService, record: WorkflowJournal
 
   if (!ref) return;
   if (ref !== `refs/eda/reference/${record.id}`)
-    throw invalid(t("main.refHistory.theSavedReferenceNamespaceChanged"));
+    throw invalid(errorText("main.refHistory.theSavedReferenceNamespaceChanged"));
 
   for (const [suffix, oid] of referenceObjects(record)) {
     const result = await git.exec(["rev-parse", "--verify", "--quiet", `${ref}/${suffix}`], {
@@ -313,7 +322,9 @@ async function validateReferenceObjects(git: GitService, record: WorkflowJournal
     });
 
     if (result.exitCode !== 0 || result.stdout.trim() !== oid)
-      throw invalid(t("main.refHistory.aSavedReferenceIsMissingOrChangedInspectHistoryRecovery"));
+      throw invalid(
+        errorText("main.refHistory.aSavedReferenceIsMissingOrChangedInspectHistoryRecovery"),
+      );
   }
 }
 
@@ -351,9 +362,9 @@ async function checkoutState(
 ) {
   const status = await git.status(root);
   if ((status.branch.oid ?? null) !== (head ?? null))
-    throw invalid(t("main.refHistory.headChangedSinceThisReferenceAction"));
+    throw invalid(errorText("main.refHistory.headChangedSinceThisReferenceAction"));
   if ((status.branch.detached ? null : (status.branch.head ?? null)) !== branch)
-    throw invalid(t("main.refHistory.theCheckedOutBranchChangedSinceThisReferenceAction"));
+    throw invalid(errorText("main.refHistory.theCheckedOutBranchChangedSinceThisReferenceAction"));
 }
 
 export async function validateRefHistory(
@@ -363,20 +374,28 @@ export async function validateRefHistory(
 ): Promise<HistoryDirection> {
   const operation = record.refOperation;
 
-  if (!operation) throw invalid(t("main.refHistory.thisReferenceActionHasNoReversalRecord"));
+  if (!operation)
+    throw invalid(errorText("main.refHistory.thisReferenceActionHasNoReversalRecord"));
   if (record.state !== "completed")
-    throw invalid(t("main.refHistory.thisReferenceActionDidNotCompleteInspectRepositoryState"));
+    throw invalid(
+      errorText("main.refHistory.thisReferenceActionDidNotCompleteInspectRepositoryState"),
+    );
   if (operation.state === "undoing" || operation.state === "redoing")
     throw invalid(
-      t("main.refHistory.thisReferenceReversalWasInterruptedInspectTheRefsBeforeContinuing"),
+      errorText(
+        "main.refHistory.thisReferenceReversalWasInterruptedInspectTheRefsBeforeContinuing",
+      ),
     );
-  if (operation.blockedReason) throw invalid(operation.blockedReason);
+  if (operation.blockedReason)
+    throw invalid(errorText("errors.operationBlocked", { reason: operation.blockedReason }));
 
   await validateReferenceObjects(git, record);
 
   if (await readWorkflowState(git, record.root, await git.status(record.root)))
     throw invalid(
-      t("main.refHistory.finishOrAbortTheCurrentGitOperationBeforeChangingReferenceHistory"),
+      errorText(
+        "main.refHistory.finishOrAbortTheCurrentGitOperationBeforeChangingReferenceHistory",
+      ),
     );
 
   const undo = operation.state === "applied";
@@ -391,7 +410,7 @@ export async function validateRefHistory(
     ).stdout;
 
     if (flags !== expectedFlags)
-      throw invalid(t("main.refHistory.indexFlagsChangedSinceThisAction"));
+      throw invalid(errorText("main.refHistory.indexFlagsChangedSinceThisAction"));
   }
 
   if (
@@ -407,7 +426,9 @@ export async function validateRefHistory(
       JSON.stringify(config) !==
       JSON.stringify(undo ? operation.afterFromConfig : operation.beforeFromConfig)
     )
-      throw invalid(t("main.refHistory.branchConfigurationChangedSinceThisActionInspectThe"));
+      throw invalid(
+        errorText("main.refHistory.branchConfigurationChangedSinceThisActionInspectThe"),
+      );
   }
 
   if (
@@ -422,7 +443,9 @@ export async function validateRefHistory(
       JSON.stringify(config) !==
       JSON.stringify(undo ? operation.afterConfig : operation.beforeConfig)
     )
-      throw invalid(t("main.refHistory.branchConfigurationChangedSinceThisActionInspectThe"));
+      throw invalid(
+        errorText("main.refHistory.branchConfigurationChangedSinceThisActionInspectThe"),
+      );
   }
 
   if (
@@ -439,7 +462,7 @@ export async function validateRefHistory(
     const allowed = operation.kind === "branch-create" && operation.checkedOut ? 1 : 0;
 
     if (checkouts > allowed)
-      throw invalid(t("main.refHistory.theBranchIsCheckedOutInAnotherWorktree"));
+      throw invalid(errorText("main.refHistory.theBranchIsCheckedOutInAnotherWorktree"));
   }
 
   await checkoutState(
@@ -465,7 +488,7 @@ export async function validateRefHistory(
         ? operation.afterFingerprint
         : operation.beforeFingerprint)
   )
-    throw invalid(t("main.refHistory.theRepositoryChangedSinceThisReferenceActionUndo"));
+    throw invalid(errorText("main.refHistory.theRepositoryChangedSinceThisReferenceActionUndo"));
 
   if (record.branch) {
     const worktrees = await git.exec(["worktree", "list", "--porcelain"], {
@@ -477,22 +500,22 @@ export async function validateRefHistory(
       worktrees.stdout.split("\n").filter((line) => line === `branch refs/heads/${record.branch}`)
         .length > 1
     )
-      throw invalid(t("main.refHistory.thisBranchIsCheckedOutInMultipleWorktrees"));
+      throw invalid(errorText("main.refHistory.thisBranchIsCheckedOutInMultipleWorktrees"));
   }
 
   if (operation.kind === "branch-create") {
     const current = await branchTip(git, record.root, operation.to!);
     if (undo ? current !== operation.tip : current !== null)
-      throw invalid(t("main.refHistory.theCreatedBranchChangedSinceThisAction"));
+      throw invalid(errorText("main.refHistory.theCreatedBranchChangedSinceThisAction"));
   } else if (operation.kind === "branch-delete") {
     const current = await branchTip(git, record.root, operation.to!);
     if (undo ? current !== null : current !== operation.tip)
-      throw invalid(t("main.refHistory.theDeletedBranchReferenceChangedSinceThisAction"));
+      throw invalid(errorText("main.refHistory.theDeletedBranchReferenceChangedSinceThisAction"));
   } else if (operation.kind === "branch-rename") {
     const from = await branchTip(git, record.root, operation.from!);
     const to = await branchTip(git, record.root, operation.to!);
     if (undo ? from !== null || to !== operation.tip : from !== operation.tip || to !== null)
-      throw invalid(t("main.refHistory.theRenamedBranchReferencesChangedSinceThisAction"));
+      throw invalid(errorText("main.refHistory.theRenamedBranchReferencesChangedSinceThisAction"));
   }
 
   return undo ? "undo" : "redo";
@@ -500,7 +523,9 @@ export async function validateRefHistory(
 
 export async function validateUnstartedRefIntent(git: GitService, record: WorkflowJournalRecord) {
   if (!record.refOperation || record.state === "completed" || record.refOperation.afterFingerprint)
-    throw invalid(t("main.refHistory.onlyAnUnfinishedOriginalReferenceActionCanBeDismissed"));
+    throw invalid(
+      errorText("main.refHistory.onlyAnUnfinishedOriginalReferenceActionCanBeDismissed"),
+    );
 
   const candidate = structuredClone(record);
 
@@ -527,7 +552,7 @@ export async function validatePendingBranchCheckout(
     operation.beforeIndexFlags === undefined ||
     !operation.afterConfig
   )
-    throw invalid(t("main.refHistory.thisActionHasNoInterruptedOriginalBranchCheckout"));
+    throw invalid(errorText("main.refHistory.thisActionHasNoInterruptedOriginalBranchCheckout"));
 
   const candidate = structuredClone(record);
 
@@ -580,7 +605,7 @@ export async function pendingBranchReversal(git: GitService, record: WorkflowJou
     !operation.afterConfig ||
     operation.beforeIndexFlags === undefined
   )
-    throw invalid(t("main.refHistory.thisActionHasNoPartialBranchCreationReversal"));
+    throw invalid(errorText("main.refHistory.thisActionHasNoPartialBranchCreationReversal"));
 
   const direction = operation.state === "undoing" ? "undo" : "redo";
   const candidate = structuredClone(record);
@@ -604,7 +629,7 @@ export async function finishBranchReversal(
   direction: HistoryDirection,
 ) {
   if ((await pendingBranchReversal(git, record)) !== direction)
-    throw invalid(t("main.refHistory.theInterruptedDirectionChangedRefreshUndoRedo"));
+    throw invalid(errorText("main.refHistory.theInterruptedDirectionChangedRefreshUndoRedo"));
 
   const operation = record.refOperation!;
   const undo = direction === "undo";
@@ -654,7 +679,7 @@ export async function completedRefIntent(git: GitService, record: WorkflowJourna
   const operation = record.refOperation;
 
   if (!operation || record.state === "completed")
-    throw invalid(t("main.refHistory.thisActionHasNoUnfinishedOriginalRecord"));
+    throw invalid(errorText("main.refHistory.thisActionHasNoUnfinishedOriginalRecord"));
 
   const candidate = structuredClone(record);
   const next = candidate.refOperation!;
@@ -677,14 +702,18 @@ export async function completedRefIntent(git: GitService, record: WorkflowJourna
         status.changes.length ||
         flags.split("\0").some((line) => line && !line.startsWith("H "))
       )
-        throw invalid(t("main.refHistory.thisInterruptedCheckoutHasLocalChangesInspectThe"));
+        throw invalid(
+          errorText("main.refHistory.thisInterruptedCheckoutHasLocalChangesInspectThe"),
+        );
     } else if (
       !operation.startContentFingerprint ||
       operation.startContentFingerprint !==
         (await workflowFingerprint(git, record.root, status, true)) ||
       flags !== operation.beforeIndexFlags
     )
-      throw invalid(t("main.refHistory.repositoryContentsChangedDuringThisActionPreserveNewer"));
+      throw invalid(
+        errorText("main.refHistory.repositoryContentsChangedDuringThisActionPreserveNewer"),
+      );
 
     next.afterFingerprint = await workflowFingerprint(git, record.root, status);
     next.afterIndexFlags = flags;
@@ -707,7 +736,9 @@ export async function pendingRefConfiguration(git: GitService, record: WorkflowJ
     !operation.afterConfig ||
     !operation.to
   )
-    throw invalid(t("main.refHistory.thisActionHasNoInterruptedBranchConfigurationToRestore"));
+    throw invalid(
+      errorText("main.refHistory.thisActionHasNoInterruptedBranchConfigurationToRestore"),
+    );
 
   const undo = operation.state === "undoing";
   const candidate = structuredClone(record);
@@ -717,7 +748,7 @@ export async function pendingRefConfiguration(git: GitService, record: WorkflowJ
 
   if (operation.kind === "branch-rename") {
     if (!operation.from || !operation.beforeFromConfig || !operation.afterFromConfig)
-      throw invalid(t("main.refHistory.theRenameHasNoCompleteSettingsSnapshot"));
+      throw invalid(errorText("main.refHistory.theRenameHasNoCompleteSettingsSnapshot"));
 
     const moved = (entries: [string, string][], name: string): [string, string][] =>
       entries.map(([key, value]) => [
@@ -748,7 +779,7 @@ export async function pendingRefConfiguration(git: GitService, record: WorkflowJ
         JSON.stringify(current) !== JSON.stringify(endpoint.target)
       )
         throw invalid(
-          t("main.refHistory.branchConfigurationHasNewerSettingsPreserveThemBeforeMessage"),
+          errorText("main.refHistory.branchConfigurationHasNewerSettingsPreserveThemBeforeMessage"),
         );
 
       changes.push({ name: endpoint.name, expected: current, target: endpoint.target });
@@ -765,7 +796,9 @@ export async function pendingRefConfiguration(git: GitService, record: WorkflowJ
     JSON.stringify(current) !== JSON.stringify(source) &&
     JSON.stringify(current) !== JSON.stringify(target)
   )
-    throw invalid(t("main.refHistory.branchConfigurationHasNewerSettingsPreserveThemBefore"));
+    throw invalid(
+      errorText("main.refHistory.branchConfigurationHasNewerSettingsPreserveThemBefore"),
+    );
 
   return { candidate, changes: [{ name: operation.to, expected: current, target }] };
 }
@@ -917,7 +950,8 @@ async function executeRefChanges(
     if (branch) await git.exec(["checkout", "--no-overwrite-ignore", branch, "--"], soft);
     else if (head)
       await git.exec(["checkout", "--no-overwrite-ignore", "--detach", head, "--"], soft);
-    else throw invalid(t("main.refHistory.theRecordedCheckoutHasNoBranchOrCommitToRestore"));
+    else
+      throw invalid(errorText("main.refHistory.theRecordedCheckoutHasNoBranchOrCommitToRestore"));
   }
 
   await checkoutState(
@@ -930,21 +964,27 @@ async function executeRefChanges(
   if (operation.kind === "branch-create") {
     const tip = await branchTip(git, root, operation.to!);
     if ((direction === "undo" && tip !== null) || (direction === "redo" && tip !== operation.tip))
-      throw invalid(t("main.refHistory.theReferenceReversalDidNotFinishInTheRecordedState"));
+      throw invalid(
+        errorText("main.refHistory.theReferenceReversalDidNotFinishInTheRecordedState"),
+      );
   } else if (operation.kind === "branch-delete") {
     const tip = await branchTip(git, root, operation.to!);
     if ((direction === "undo" && tip !== operation.tip) || (direction === "redo" && tip !== null))
-      throw invalid(t("main.refHistory.theReferenceReversalDidNotFinishInTheRecordedState"));
+      throw invalid(
+        errorText("main.refHistory.theReferenceReversalDidNotFinishInTheRecordedState"),
+      );
   } else if (operation.kind === "branch-rename") {
     const expected = direction === "undo" ? operation.from! : operation.to!;
     if ((await branchTip(git, root, expected)) !== operation.tip)
-      throw invalid(t("main.refHistory.theReferenceReversalDidNotFinishInTheRecordedState"));
+      throw invalid(
+        errorText("main.refHistory.theReferenceReversalDidNotFinishInTheRecordedState"),
+      );
   }
 
   const fingerprint = await workflowFingerprint(git, root, await git.status(root));
 
   if (fingerprint !== (undo ? operation.beforeFingerprint : operation.afterFingerprint))
-    throw invalid(t("main.refHistory.theReferenceReversalDidNotFinishInThe"));
+    throw invalid(errorText("main.refHistory.theReferenceReversalDidNotFinishInThe"));
 
   if (operation.kind === "branch-rename") {
     const candidate = structuredClone(record);

@@ -1,3 +1,7 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { stateLabel } from "@shared/i18n/labels";
 import {
   RECOVERY_PAGE_SIZE,
   type RecoveryEntry,
@@ -5,18 +9,15 @@ import {
   type RecoveryPage,
   type RecoverySource,
 } from "@shared/workflows/history-recovery";
-import { stateLabel } from "@shared/i18n/labels";
-import { t } from "@shared/i18n";
 import { randomUUID } from "node:crypto";
-import { GitError } from "@shared/errors";
 
 import type { GitService } from "../../git/git-service";
 import { assertFullObjectId, assertValidRefName } from "../../git/validation";
+import type { WorkflowJournal } from "../../persistence/workflow-journal";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
-import type { WorkflowJournal } from "../../persistence/workflow-journal";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.recoverHistory"), message });
 
 export class HistoryRecoveryService {
@@ -36,7 +37,7 @@ export class HistoryRecoveryService {
     const { path, identityId } = this.repositories.resolveActiveRepository(repositoryId);
 
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000)
-      throw invalid(t("main.historyRecoveryService.chooseAValidRecoveryPage"));
+      throw invalid(errorText("main.historyRecoveryService.chooseAValidRecoveryPage"));
 
     let entries: RecoveryEntry[];
 
@@ -95,7 +96,9 @@ export class HistoryRecoveryService {
       for (let i = 0; i + 2 < fields.length; i += 3) {
         const oid = fields[i]!.trim();
         if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid))
-          throw invalid(t("main.historyRecoveryService.gitReturnedAnUnreadableReflogEntry"));
+          throw invalid(
+            errorText("main.historyRecoveryService.gitReturnedAnUnreadableReflogEntry"),
+          );
         entries.push({ oid, label: fields[i + 1]!, description: fields[i + 2]! });
       }
     } else if (source === "saved") {
@@ -154,7 +157,9 @@ export class HistoryRecoveryService {
         .sort((a, b) => a.oid.localeCompare(b.oid))
         .slice(offset, offset + RECOVERY_PAGE_SIZE + 1);
     } else
-      throw invalid(t("main.historyRecoveryService.chooseReflogsSavedRefsSharedHistoryActionsOr"));
+      throw invalid(
+        errorText("main.historyRecoveryService.chooseReflogsSavedRefsSharedHistoryActionsOr"),
+      );
 
     const hasMore = entries.length > RECOVERY_PAGE_SIZE;
 
@@ -171,7 +176,9 @@ export class HistoryRecoveryService {
     const inspection = await this.git.inspectCommit(repository.path, oid);
 
     if (inspection.commit.oid !== oid)
-      throw invalid(t("main.historyRecoveryService.chooseACommitObjectNotATagOrAnotherObjectType"));
+      throw invalid(
+        errorText("main.historyRecoveryService.chooseACommitObjectNotATagOrAnotherObjectType"),
+      );
 
     let diff: RecoveryInspection["diff"] = { files: [] };
     let diffNotice: string | undefined;
@@ -211,7 +218,7 @@ export class HistoryRecoveryService {
       review.root !== repository.path
     )
       throw invalid(
-        t("main.historyRecoveryService.thisRecoveryInspectionExpiredOrBelongsToAnother"),
+        errorText("main.historyRecoveryService.thisRecoveryInspectionExpiredOrBelongsToAnother"),
       );
 
     assertValidRefName(name, t("operations.restoreRecoveredBranch"));
@@ -231,7 +238,9 @@ export class HistoryRecoveryService {
         });
 
         if (resolved.stdout.trim() !== review.oid)
-          throw invalid(t("main.historyRecoveryService.theInspectedCommitIsNoLongerAvailable"));
+          throw invalid(
+            errorText("main.historyRecoveryService.theInspectedCommitIsNoLongerAvailable"),
+          );
 
         await this.git.exec(
           [

@@ -1,24 +1,25 @@
-import { t } from "@shared/i18n";
-import { hasOpenOverlay } from "../components/ui/overlays/overlay-presence";
-import { ModalBehaviorContext } from "../components/ui/overlays/ModalSurface";
-import { useCallback } from "react";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import { emptySession } from "@shared/identity/profile-session";
-import { useAppStore } from "../stores/app-store";
-import { useSessionStore } from "../stores/session-store";
-import { useRepositoryStore } from "../stores/repository-store";
+import { useCallback } from "react";
 import { Toolbar } from "../app/Toolbar";
-import { RepositoryTabs } from "../features/repositories/RepositoryTabs";
-import { WorkspaceFrame } from "../app/WorkspaceFrame";
-import { usePreferencesStore } from "../stores/preferences-store";
 import { Workspace } from "../app/Workspace";
+import { WorkspaceFrame } from "../app/WorkspaceFrame";
+import { ModalBehaviorContext } from "../components/ui/overlays/ModalSurface";
+import { hasOpenOverlay } from "../components/ui/overlays/overlay-presence";
+import { RepositoryTabs } from "../features/repositories/RepositoryTabs";
+import { useAppStore } from "../stores/app-store";
+import { usePreferencesStore } from "../stores/preferences-store";
+import { useRepositoryStore } from "../stores/repository-store";
+import { useSessionStore } from "../stores/session-store";
 import { TourGuide } from "./TourGuide";
-import { welcomeTour, type TourStep } from "./steps";
 import { commits, createDemo, demoIdentity, demoRepositories } from "./demo";
+import { welcomeTour, type TourStep } from "./steps";
 
 const demo = createDemo();
 export async function initializeDemo() {
   if (window === window.parent || window.eda)
-    throw new Error(t("tutorial.demoRoot.theTourRequiresAnIsolatedFrameWithoutDesktopAccess"));
+    throw new AppError(ERROR_CODE.TUTORIAL_ISOLATION_REQUIRED);
   let receiveInitial!: () => void;
   const initialAppearance = new Promise<void>((resolve) => {
     receiveInitial = resolve;

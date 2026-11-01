@@ -1,8 +1,9 @@
-import { MAX_STASH_NAME_LENGTH, type StashInspection } from "@shared/workflows/stashes";
+import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { MAX_STASH_NAME_LENGTH, type StashInspection } from "@shared/workflows/stashes";
 import { useState } from "react";
 
-import { Button, Dialog, Input, ErrorDialog } from "../../components/ui/index";
+import { Button, Dialog, ErrorDialog, Input } from "../../components/ui/index";
 
 export function StashRenameDialog({
   repositoryId,
@@ -25,7 +26,7 @@ export function StashRenameDialog({
     try {
       const result = await window.eda.stashes.rename(repositoryId, inspection.token, name);
       if (result.ok) onRenamed(result.value.keptOriginal);
-      else setError(`${result.error.message} ${result.error.suggestedAction ?? ""}`);
+      else setError(`${errorMessage(result.error)} ${errorAction(result.error) ?? ""}`);
     } finally {
       setBusy(false);
     }

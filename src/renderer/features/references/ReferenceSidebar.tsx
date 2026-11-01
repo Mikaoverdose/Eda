@@ -1,24 +1,25 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { Skeleton, SkeletonRows } from "../../components/ui/feedback/Skeleton";
-import { ErrorDialog } from "../../components/ui/index";
-import { useEffect, useRef, useState } from "react";
-import { GitBranch, Globe, Tag, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { BranchSummary, TagSummary } from "@shared/repository/repository-write";
+import { GitBranch, Globe, PanelLeftClose, PanelLeftOpen, Tag } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLayoutTransition } from "../../components/layout/hooks/useLayoutTransition";
+import { Skeleton, SkeletonRows } from "../../components/ui/feedback/Skeleton";
+import {
+  cx,
+  Disclosure,
+  ErrorDialog,
+  IconButton,
+  ListItemButton,
+  SearchField,
+  TextButton,
+} from "../../components/ui/index";
+import { referenceLabel } from "../../repository/reference-label";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { useSessionStore } from "../../stores/session-store";
-import {
-  cx,
-  IconButton,
-  SearchField,
-  ListItemButton,
-  TextButton,
-  Disclosure,
-} from "../../components/ui/index";
-import { referenceLabel } from "../../repository/reference-label";
 import { ManageReferencesDialog } from "./ManageReferencesDialog";
 import { ReferenceMenu, type ReferenceTarget } from "./ReferenceMenu";
-import { useLayoutTransition } from "../../components/layout/hooks/useLayoutTransition";
 
 const defaults = { hidden: false, locals: true, remotes: true, tags: true };
 
@@ -86,8 +87,8 @@ export function ReferenceSidebar({
           }
         }
 
-        if (!branchResult.ok) setError(branchResult.error.message);
-        else if (!tagResult.ok) setError(tagResult.error.message);
+        if (!branchResult.ok) setError(errorMessage(branchResult.error));
+        else if (!tagResult.ok) setError(errorMessage(tagResult.error));
       })
       .catch(() => {
         if (!cancelled) setError(t("referenceSidebar.referencesCouldNotBeReadTryRefreshing"));

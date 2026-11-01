@@ -1,10 +1,11 @@
+import { errorText } from "@shared/error-codes";
+import { err, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { EdaApi } from "@shared/ipc";
-import { err, type Result } from "@shared/errors";
-import type { ShellCommandId } from "./shell-commands";
 import { useAppStore } from "../stores/app-store";
-import { useSessionStore } from "../stores/session-store";
 import { useRepositoryStore } from "../stores/repository-store";
+import { useSessionStore } from "../stores/session-store";
+import type { ShellCommandId } from "./shell-commands";
 
 export const REPOSITORY_COMMANDS = {
   createBranch: { title: t("repositoryCommands.createBranch"), entry: "repository.createBranch" },
@@ -74,14 +75,15 @@ export async function executeRepositoryCommand<K extends RepositoryCommandId>(
 ): Promise<Result<void>> {
   const reason =
     expected.repositoryId !== request.repositoryId
-      ? t("repositoryCommands.theActionBelongsToADifferentRepository")
+      ? errorText("repositoryCommands.theActionBelongsToADifferentRepository")
       : repositoryCommandReason(expected);
 
   if (reason)
     return err({
       kind: "invalid-input",
       operation: REPOSITORY_COMMANDS[command].title,
-      message: reason,
+      message:
+        typeof reason === "string" ? errorText("errors.operationBlocked", { reason }) : reason,
     });
 
   const execute = window.eda.repository[command] as (

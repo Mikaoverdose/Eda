@@ -1,35 +1,36 @@
-import { t } from "@shared/i18n";
-import { TourHost } from "../tutorial/TourHost";
-import { ErrorDialog } from "../components/ui/index";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { redactDiagnostic } from "@shared/diagnostics";
-import { FailureScreen } from "./RendererFailure";
-import { AppErrorDialog } from "./AppErrorDialog";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useShellCommands } from "../commands/hooks/useShellCommands";
+import { RetainedView } from "../components/layout/ViewTransition";
+import { useViewTransition } from "../components/layout/hooks/useViewTransition";
+import { TextButton } from "../components/ui/actions/TextButton";
+import { ErrorDialog } from "../components/ui/index";
 import { FirstRun } from "../features/onboarding/FirstRun";
-import { AppUpdateNotice } from "../features/updates/AppUpdateNotice";
 import { IdentityDialog } from "../features/profiles/IdentityDialog";
 import { RepositoryPicker } from "../features/repositories/RepositoryPicker";
 import { RepositoryTabs } from "../features/repositories/RepositoryTabs";
 import { Settings, type SettingsSection } from "../features/settings/Settings";
-import { Toolbar } from "./Toolbar";
-import { RetainedView } from "../components/layout/ViewTransition";
-import { useViewTransition } from "../components/layout/hooks/useViewTransition";
-import { Workspace } from "./Workspace";
-import { useAppStore } from "../stores/app-store";
-import { watchSystemAppearance } from "../stores/preferences-store";
-import { useSessionStore } from "../stores/session-store";
-import { useShellStore } from "../stores/shell-store";
-import { useShellCommands } from "../commands/hooks/useShellCommands";
-import { CommandPalette } from "./CommandPalette";
-import { ShortcutHelp } from "./ShortcutHelp";
-import { StartupTitlebar } from "./WindowControls";
-import { WorkspaceFrame } from "./WorkspaceFrame";
-import { useRepositoryWatch } from "../repository/hooks/useRepositoryWatch";
-import { TextButton } from "../components/ui/actions/TextButton";
+import { AppUpdateNotice } from "../features/updates/AppUpdateNotice";
 import {
   showOpenedRepository,
   useRepositoryNavigation,
 } from "../repository/hooks/useRepositoryNavigation";
+import { useRepositoryWatch } from "../repository/hooks/useRepositoryWatch";
+import { useAppStore } from "../stores/app-store";
+import { watchSystemAppearance } from "../stores/preferences-store";
+import { useSessionStore } from "../stores/session-store";
+import { useShellStore } from "../stores/shell-store";
+import { TourHost } from "../tutorial/TourHost";
+import { AppErrorDialog } from "./AppErrorDialog";
+import { CommandPalette } from "./CommandPalette";
+import { FailureScreen } from "./RendererFailure";
+import { ShortcutHelp } from "./ShortcutHelp";
+import { Toolbar } from "./Toolbar";
+import { StartupTitlebar } from "./WindowControls";
+import { Workspace } from "./Workspace";
+import { WorkspaceFrame } from "./WorkspaceFrame";
 
 export function App() {
   useEffect(watchSystemAppearance, []);
@@ -114,7 +115,7 @@ export function App() {
 
   useEffect(() => {
     void initialize().catch((error: unknown) => {
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = errorMessage(error);
       setStartupError(redactDiagnostic(detail || t("app.startupFailedUnexpectedly")));
     });
   }, [initialize]);

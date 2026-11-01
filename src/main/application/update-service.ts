@@ -1,7 +1,9 @@
+import { ERROR_CODE, errorText, type ErrorText } from "@shared/error-codes";
+import { AppError, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { localizedUpdateApiError } from "@shared/update-api-errors";
 import type { UpdateCapability, UpdateProgress, UpdateRelease, UpdateState } from "@shared/updates";
 import { UPDATE_FEED_BASE } from "@shared/updates";
-import { GitError } from "@shared/errors";
 
 export interface UpdateDriver {
   check(): Promise<{ available: boolean; release: UpdateRelease }>;
@@ -117,7 +119,9 @@ export class UpdateService {
   private requireAutomatic(): void {
     if (this.state.capability !== "automatic")
       throw updateRequest(
-        this.state.reason ?? t("main.updateService.useTheDownloadPageToUpdateEda"),
+        errorText("errors.operationBlocked", {
+          reason: this.state.reason ?? t("main.updateService.useTheDownloadPageToUpdateEda"),
+        }),
       );
   }
 
@@ -158,7 +162,7 @@ export class UpdateService {
     this.requireAutomatic();
     if (this.downloading) return this.downloading;
     if (this.state.phase !== "available" || !this.state.release)
-      throw updateRequest(t("main.updateService.checkForAnUpdateBeforeDownloading"));
+      throw updateRequest(errorText("main.updateService.checkForAnUpdateBeforeDownloading"));
     this.cancelled = false;
     this.publish({ phase: "downloading", progress: null, error: null });
     this.downloading = Promise.resolve().then(async () => {
@@ -193,7 +197,9 @@ export class UpdateService {
   async install(): Promise<UpdateState> {
     this.requireAutomatic();
     if (this.state.phase !== "ready")
-      throw updateRequest(t("main.updateService.downloadAndVerifyAnUpdateBeforeInstallingIt"));
+      throw updateRequest(
+        errorText("main.updateService.downloadAndVerifyAnUpdateBeforeInstallingIt"),
+      );
     this.publish({ phase: "installing", error: null });
     try {
       this.rollbackInstall = await this.options.prepareInstall();
@@ -213,7 +219,7 @@ export class UpdateService {
 export function newerRelease(candidate: string, current: string): boolean {
   const parse = (value: string) => {
     if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value))
-      throw new Error(t("main.updateService.invalidStableReleaseVersion"));
+      throw new AppError(ERROR_CODE.INVALID_STABLE_VERSION);
     return value.split(".").map((part) => BigInt(part));
   };
   const next = parse(candidate),
@@ -225,16 +231,20 @@ export function newerRelease(candidate: string, current: string): boolean {
   return false;
 }
 
-function updateRequest(message: string): GitError {
+function updateRequest(message: ErrorText): GitError {
   return new GitError({ kind: "invalid-input", operation: t("operations.updateEda"), message });
 }
 
 export function updateError(error: unknown, action: "check" | "download" | "install"): string {
+  const apiMessage = localizedUpdateApiError(error);
+  if (apiMessage) return apiMessage;
+  if (error instanceof AppError && error.code === ERROR_CODE.INVALID_STABLE_VERSION)
+    return t("main.updateService.theUpdateCouldNotBeVerifiedNothingWas");
   const details =
     error instanceof Error ? `${"code" in error ? error.code : ""} ${error.message}` : "";
   if (/404|LATEST_VERSION_NOT_FOUND|CHANNEL_FILE_NOT_FOUND|ENOTFOUND/.test(details))
     return t("main.updateService.theUpdateServiceIsNotAvailableYetTryAgainLater");
-  if (/sha512|checksum|signature|ERR_UPDATER_INVALID|Invalid stable|Invalid update/i.test(details))
+  if (/sha512|checksum|signature|ERR_UPDATER_INVALID/i.test(details))
     return t("main.updateService.theUpdateCouldNotBeVerifiedNothingWas");
   if (/TIMEDOUT|TIMEOUT|ECONN|ERR_INTERNET|network|fetch failed|ENET|EAI_AGAIN/i.test(details))
     return t("main.updateService.couldNotReachTheUpdateServiceCheckYourConnectionAndTryAgain");

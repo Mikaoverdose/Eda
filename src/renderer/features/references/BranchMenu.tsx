@@ -1,27 +1,29 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { RemotesDialog } from "../sync/RemotesDialog";
-import { ButtonBase } from "../../components/ui/actions/ButtonBase";
+import type { BranchSummary } from "@shared/repository/repository-write";
+import { Circle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
   repositoryCommandReason,
 } from "../../commands/repository-commands";
-import { useEffect, useRef, useState } from "react";
-import { Circle } from "lucide-react";
-import type { BranchSummary } from "@shared/repository/repository-write";
-import { useAppStore } from "../../stores/app-store";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { ButtonBase } from "../../components/ui/actions/ButtonBase";
+import { useListNavigation } from "../../components/ui/hooks/useListNavigation";
 import {
   BranchIcon,
   Button,
   CloseIcon,
+  ErrorDialog,
   IconButton,
   Input,
-  ErrorDialog,
-  PopoverSurface,
   ListItemButton,
+  PopoverSurface,
 } from "../../components/ui/index";
-import { useListNavigation } from "../../components/ui/hooks/useListNavigation";
+import { useAppStore } from "../../stores/app-store";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { RemotesDialog } from "../sync/RemotesDialog";
 
 export function BranchMenu({ head }: { head: string }) {
   const repositoryId = useAppStore((state) => state.selectedRepositoryId);
@@ -45,11 +47,11 @@ export function BranchMenu({ head }: { head: string }) {
     if (!open || !repositoryId) return;
     void window.eda.repository.listBranches(repositoryId).then((result) => {
       if (result.ok) setBranches(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     });
   }, [open, repositoryId]);
 
-  const run = async (work: () => Promise<{ ok: boolean; error?: { message: string } }>) => {
+  const run = async (work: () => Promise<Result<unknown>>) => {
     if (!repositoryId || writeUnavailable || commandUnavailable) {
       setError(
         commandUnavailable ?? t("branchMenu.thisRepositoryIsReadOnlyCheckPermissionsThenRefresh"),
@@ -64,7 +66,7 @@ export function BranchMenu({ head }: { head: string }) {
       const result = await work();
 
       if (!result.ok) {
-        setError(result.error?.message ?? t("branchMenu.thatDidNotWork"));
+        setError(errorMessage(result.error, errorText("branchMenu.thatDidNotWork")));
         return false;
       }
 

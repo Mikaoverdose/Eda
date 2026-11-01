@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { SshSetupCard } from "@renderer/features/onboarding/SshSetupCard";
@@ -91,7 +92,10 @@ it.each(["Import key", "Generate key"])(
   },
 );
 it("does not show completion when assignment fails and allows retry", async () => {
-  assign.mockResolvedValueOnce({ ok: false, error: { message: "Could not assign key" } });
+  assign.mockResolvedValueOnce({
+    ok: false,
+    error: errorFixture({ message: "Could not assign key" }),
+  });
   await click("Import key");
   expect(container.textContent).toContain("Could not assign key");
   expect(container.querySelector('[aria-label="SSH key assigned"]')).toBeNull();

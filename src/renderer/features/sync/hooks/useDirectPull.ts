@@ -1,8 +1,9 @@
-import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
 import type { GitErrorData } from "@shared/errors";
-import type { PullStrategy } from "@shared/workflows/pull";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { TransportCredentials } from "@shared/integrations/remotes";
+import type { PullStrategy } from "@shared/workflows/pull";
+import { useEffect, useRef, useState } from "react";
 import { ACTION_FEEDBACK } from "../../../motion";
 import { useAppStore } from "../../../stores/app-store";
 import { useRepositoryStore } from "../../../stores/repository-store";
@@ -50,7 +51,7 @@ export function useDirectPull(repositoryId: string) {
       ) {
         setGitHubAuthentication(strategy);
         setGitHubAccessDenied(failure.kind === "github-access-required");
-        setError(failure.message);
+        setError(errorMessage(failure));
         return;
       }
       if (failure.kind === "auth-failed" && strategy) {
@@ -63,12 +64,12 @@ export function useDirectPull(repositoryId: string) {
           );
           if (remote?.fetchUrls.some((url) => url.startsWith("https://"))) {
             setAuthentication(strategy);
-            setError(failure.message);
+            setError(errorMessage(failure));
             return;
           }
         }
       }
-      setError(failure.message);
+      setError(errorMessage(failure));
     };
 
     try {

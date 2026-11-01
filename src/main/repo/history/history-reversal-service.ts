@@ -1,45 +1,46 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { stateLabel } from "@shared/i18n/labels";
 import type {
-  HistoryDirection,
   BranchCheckoutPhase,
+  HistoryDirection,
   HistoryReversal,
   HistoryReversalKind,
 } from "@shared/workflows/history-recovery";
-import { stateLabel } from "@shared/i18n/labels";
-import { t } from "@shared/i18n";
-import { GitError } from "@shared/errors";
 
 import { createHash } from "node:crypto";
 import type { GitService } from "../../git/git-service";
+import { withLockedIndex } from "../../git/operations/locked-index";
 import type {
-  ContentRecoveryRepository,
   ContentRecoveryRecord,
+  ContentRecoveryRepository,
 } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { repositoryCommonDirectory } from "../lifecycle/repository-location";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
-import type { RepositoryWriter } from "../working-tree/repository-writer";
+import { protectResetPaths } from "../workflows/reset-service";
+import { workflowFingerprint } from "../workflows/workflow-fingerprint";
 import type { WorkflowService } from "../workflows/workflow-service";
 import { DiscardService } from "../working-tree/discard-service";
-import { workflowFingerprint } from "../workflows/workflow-fingerprint";
-import { repositoryCommonDirectory } from "../lifecycle/repository-location";
-import { withLockedIndex } from "../../git/operations/locked-index";
-import { publishedRangeCount } from "./shared-history";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
 import {
-  executeRefHistory,
-  validateRefHistory,
-  pendingRefConfiguration,
-  finishRefConfiguration,
   completedRefIntent,
-  validateUnstartedRefIntent,
-  validatePendingBranchCheckout,
+  executeRefHistory,
   finishBranchCheckout,
-  pendingBranchReversal,
   finishBranchReversal,
+  finishRefConfiguration,
+  pendingBranchReversal,
+  pendingRefConfiguration,
   releaseReferenceObjects,
+  validatePendingBranchCheckout,
+  validateRefHistory,
+  validateUnstartedRefIntent,
 } from "./ref-history";
 import { ensureRecoveryRefs } from "./rewrite-history";
-import { protectResetPaths } from "../workflows/reset-service";
+import { publishedRangeCount } from "./shared-history";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.reverseLocalAction"), message });
 
 export class HistoryReversalService {
@@ -88,23 +89,32 @@ export class HistoryReversalService {
   ) {
     if (record.refOperation)
       throw invalid(
-        t("main.historyReversalService.thisIsABranchOrCheckoutActionInspectItsReferenceStateFirst"),
+        errorText(
+          "main.historyReversalService.thisIsABranchOrCheckoutActionInspectItsReferenceStateFirst",
+        ),
       );
 
     const reset = record.refChange;
 
     if (!reset)
-      throw invalid(t("main.historyReversalService.thisActionHasNoCompletedReversalRecordInspect"));
+      throw invalid(
+        errorText("main.historyReversalService.thisActionHasNoCompletedReversalRecordInspect"),
+      );
 
     const reversal = reset.reversal;
 
     if (record.state !== "completed" || !reversal)
-      throw invalid(t("main.historyReversalService.thisActionHasNoCompletedReversalRecordInspect"));
+      throw invalid(
+        errorText("main.historyReversalService.thisActionHasNoCompletedReversalRecordInspect"),
+      );
 
     if (reversal.state === "undoing" || reversal.state === "redoing")
-      throw invalid(t("main.historyReversalService.aReversalWasInterruptedInspectHeadIndexAnd"));
+      throw invalid(
+        errorText("main.historyReversalService.aReversalWasInterruptedInspectHeadIndexAnd"),
+      );
 
-    if (reversal.blockedReason) throw invalid(reversal.blockedReason);
+    if (reversal.blockedReason)
+      throw invalid(errorText("errors.operationBlocked", { reason: reversal.blockedReason }));
 
     if (
       !options.reconciling &&
@@ -117,16 +127,20 @@ export class HistoryReversalService {
         )
     )
       throw invalid(
-        t("main.historyReversalService.anotherLocalActionReversalWasInterruptedInspectRecovery"),
+        errorText(
+          "main.historyReversalService.anotherLocalActionReversalWasInterruptedInspectRecovery",
+        ),
       );
 
     if ((await repositoryCommonDirectory(this.git, record.root)) !== reset.commonDirectory)
-      throw invalid(t("main.historyReversalService.thePhysicalRepositoryChanged"));
+      throw invalid(errorText("main.historyReversalService.thePhysicalRepositoryChanged"));
 
     const status = await this.git.status(record.root);
 
     if (await this.workflows.observe(record.root, status))
-      throw invalid(t("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"));
+      throw invalid(
+        errorText("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"),
+      );
 
     const undo = reversal.state === "applied";
     const expectedHead = undo ? reset.target : record.head;
@@ -136,14 +150,16 @@ export class HistoryReversalService {
       (status.branch.detached ? undefined : status.branch.head) !== record.branch
     )
       throw invalid(
-        t("main.historyReversalService.headOrTheCheckedOutBranchChangedSinceThisAction"),
+        errorText("main.historyReversalService.headOrTheCheckedOutBranchChangedSinceThisAction"),
       );
 
     if (
       !options.partialIndex &&
       (await workflowFingerprint(this.git, record.root, status)) !== reversal.expectedFingerprint
     )
-      throw invalid(t("main.historyReversalService.theRepositoryChangedSinceThisActionUndoRedo"));
+      throw invalid(
+        errorText("main.historyReversalService.theRepositoryChangedSinceThisActionUndoRedo"),
+      );
 
     const flags = (
       await this.git.exec(["ls-files", "-v", "-z"], {
@@ -153,7 +169,7 @@ export class HistoryReversalService {
     ).stdout;
 
     if (!options.partialIndex && flags !== (undo ? reversal.afterFlags : reversal.beforeFlags))
-      throw invalid(t("main.historyReversalService.indexFlagsChangedSinceThisAction"));
+      throw invalid(errorText("main.historyReversalService.indexFlagsChangedSinceThisAction"));
 
     const refs = (
       await this.git.exec(
@@ -178,7 +194,9 @@ export class HistoryReversalService {
 
     for (const [suffix, oid] of expectedRefs)
       if (objects.get(`${reset.recoveryRef}/${suffix}`) !== oid)
-        throw invalid(t("main.historyReversalService.aRequiredRecoveryRefIsMissingOrChanged"));
+        throw invalid(
+          errorText("main.historyReversalService.aRequiredRecoveryRefIsMissingOrChanged"),
+        );
 
     if (record.branch) {
       const worktrees = await this.git.exec(["worktree", "list", "--porcelain"], {
@@ -190,7 +208,9 @@ export class HistoryReversalService {
         worktrees.stdout.split("\n").filter((line) => line === `branch refs/heads/${record.branch}`)
           .length > 1
       )
-        throw invalid(t("main.historyReversalService.thisBranchIsCheckedOutInMultipleWorktrees"));
+        throw invalid(
+          errorText("main.historyReversalService.thisBranchIsCheckedOutInMultipleWorktrees"),
+        );
 
       const symbolic = await this.git.exec(
         ["symbolic-ref", "--quiet", `refs/heads/${record.branch}`],
@@ -203,7 +223,7 @@ export class HistoryReversalService {
 
       if (symbolic.exitCode === 0)
         throw invalid(
-          t("main.historyReversalService.symbolicBranchRefsCannotBeReversedAutomatically"),
+          errorText("main.historyReversalService.symbolicBranchRefsCannotBeReversedAutomatically"),
         );
     }
 
@@ -215,7 +235,9 @@ export class HistoryReversalService {
         "completed"
       )
         throw invalid(
-          t("main.historyReversalService.theOriginalWorkingContentSnapshotIsMissingInspect"),
+          errorText(
+            "main.historyReversalService.theOriginalWorkingContentSnapshotIsMissingInspect",
+          ),
         );
 
       const id = undo ? reset.snapshotId : reversal.redoSnapshotId;
@@ -228,7 +250,9 @@ export class HistoryReversalService {
         snapshot.state !== "completed" ||
         !snapshot.after
       )
-        throw invalid(t("main.historyReversalService.aRequiredWorkingContentSnapshotIsMissingOr"));
+        throw invalid(
+          errorText("main.historyReversalService.aRequiredWorkingContentSnapshotIsMissingOr"),
+        );
 
       await this.recovery.validateOperationFiles(snapshot, snapshot.after);
     }
@@ -281,18 +305,26 @@ export class HistoryReversalService {
     const reset = record.refChange;
 
     if (record.mode !== "reset" || !reset || reset.reversal)
-      throw invalid(t("main.historyReversalService.thisRecordIsNotAnInterruptedOriginalReset"));
+      throw invalid(
+        errorText("main.historyReversalService.thisRecordIsNotAnInterruptedOriginalReset"),
+      );
     if (record.state === "completed")
-      throw invalid(t("main.historyReversalService.thisResetAlreadyHasACompletedRecoveryRecord"));
+      throw invalid(
+        errorText("main.historyReversalService.thisResetAlreadyHasACompletedRecoveryRecord"),
+      );
     if ((await repositoryCommonDirectory(this.git, record.root)) !== reset.commonDirectory)
-      throw invalid(t("main.historyReversalService.thePhysicalRepositoryChanged"));
+      throw invalid(errorText("main.historyReversalService.thePhysicalRepositoryChanged"));
 
     const status = await this.git.status(record.root);
 
     if (await this.workflows.observe(record.root, status))
-      throw invalid(t("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"));
+      throw invalid(
+        errorText("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"),
+      );
     if ((status.branch.detached ? undefined : status.branch.head) !== record.branch)
-      throw invalid(t("main.historyReversalService.theCheckedOutBranchChangedSinceThisReset"));
+      throw invalid(
+        errorText("main.historyReversalService.theCheckedOutBranchChangedSinceThisReset"),
+      );
 
     const head = status.branch.oid ?? "";
     const tree = await this.indexTree(record.root);
@@ -316,7 +348,9 @@ export class HistoryReversalService {
         !["prepared", "completed"].includes(snapshot.state)
       )
         throw invalid(
-          t("main.historyReversalService.theOriginalWorkingContentSnapshotIsUnavailablePreserve"),
+          errorText(
+            "main.historyReversalService.theOriginalWorkingContentSnapshotIsUnavailablePreserve",
+          ),
         );
 
       await this.recovery.validateOperationFiles(
@@ -342,16 +376,18 @@ export class HistoryReversalService {
     if (head === record.head && head !== reset.target) {
       if (tree !== reset.indexTree)
         throw invalid(
-          t(
+          errorText(
             "main.historyReversalService.theIndexChangedSinceThisResetInspectStagedChangesBeforeResuming",
           ),
         );
 
       if (reset.beforeFlags === undefined || flags !== reset.beforeFlags)
-        throw invalid(t("main.historyReversalService.theIndexFlagsChangedSinceThisReset"));
+        throw invalid(errorText("main.historyReversalService.theIndexFlagsChangedSinceThisReset"));
 
       if (!reset.beforeWorking || working !== reset.beforeWorking)
-        throw invalid(t("main.historyReversalService.workingFilesChangedSinceThisResetResumeIs"));
+        throw invalid(
+          errorText("main.historyReversalService.workingFilesChangedSinceThisResetResumeIs"),
+        );
 
       await requireSavedStart();
 
@@ -359,7 +395,7 @@ export class HistoryReversalService {
     }
 
     if (head !== reset.target)
-      throw invalid(t("main.historyReversalService.headIsNeitherThisResetSStarting"));
+      throw invalid(errorText("main.historyReversalService.headIsNeitherThisResetSStarting"));
 
     const expectedIndex =
       reset.mode === "soft" ? reset.indexTree : await this.commitTree(record.root, reset.target);
@@ -381,8 +417,8 @@ export class HistoryReversalService {
 
     throw invalid(
       reset.mode === "soft"
-        ? t("main.historyReversalService.theIndexOrWorkingFilesDoNotMatchMessage")
-        : t("main.historyReversalService.theIndexOrWorkingFilesDoNotMatch"),
+        ? errorText("main.historyReversalService.theIndexOrWorkingFilesDoNotMatchMessage")
+        : errorText("main.historyReversalService.theIndexOrWorkingFilesDoNotMatch"),
     );
   }
 
@@ -449,7 +485,7 @@ export class HistoryReversalService {
     const { records } = this.records(repositoryId);
 
     if (!records.some((record) => record.id === id))
-      throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+      throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -458,7 +494,7 @@ export class HistoryReversalService {
         const current = this.journal.historyActions(root).find((record) => record.id === id);
 
         if (!current || current.profileId !== identity.id || current.repositoryId !== repositoryId)
-          throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+          throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
         const inspection = await this.inspectInterruptedReset(current);
         const publishedCommits = Math.max(
@@ -468,7 +504,9 @@ export class HistoryReversalService {
 
         if (expectedPublishedCommits !== undefined && publishedCommits !== expectedPublishedCommits)
           throw invalid(
-            t("main.historyReversalService.remoteTrackingHistoryChangedAfterReviewRefreshUndo"),
+            errorText(
+              "main.historyReversalService.remoteTrackingHistoryChangedAfterReviewRefreshUndo",
+            ),
           );
 
         current.publishedCommits = publishedCommits;
@@ -503,7 +541,9 @@ export class HistoryReversalService {
           outcome = "reset";
 
           if ((await this.inspectInterruptedReset(current)) !== "record")
-            throw invalid(t("main.historyReversalService.theResumedResetDidNotReachItsRecorded"));
+            throw invalid(
+              errorText("main.historyReversalService.theResumedResetDidNotReachItsRecorded"),
+            );
         }
 
         await this.finalizeInterruptedReset(current);
@@ -521,7 +561,7 @@ export class HistoryReversalService {
 
       if (!["undoing", "redoing"].includes(operation.state))
         throw invalid(
-          t("main.historyReversalService.thisActionHasNoInterruptedReversalToReconcile"),
+          errorText("main.historyReversalService.thisActionHasNoInterruptedReversalToReconcile"),
         );
 
       const states =
@@ -541,14 +581,18 @@ export class HistoryReversalService {
       }
 
       throw invalid(
-        t("main.historyReversalService.theInterruptedReferenceReversalIsPartialOrExternally"),
+        errorText(
+          "main.historyReversalService.theInterruptedReferenceReversalIsPartialOrExternally",
+        ),
       );
     }
 
     const reversal = record.refChange?.reversal;
 
     if (!reversal || !["undoing", "redoing"].includes(reversal.state))
-      throw invalid(t("main.historyReversalService.thisActionHasNoInterruptedReversalToReconcile"));
+      throw invalid(
+        errorText("main.historyReversalService.thisActionHasNoInterruptedReversalToReconcile"),
+      );
 
     const states =
       reversal.state === "undoing"
@@ -571,7 +615,7 @@ export class HistoryReversalService {
     }
 
     throw invalid(
-      t("main.historyReversalService.theInterruptedReversalIsPartialExternallyChangedOr"),
+      errorText("main.historyReversalService.theInterruptedReversalIsPartialExternallyChangedOr"),
     );
   }
 
@@ -579,13 +623,15 @@ export class HistoryReversalService {
     const reset = record.refChange;
 
     if (!reset)
-      throw invalid(t("main.historyReversalService.thisActionHasNoResetStyleRecoveryRecord"));
+      throw invalid(
+        errorText("main.historyReversalService.thisActionHasNoResetStyleRecoveryRecord"),
+      );
 
     const recorded = reset.beforeFingerprint;
 
     if (!recorded)
       throw invalid(
-        t("main.historyReversalService.theOriginalRepositoryFingerprintWasNotRecordedUse"),
+        errorText("main.historyReversalService.theOriginalRepositoryFingerprintWasNotRecordedUse"),
       );
 
     return recorded;
@@ -595,7 +641,7 @@ export class HistoryReversalService {
     const { records } = this.records(repositoryId);
 
     if (!records.some((record) => record.id === id))
-      throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+      throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -604,9 +650,11 @@ export class HistoryReversalService {
         const current = this.findRecord(root, id);
 
         if (!current || current.profileId !== identity.id || current.repositoryId !== repositoryId)
-          throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+          throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
         if (await this.workflows.observe(root, await this.git.status(root)))
-          throw invalid(t("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"));
+          throw invalid(
+            errorText("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"),
+          );
 
         const candidate =
           phase === "original"
@@ -623,7 +671,7 @@ export class HistoryReversalService {
     const { records } = this.records(repositoryId);
 
     if (!records.some((record) => record.id === id))
-      throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+      throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -632,9 +680,11 @@ export class HistoryReversalService {
         const current = this.findRecord(root, id);
 
         if (!current || current.profileId !== identity.id || current.repositoryId !== repositoryId)
-          throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+          throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
         if (await this.workflows.observe(root, await this.git.status(root)))
-          throw invalid(t("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"));
+          throw invalid(
+            errorText("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"),
+          );
 
         await validateUnstartedRefIntent(this.git, current);
         await releaseReferenceObjects(this.git, current);
@@ -647,7 +697,7 @@ export class HistoryReversalService {
     const { records } = this.records(repositoryId);
 
     if (!records.some((record) => record.id === id))
-      throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+      throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -656,14 +706,16 @@ export class HistoryReversalService {
         const current = this.findRecord(root, id);
 
         if (!current || current.profileId !== identity.id || current.repositoryId !== repositoryId)
-          throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+          throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
         const candidate = await this.reconciledRecord(current);
         const state = candidate.refOperation?.state ?? candidate.refChange?.reversal?.state;
 
         if (state !== expectedState)
           throw invalid(
-            t("main.historyReversalService.theRecoveryStateChangedAfterReviewRefreshUndoRedo"),
+            errorText(
+              "main.historyReversalService.theRecoveryStateChangedAfterReviewRefreshUndoRedo",
+            ),
           );
 
         candidate.updatedAt = new Date().toISOString();
@@ -683,7 +735,7 @@ export class HistoryReversalService {
       !["undoing", "redoing"].includes(reversal.state)
     )
       throw invalid(
-        t(
+        errorText(
           "main.historyReversalService.onlyAnInterruptedMixedOrHardResetReversalCanResumeRestoration",
         ),
       );
@@ -727,7 +779,9 @@ export class HistoryReversalService {
         )
       )
         throw invalid(
-          t("main.historyReversalService.requiredWorkingContentSnapshotsAreMissingOrChanged"),
+          errorText(
+            "main.historyReversalService.requiredWorkingContentSnapshotsAreMissingOrChanged",
+          ),
         );
 
       const target = undo ? original : redo;
@@ -779,14 +833,14 @@ export class HistoryReversalService {
         return { candidate, targetTree, targetFlags, atTarget: tree === targetTree, files };
     }
 
-    throw invalid(t("main.historyReversalService.theIndexHasNewerStagedChangesOrFlags"));
+    throw invalid(errorText("main.historyReversalService.theIndexHasNewerStagedChangesOrFlags"));
   }
 
   resumeIndex(repositoryId: string, id: string, expectedDirection?: HistoryDirection) {
     const { records } = this.records(repositoryId);
 
     if (!records.some((record) => record.id === id))
-      throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+      throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -800,14 +854,16 @@ export class HistoryReversalService {
             current.profileId !== identity.id ||
             current.repositoryId !== repositoryId
           )
-            throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+            throw invalid(
+              errorText("main.historyReversalService.thisActionBelongsToAnotherContext"),
+            );
 
           const { candidate, targetTree, targetFlags, atTarget, files } =
             await this.pendingIndex(current);
 
           if (expectedDirection && current.refChange!.reversal!.state !== `${expectedDirection}ing`)
             throw invalid(
-              t(
+              errorText(
                 "main.historyReversalService.theInterruptedReversalChangedAfterReviewRefreshUndoRedo",
               ),
             );
@@ -832,7 +888,7 @@ export class HistoryReversalService {
             (status.branch.detached ? undefined : status.branch.head) !== candidate.branch
           )
             throw invalid(
-              t("main.historyReversalService.headChangedDuringIndexRecoveryTheInterrupted"),
+              errorText("main.historyReversalService.headChangedDuringIndexRecoveryTheInterrupted"),
             );
 
           const fingerprint = await workflowFingerprint(this.git, root, status);
@@ -864,7 +920,9 @@ export class HistoryReversalService {
 
           if (flags !== targetFlags || index.exitCode !== 0)
             throw invalid(
-              t("main.historyReversalService.theIndexChangedDuringRecoveryTheInterruptedRecord"),
+              errorText(
+                "main.historyReversalService.theIndexChangedDuringRecoveryTheInterruptedRecord",
+              ),
             );
 
           const preservedNewerWork = fingerprint !== reversal.expectedFingerprint;
@@ -886,7 +944,7 @@ export class HistoryReversalService {
     const { records } = this.records(repositoryId);
 
     if (!records.some((record) => record.id === id))
-      throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+      throw invalid(errorText("main.historyReversalService.thisActionBelongsToAnotherContext"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -900,17 +958,19 @@ export class HistoryReversalService {
             current.profileId !== identity.id ||
             current.repositoryId !== repositoryId
           )
-            throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+            throw invalid(
+              errorText("main.historyReversalService.thisActionBelongsToAnotherContext"),
+            );
 
           if (current.refOperation?.state !== `${direction}ing`)
             throw invalid(
-              t(
+              errorText(
                 "main.historyReversalService.theInterruptedDirectionChangedAfterReviewRefreshUndoRedo",
               ),
             );
           if (await this.workflows.observe(root, await this.git.status(root)))
             throw invalid(
-              t("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"),
+              errorText("main.historyReversalService.finishOrAbortTheCurrentGitOperationFirst"),
             );
 
           const candidate = await finishRefConfiguration(this.git, current);
@@ -960,16 +1020,16 @@ export class HistoryReversalService {
           const actual = await validateRefHistory(this.git, record);
           if (actual !== direction)
             throw invalid(
-              t(
+              errorText(
                 "main.historyReversalService.theReferenceStateChangedAfterThisActionRefreshUndoRedo",
               ),
             );
         } catch (error) {
           item.available = false;
-          item.reason =
-            error instanceof Error
-              ? error.message
-              : t("main.historyReversalService.referenceStateCouldNotBeInspected");
+          item.reason = errorMessage(
+            error,
+            errorText("main.historyReversalService.referenceStateCouldNotBeInspected"),
+          );
 
           if (record.state !== "completed" || ["undoing", "redoing"].includes(operation.state)) {
             try {
@@ -995,10 +1055,10 @@ export class HistoryReversalService {
                 item.resumeConfiguration = true;
               } catch {}
 
-              item.reason =
-                failure instanceof Error
-                  ? failure.message
-                  : t("main.historyReversalService.referenceRecoveryIsIncomplete");
+              item.reason = errorMessage(
+                failure,
+                errorText("main.historyReversalService.referenceRecoveryIsIncomplete"),
+              );
             }
           }
         }
@@ -1039,10 +1099,10 @@ export class HistoryReversalService {
               ? t("main.historyReversalService.gitDidNotReachTheReviewedResetTarget")
               : t("main.historyReversalService.gitAlreadyReachedTheReviewedResetTargetResume");
         } catch (error) {
-          item.reason =
-            error instanceof Error
-              ? error.message
-              : t("main.historyReversalService.interruptedResetStateCouldNotBeInspected");
+          item.reason = errorMessage(
+            error,
+            errorText("main.historyReversalService.interruptedResetStateCouldNotBeInspected"),
+          );
         }
 
         results.push(item);
@@ -1094,10 +1154,10 @@ export class HistoryReversalService {
         );
       } catch (error) {
         item.available = false;
-        item.reason =
-          error instanceof Error
-            ? error.message
-            : t("main.historyReversalService.recoveryStateCouldNotBeInspected");
+        item.reason = errorMessage(
+          error,
+          errorText("main.historyReversalService.recoveryStateCouldNotBeInspected"),
+        );
 
         if (["undoing", "redoing"].includes(reset.reversal?.state ?? "")) {
           try {
@@ -1109,7 +1169,10 @@ export class HistoryReversalService {
                 await this.pendingIndex(record);
                 item.resumeIndex = true;
               } catch (failure) {
-                item.reason = failure instanceof Error ? failure.message : item.reason;
+                item.reason = errorMessage(
+                  failure,
+                  errorText("errors.operationBlocked", { reason: item.reason }),
+                );
               }
             }
           }
@@ -1140,7 +1203,9 @@ export class HistoryReversalService {
 
     if (!record)
       throw invalid(
-        t("main.historyReversalService.thisActionIsNoLongerAvailableInTheCurrentProfileWorktree"),
+        errorText(
+          "main.historyReversalService.thisActionIsNoLongerAvailableInTheCurrentProfileWorktree",
+        ),
       );
 
     return this.writer.remoteOperation(
@@ -1155,13 +1220,15 @@ export class HistoryReversalService {
             current.profileId !== identity.id ||
             current.repositoryId !== repositoryId
           )
-            throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+            throw invalid(
+              errorText("main.historyReversalService.thisActionBelongsToAnotherContext"),
+            );
 
           const actual = await validateRefHistory(this.git, current);
 
           if (actual !== direction)
             throw invalid(
-              t("main.historyReversalService.thisActionChangedAfterReviewRefreshUndoRedo"),
+              errorText("main.historyReversalService.thisActionChangedAfterReviewRefreshUndoRedo"),
             );
 
           current.refOperation.state = direction === "undo" ? "undoing" : "redoing";
@@ -1183,13 +1250,15 @@ export class HistoryReversalService {
           const current = this.journal.historyActions(root).find((item) => item.id === id);
 
           if (!current || current.profileId !== identity.id)
-            throw invalid(t("main.historyReversalService.thisActionBelongsToAnotherContext"));
+            throw invalid(
+              errorText("main.historyReversalService.thisActionBelongsToAnotherContext"),
+            );
 
           const { undo, expectedHead, expectedRefs, snapshot } = await this.validate(current);
 
           if ((undo ? "undo" : "redo") !== direction)
             throw invalid(
-              t("main.historyReversalService.thisActionChangedAfterReviewRefreshUndoRedo"),
+              errorText("main.historyReversalService.thisActionChangedAfterReviewRefreshUndoRedo"),
             );
 
           const reset = current.refChange!;
@@ -1202,7 +1271,7 @@ export class HistoryReversalService {
             publishedCommits !== expectedPublishedCommits
           )
             throw invalid(
-              t(
+              errorText(
                 "main.historyReversalService.remoteTrackingHistoryChangedAfterReviewRefreshUndoRedo",
               ),
             );
@@ -1288,7 +1357,9 @@ export class HistoryReversalService {
               fingerprint !== expectedFingerprint ||
               flags !== (undo ? reversal.beforeFlags : reversal.afterFlags)
             )
-              throw invalid(t("main.historyReversalService.theReversalDidNotFinishInTheRecorded"));
+              throw invalid(
+                errorText("main.historyReversalService.theReversalDidNotFinishInTheRecorded"),
+              );
 
             reversal.expectedFingerprint = fingerprint;
             reversal.state = undo ? "undone" : "applied";

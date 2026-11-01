@@ -1,33 +1,35 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { copyText } from "../../utils/clipboard";
-import { ErrorDialog } from "../../components/ui/index";
+import {
+  Cherry,
+  Copy,
+  GitBranch,
+  GitCommitHorizontal,
+  GitMerge,
+  Link,
+  RotateCcw,
+  Tag,
+  Undo2,
+} from "lucide-react";
+import { useState } from "react";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
   repositoryCommandReason,
 } from "../../commands/repository-commands";
-import { useState } from "react";
 import {
-  Copy,
-  GitBranch,
-  GitMerge,
-  RotateCcw,
-  Cherry,
-  Undo2,
-  Link,
-  Tag,
-  GitCommitHorizontal,
-} from "lucide-react";
-import { useAppStore } from "../../stores/app-store";
-import { useRepositoryStore } from "../../stores/repository-store";
-import {
-  Input,
+  Button,
   Checkbox,
-  Textarea,
+  ErrorDialog,
+  Input,
   MenuItem,
   PopoverSurface,
-  Button,
+  Textarea,
 } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { copyText } from "../../utils/clipboard";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { ReplayDialog } from "../workflows/ReplayDialog";
 import { ResetDialog } from "../workflows/ResetDialog";
@@ -79,7 +81,7 @@ export function CommitMenu({
   if (mode === "merge")
     return <MergeStartDialog repositoryId={repositoryId} source={target.oid} onClose={onClose} />;
 
-  const run = async (work: () => Promise<{ ok: boolean; error?: { message: string } }>) => {
+  const run = async (work: () => Promise<Result<unknown>>) => {
     if (commandUnavailable) {
       setError(commandUnavailable);
       return;
@@ -92,7 +94,7 @@ export function CommitMenu({
       const result = await work();
 
       if (!result.ok) {
-        setError(result.error?.message ?? t("commitMenu.thatDidNotWork"));
+        setError(errorMessage(result.error, errorText("commitMenu.thatDidNotWork")));
         return;
       }
 
@@ -160,7 +162,7 @@ export function CommitMenu({
                 target.oid,
               );
 
-              if (!result.ok) setError(result.error.message);
+              if (!result.ok) setError(errorMessage(result.error));
               else if (!result.value)
                 setError(t("commitMenu.noSupportedBrowserUrlIsAvailableForTheDefaultRemote"));
               else

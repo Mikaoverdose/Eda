@@ -1,11 +1,12 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { RepositoryStatus } from "@shared/repository/repository-read";
+import { conflictSides } from "@shared/workflows/conflict-sides";
+import type { WorkflowKind, WorkflowState } from "@shared/workflows/workflow";
 import { createHash } from "node:crypto";
 import { open, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { GitError } from "@shared/errors";
-import type { RepositoryStatus } from "@shared/repository/repository-read";
-import type { WorkflowKind, WorkflowState } from "@shared/workflows/workflow";
-import { conflictSides } from "@shared/workflows/conflict-sides";
 import type { GitService } from "../git-service";
 
 const files = [
@@ -52,7 +53,9 @@ async function readMarker(path: string): Promise<{ text: string; instance: strin
       throw new GitError({
         kind: "output-too-large",
         operation: t("operations.inspectWorkflow"),
-        message: t("main.git.workflowState.gitOperationMetadataExceedsTheInspectionLimitInspect"),
+        message: errorText(
+          "main.git.workflowState.gitOperationMetadataExceedsTheInspectionLimitInspect",
+        ),
       });
 
     const entry = await handle.stat({ bigint: true });

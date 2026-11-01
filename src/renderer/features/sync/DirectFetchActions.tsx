@@ -1,18 +1,19 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useRef, useState } from "react";
 import { ChevronDown, RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
+import { openSettings } from "../../commands/open-settings";
 import {
   Button,
+  Dialog,
+  ErrorDialog,
+  Field,
+  Input,
   MenuItem,
   PopoverSurface,
-  Dialog,
-  Input,
-  Field,
-  ErrorDialog,
 } from "../../components/ui/index";
-import { useDirectFetch } from "./hooks/useDirectFetch";
-import { openSettings } from "../../commands/open-settings";
 import { GitHubSignInDialog } from "../connections/GitHubSignInDialog";
+import { useDirectFetch } from "./hooks/useDirectFetch";
 
 export function DirectFetchActions({
   repositoryId,
@@ -73,7 +74,7 @@ export function DirectFetchActions({
             if (!menu)
               void window.eda.remotes.inspect(repositoryId).then((result) => {
                 if (result.ok) action.setRemotes(result.value.remotes);
-                else action.setError(result.error.message);
+                else action.setError(errorMessage(result.error));
               });
           }}
         />

@@ -1,24 +1,25 @@
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
 import {
   RECOVERY_PAGE_SIZE,
   type RecoveryInspection,
   type RecoveryPage,
   type RecoverySource,
 } from "@shared/workflows/history-recovery";
-import { t } from "@shared/i18n";
-import { formatDateTime } from "../../utils/format";
 import { useEffect, useState } from "react";
+import { formatDateTime } from "../../utils/format";
 
-import { useRepositoryStore } from "../../stores/repository-store";
-import { boundDiff } from "../../repository/diff-model";
 import {
   Button,
+  Checkbox,
   Dialog,
+  ErrorDialog,
   Field,
   Input,
-  Checkbox,
-  ErrorDialog,
   ListItemButton,
 } from "../../components/ui/index";
+import { boundDiff } from "../../repository/diff-model";
+import { useRepositoryStore } from "../../stores/repository-store";
 import { DiffContent } from "../diff/DiffContent";
 
 export function HistoryRecoveryDialog({
@@ -52,7 +53,7 @@ export function HistoryRecoveryDialog({
     try {
       const result = await window.eda.historyRecovery.list(repositoryId, nextSource, nextOffset);
       if (result.ok) setPage(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } finally {
       setBusy(false);
     }
@@ -73,7 +74,7 @@ export function HistoryRecoveryDialog({
     try {
       const result = await window.eda.historyRecovery.inspect(repositoryId, commit);
       if (result.ok) setInspection({ ...result.value, diff: boundDiff(result.value.diff) });
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } finally {
       setBusy(false);
     }
@@ -98,7 +99,7 @@ export function HistoryRecoveryDialog({
         setConfirmed(false);
         if (useRepositoryStore.getState().repositoryId === repositoryId)
           await useRepositoryStore.getState().syncFromDisk();
-      } else setError(result.error.message);
+      } else setError(errorMessage(result.error));
     } finally {
       setBusy(false);
     }

@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
@@ -172,11 +173,13 @@ it("rechecks on focus, clears after an external repair, and opens the settings a
 it("keeps a failed repair actionable and requires verified readback before clearing", async () => {
   drift();
   apply.mockResolvedValueOnce(
-    err({
-      kind: "config-write-refused",
-      operation: "apply",
-      message: "Git configuration is read-only.",
-    }),
+    err(
+      errorFixture({
+        kind: "config-write-refused",
+        operation: "apply",
+        message: "Git configuration is read-only.",
+      }),
+    ),
   );
   await render();
   await openDetails();

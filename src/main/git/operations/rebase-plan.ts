@@ -1,11 +1,12 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { RebasePlanEntry } from "@shared/workflows/rebase";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import { GitError } from "@shared/errors";
-import type { RebasePlanEntry } from "@shared/workflows/rebase";
 import type { GitService } from "../git-service";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.interactiveRebase"), message });
 
 export async function readRebasePlan(git: GitService, root: string, onto: string) {
@@ -27,25 +28,32 @@ export async function readRebasePlan(git: GitService, root: string, onto: string
 
   if (fields.at(-1) === "") fields.pop();
   if (fields.length % 2 || fields.length > 400)
-    throw invalid(t("main.git.rebasePlan.chooseARangeOfAtMost200CommitsForInteractiveRebase"));
+    throw invalid(
+      errorText("main.git.rebasePlan.chooseARangeOfAtMost200CommitsForInteractiveRebase"),
+    );
 
   const entries: RebasePlanEntry[] = [];
 
   for (let index = 0; index < fields.length; index += 2) {
     const oid = fields[index]!;
     if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid))
-      throw invalid(t("main.git.rebasePlan.gitReturnedAnInvalidRebasePlanRefreshAndReviewAgain"));
+      throw invalid(
+        errorText("main.git.rebasePlan.gitReturnedAnInvalidRebasePlanRefreshAndReviewAgain"),
+      );
     entries.push({ oid, action: "pick", message: fields[index + 1]!.trimEnd() });
   }
 
-  if (!entries.length) throw invalid(t("main.git.rebasePlan.thereAreNoCommitsToEditAboveThisBase"));
+  if (!entries.length)
+    throw invalid(errorText("main.git.rebasePlan.thereAreNoCommitsToEditAboveThisBase"));
 
   return entries;
 }
 
 export function validateRebasePlan(value: unknown, original: RebasePlanEntry[]): RebasePlanEntry[] {
   if (!Array.isArray(value) || value.length !== original.length)
-    throw invalid(t("main.git.rebasePlan.keepEveryReviewedCommitInThePlanChooseDropToRemoveOne"));
+    throw invalid(
+      errorText("main.git.rebasePlan.keepEveryReviewedCommitInThePlanChooseDropToRemoveOne"),
+    );
 
   const remaining = new Set(original.map((entry) => entry.oid));
   let kept = false;
@@ -64,13 +72,19 @@ export function validateRebasePlan(value: unknown, original: RebasePlanEntry[]):
       Buffer.byteLength(entry.message) > 64 * 1024
     )
       throw invalid(
-        t("main.git.rebasePlan.chooseAValidActionAndMessageForEachReviewedCommitExactlyOnce"),
+        errorText(
+          "main.git.rebasePlan.chooseAValidActionAndMessageForEachReviewedCommitExactlyOnce",
+        ),
       );
 
     if (["reword", "squash", "fixup-reword"].includes(entry.action) && !entry.message.trim())
-      throw invalid(t("main.git.rebasePlan.enterANonemptyMessageForRewordedOrSquashedCommits"));
+      throw invalid(
+        errorText("main.git.rebasePlan.enterANonemptyMessageForRewordedOrSquashedCommits"),
+      );
     if (["squash", "fixup", "fixup-reword"].includes(entry.action) && !kept)
-      throw invalid(t("main.git.rebasePlan.squashOrFixupNeedsAPrecedingRetainedCommitInThePlan"));
+      throw invalid(
+        errorText("main.git.rebasePlan.squashOrFixupNeedsAPrecedingRetainedCommitInThePlan"),
+      );
     if (entry.action !== "drop") kept = true;
 
     plan.push({ oid: entry.oid, action: entry.action, message: entry.message });
@@ -85,7 +99,7 @@ const quote = (value: string) =>
 
 async function planDirectory(git: GitService, root: string, id: string) {
   if (!/^[a-f0-9-]{36}$/.test(id))
-    throw invalid(t("main.git.rebasePlan.invalidRebaseOperationIdentifier"));
+    throw invalid(errorText("main.git.rebasePlan.invalidRebaseOperationIdentifier"));
 
   const directory = (
     await git.exec(["rev-parse", "--path-format=absolute", "--git-path", `eda-rebase-${id}`], {
@@ -95,7 +109,7 @@ async function planDirectory(git: GitService, root: string, id: string) {
   ).stdout.trim();
 
   if (!isAbsolute(directory) || basename(resolve(directory)) !== `eda-rebase-${id}`)
-    throw invalid(t("main.git.rebasePlan.gitReturnedAnInvalidRebaseMetadataDirectory"));
+    throw invalid(errorText("main.git.rebasePlan.gitReturnedAnInvalidRebaseMetadataDirectory"));
 
   return directory;
 }

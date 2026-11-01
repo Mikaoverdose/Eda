@@ -1,20 +1,21 @@
-import { t } from "@shared/i18n";
-import { constants } from "node:fs";
-import { lstat, open, realpath, stat } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type {
   ImagePreview,
   ImagePreviewRequest,
   ImagePreviewVersion,
 } from "@shared/repository/image-preview";
+import { constants } from "node:fs";
+import { lstat, open, realpath, stat } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { GitService } from "../../git/git-service";
 import { assertFullObjectId, assertRepositoryPath } from "../../git/validation";
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const operation = t("operations.previewRepositoryImage");
 const readEnv = { overrides: { GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" } };
-const invalid = (message: string) => new GitError({ kind: "invalid-input", operation, message });
+const invalid = (message: ErrorText) => new GitError({ kind: "invalid-input", operation, message });
 const unavailable = (path: string, reason: string, bytes?: number): ImagePreviewVersion => ({
   kind: "unavailable",
   path,
@@ -28,7 +29,7 @@ const tooLarge = (path: string, bytes?: number) =>
 function validatePath(path: string): void {
   assertRepositoryPath(path, operation);
   if (path.split(/[\\/]/).some((part) => part.toLowerCase() === ".git"))
-    throw invalid(t("main.imagePreview.selectAnImageOutsideGitSInternalMetadata"));
+    throw invalid(errorText("main.imagePreview.selectAnImageOutsideGitSInternalMetadata"));
 }
 
 function image(path: string, bytes: Buffer): ImagePreviewVersion {
@@ -77,7 +78,7 @@ async function workingImage(root: string, path: string): Promise<ImagePreviewVer
   const local = relative(canonicalRoot, target);
 
   if (!local || isAbsolute(local) || local === ".." || local.startsWith(`..${sep}`))
-    throw invalid(t("main.imagePreview.selectAnImageInsideThisRepository"));
+    throw invalid(errorText("main.imagePreview.selectAnImageInsideThisRepository"));
 
   try {
     let parent = canonicalRoot;
@@ -116,7 +117,7 @@ async function workingImage(root: string, path: string): Promise<ImagePreviewVer
         info.ino !== current.ino
       )
         throw invalid(
-          t("main.imagePreview.theImagePathChangedWhileItWasBeingOpenedRefreshAndTryAgain"),
+          errorText("main.imagePreview.theImagePathChangedWhileItWasBeingOpenedRefreshAndTryAgain"),
         );
 
       if (info.size > MAX_IMAGE_BYTES) return tooLarge(path, info.size);
@@ -189,7 +190,7 @@ async function gitImage(
   const count = Number(size.stdout.trim());
 
   if (!Number.isSafeInteger(count) || count < 0)
-    throw invalid(t("main.imagePreview.gitReturnedAnInvalidImageSize"));
+    throw invalid(errorText("main.imagePreview.gitReturnedAnInvalidImageSize"));
   if (count > MAX_IMAGE_BYTES) return tooLarge(path, count);
 
   try {

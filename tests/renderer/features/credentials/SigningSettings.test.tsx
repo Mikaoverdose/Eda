@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { err, ok, type Result } from "@shared/errors";
@@ -47,11 +48,13 @@ const picker = () => container.querySelectorAll('[role="combobox"]')[1]!;
 
 it("keeps the selected key after a failed save and only persists an explicit choice for its profile", async () => {
   const configureSigning = vi.fn().mockResolvedValue(
-    err({
-      kind: "config-write-refused",
-      operation: "configure signing",
-      message: "Could not update Git configuration.",
-    }),
+    err(
+      errorFixture({
+        kind: "config-write-refused",
+        operation: "configure signing",
+        message: "Could not update Git configuration.",
+      }),
+    ),
   );
 
   vi.stubGlobal("eda", {

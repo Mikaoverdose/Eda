@@ -1,21 +1,7 @@
-import { t } from "@shared/i18n";
-import type { UpdateInfo } from "electron-updater";
 import type { UpdateRelease } from "@shared/updates";
+import type { UpdateInfo } from "electron-updater";
 
-export function releaseFromManifest(info: UpdateInfo, feedUrl: string): UpdateRelease {
-  if (!info.files?.length || info.files.length > 8)
-    throw new Error(t("main.updateManifest.invalidUpdateFiles"));
-  for (const file of info.files) {
-    const url = new URL(file.url, feedUrl);
-    if (
-      url.protocol !== "https:" ||
-      url.origin !== new URL(feedUrl).origin ||
-      url.username ||
-      url.password ||
-      !/^[A-Za-z0-9+/]{86}==$/.test(file.sha512)
-    )
-      throw new Error(t("main.updateManifest.invalidUpdateArtifact"));
-  }
+export function releaseFromManifest(info: UpdateInfo): UpdateRelease {
   const notes =
     typeof info.releaseNotes === "string"
       ? info.releaseNotes

@@ -1,6 +1,7 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
 import type { RemoteSummary, TransportCredentials } from "@shared/integrations/remotes";
+import { useEffect, useRef, useState } from "react";
 import { ACTION_FEEDBACK } from "../../../motion";
 import { useAppStore } from "../../../stores/app-store";
 import { useRepositoryStore } from "../../../stores/repository-store";
@@ -49,15 +50,15 @@ export function useDirectFetch(repositoryId: string) {
       ]);
       if (!current()) return;
       if (!inspected.ok) {
-        setError(inspected.error.message);
+        setError(errorMessage(inspected.error));
         return;
       }
       if (!prune.ok) {
-        setError(prune.error.message);
+        setError(errorMessage(prune.error));
         return;
       }
       if (!tags.ok) {
-        setError(tags.error.message);
+        setError(errorMessage(tags.error));
         return;
       }
       setRemotes(inspected.value.remotes);
@@ -90,7 +91,7 @@ export function useDirectFetch(repositoryId: string) {
         });
         if (!current()) return;
         if (!result.ok) {
-          setError(result.error.message);
+          setError(errorMessage(result.error));
           if (
             result.error.kind === "github-auth-required" ||
             result.error.kind === "github-access-required"

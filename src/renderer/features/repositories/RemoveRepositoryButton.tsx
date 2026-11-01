@@ -1,10 +1,11 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
-import { X } from "lucide-react";
 import type { RepositorySummary } from "@shared/repository/repository";
+import { X } from "lucide-react";
+import { useState } from "react";
+import { Button, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionStore } from "../../stores/session-store";
-import { Button, Dialog, ErrorDialog } from "../../components/ui/index";
 
 export function RemoveRepositoryButton({
   repository,
@@ -38,14 +39,14 @@ export function RemoveRepositoryButton({
       const result = await window.eda.repository.remove(repository.id);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
       await useAppStore.getState().refreshRepositories();
       setConfirm(false);
     } catch (failure) {
-      setError(String(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }

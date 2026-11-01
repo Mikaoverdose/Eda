@@ -1,6 +1,7 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
 import type { UpdateState } from "@shared/updates";
+import { useEffect, useState } from "react";
 
 export function useUpdates() {
   const [state, setState] = useState<UpdateState | null>(null);
@@ -16,7 +17,7 @@ export function useUpdates() {
       .state()
       .then((result) => {
         if (result.ok) accept(result.value);
-        else if (alive) setError(result.error.message);
+        else if (alive) setError(errorMessage(result.error));
       })
       .catch(() => {
         if (alive) setError(t("settings.useUpdates.couldNotReadUpdateStatus"));

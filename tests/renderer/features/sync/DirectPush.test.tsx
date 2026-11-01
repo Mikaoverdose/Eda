@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
@@ -70,7 +71,9 @@ it.each(["preview", "push"])(
   "shows an inline X for %s failure and opens details on click",
   async (stage) => {
     (stage === "preview" ? preparePush : push).mockResolvedValueOnce(
-      err({ kind: "network-failed", operation: "push", message: "Network unavailable" }),
+      err(
+        errorFixture({ kind: "network-failed", operation: "push", message: "Network unavailable" }),
+      ),
     );
     await act(async () => button().click());
     await finish();

@@ -1,10 +1,12 @@
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { SshAgentMode } from "@shared/identity/ssh";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildGitEnvironment } from "../execution/environment";
-import type { SshAgentMode } from "@shared/identity/ssh";
 
 export class SshAgent {
   readonly environment: Record<string, string>;
@@ -47,10 +49,7 @@ export class SshAgent {
 
       await new Promise<void>((resolve, reject) => {
         let output = "";
-        const timer = setTimeout(
-          () => reject(new Error(t("main.git.sshAgent.sshAgentStartupTimedOut"))),
-          5000,
-        );
+        const timer = setTimeout(() => reject(new AppError(ERROR_CODE.SSH_AGENT_TIMEOUT)), 5000);
         const ready = (chunk: Buffer) => {
           output += chunk.toString("utf8");
           const match = /(?:^|\n)SSH_AUTH_SOCK=([^;\r\n]+);/.exec(output);
@@ -62,13 +61,13 @@ export class SshAgent {
             resolve();
           } else if (output.length > 16_384) {
             clearTimeout(timer);
-            reject(new Error(t("main.git.sshAgent.unrecognizedSshAgentResponse")));
+            reject(new AppError(ERROR_CODE.INVALID_SSH_AGENT_RESPONSE));
           }
         };
         child.stdout?.on("data", ready);
         child.once("error", () => {
           clearTimeout(timer);
-          reject(new Error(t("main.git.sshAgent.couldNotStartSshAgent")));
+          reject(new AppError(ERROR_CODE.SSH_AGENT_START_FAILED));
         });
         child.once("close", () => {
           clearTimeout(timer);
@@ -79,7 +78,7 @@ export class SshAgent {
               "main.sshAgent.edaSBuiltInSshAgentStoppedRestartEdaToUnlockKeys",
             );
           process.off("exit", this.onProcessExit);
-          reject(new Error(t("main.git.sshAgent.sshAgentExitedBeforeItWasReady")));
+          reject(new AppError(ERROR_CODE.SSH_AGENT_EXITED));
         });
       });
     } catch {

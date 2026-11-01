@@ -1,3 +1,8 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import type { Identity } from "@shared/identity/identity";
+import type { GitConfigEntry } from "@shared/identity/profile-session";
 import {
   HISTORY_PAGE_SIZE,
   MAX_HISTORY_PAGE_SIZE,
@@ -6,26 +11,22 @@ import {
   type RepositoryStatus,
   type UnifiedDiff,
 } from "@shared/repository/repository-read";
-import { t } from "@shared/i18n";
 import { existsSync } from "node:fs";
 import type { OperationManager } from "../operations/operation-manager";
-import { GitError } from "@shared/errors";
-import type { Identity } from "@shared/identity/identity";
-import type { GitConfigEntry } from "@shared/identity/profile-session";
 
+import { boundDiff } from "@shared/repository/diff-limits";
 import type {
   BranchSummary,
   TagSummary,
   TagVerification,
 } from "@shared/repository/repository-write";
 import { buildGitEnvironment, type GitEnvironmentOptions } from "./execution/environment";
-import { parseUnifiedDiff } from "./parsers/diff-parser";
-import { boundDiff } from "@shared/repository/diff-limits";
 import { mapGitError } from "./execution/error-mapping";
 import type { GitEngine } from "./execution/git-engine";
-import { parseLog } from "./parsers/log-parser";
+import { ProcessSpawnError, type ProcessRunner } from "./execution/process-runner";
 import { readStashHistory } from "./operations/stash-history";
-import { type ProcessRunner, ProcessSpawnError } from "./execution/process-runner";
+import { parseUnifiedDiff } from "./parsers/diff-parser";
+import { parseLog } from "./parsers/log-parser";
 
 import { parseStatus } from "./parsers/status-parser";
 import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "./validation";
@@ -51,8 +52,8 @@ function literalPathspecs(paths: readonly string[] | undefined, operation: strin
     throw new GitError({
       kind: "invalid-input",
       operation,
-      message: t("main.git.gitService.tooManyFilePathsWereRequested"),
-      suggestedAction: t("main.git.gitService.select256FilesOrFewer"),
+      message: errorText("main.git.gitService.tooManyFilePathsWereRequested"),
+      suggestedAction: errorText("main.git.gitService.select256FilesOrFewer"),
     });
   }
 
@@ -67,8 +68,8 @@ function outputTooLarge(repositoryPath: string, operation: string): GitError {
     kind: "output-too-large",
     operation,
     repositoryPath,
-    message: t("main.git.gitService.gitProducedMoreDiffDataThanEdaCanSafelyDisplay"),
-    suggestedAction: t("main.git.gitService.selectFewerFilesAndTryAgain"),
+    message: errorText("main.git.gitService.gitProducedMoreDiffDataThanEdaCanSafelyDisplay"),
+    suggestedAction: errorText("main.git.gitService.selectFewerFilesAndTryAgain"),
   });
 }
 
@@ -85,8 +86,10 @@ function parseOutput<T>(
       kind: "repository-corrupt",
       operation,
       repositoryPath,
-      message: t("main.git.gitService.gitReturnedRepositoryDataEdaCouldNotUnderstand"),
-      suggestedAction: t("main.git.gitService.checkTheRepositoryWithGitAndReportThisIfItIsHealthy"),
+      message: errorText("main.git.gitService.gitReturnedRepositoryDataEdaCouldNotUnderstand"),
+      suggestedAction: errorText(
+        "main.git.gitService.checkTheRepositoryWithGitAndReportThisIfItIsHealthy",
+      ),
       ...(error instanceof Error && { rawStderr: error.message }),
     });
   }
@@ -161,8 +164,8 @@ export class GitService {
           throw new GitError({
             kind: "not-a-repository",
             operation: options.operation,
-            message: t("main.git.gitService.noLongerExists", { cwd: options.cwd }),
-            suggestedAction: t(
+            message: errorText("main.git.gitService.noLongerExists", { cwd: options.cwd }),
+            suggestedAction: errorText(
               "main.git.gitService.itMayHaveBeenMovedOrDeletedRemoveItFromEdaOrOpenADifferentFolder",
             ),
             repositoryPath: options.cwd,
@@ -172,8 +175,8 @@ export class GitService {
         throw new GitError({
           kind: "git-not-found",
           operation: options.operation,
-          message: t("main.git.gitService.edaCouldNotStartGit"),
-          suggestedAction: t(
+          message: errorText("main.git.gitService.edaCouldNotStartGit"),
+          suggestedAction: errorText(
             "main.git.gitService.theGitEngineIsConfiguredAsCheckThatItStillExistsInSettings",
             { path: this.engine.path },
           ),
@@ -191,10 +194,12 @@ export class GitService {
       throw new GitError({
         kind: "output-too-large",
         operation: options.operation,
-        message: t("main.git.gitService.gitProducedMoreDataThanEdaCanSafelyDisplay", {
+        message: errorText("main.git.gitService.gitProducedMoreDataThanEdaCanSafelyDisplay", {
           outputLimitExceeded: result.outputLimitExceeded,
         }),
-        suggestedAction: t("main.git.gitService.narrowTheRequestToFewerCommitsOrFilesAndTryAgain"),
+        suggestedAction: errorText(
+          "main.git.gitService.narrowTheRequestToFewerCommitsOrFilesAndTryAgain",
+        ),
         ...(options.cwd !== undefined && { repositoryPath: options.cwd }),
       });
     }
@@ -203,7 +208,7 @@ export class GitService {
       throw new GitError({
         kind: "cancelled",
         operation: options.operation,
-        message: t("main.git.gitService.theOperationWasCancelled", {
+        message: errorText("main.git.gitService.theOperationWasCancelled", {
           operation: options.operation,
         }),
         ...(options.cwd !== undefined && { repositoryPath: options.cwd }),
@@ -300,8 +305,10 @@ export class GitService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.readHistory"),
-        message: t("main.git.gitService.theHistoryPageIsOutsideTheSupportedRange"),
-        suggestedAction: t("main.git.gitService.request1To200CommitsFromANonNegativeOffset"),
+        message: errorText("main.git.gitService.theHistoryPageIsOutsideTheSupportedRange"),
+        suggestedAction: errorText(
+          "main.git.gitService.request1To200CommitsFromANonNegativeOffset",
+        ),
         repositoryPath: path,
       });
     }
@@ -395,8 +402,10 @@ export class GitService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.inspectCommit"),
-        message: t("main.git.gitService.theCommitIsNoLongerAvailable"),
-        suggestedAction: t("main.git.gitService.refreshReferencesAndSelectAnAvailableCommit"),
+        message: errorText("main.git.gitService.theCommitIsNoLongerAvailable"),
+        suggestedAction: errorText(
+          "main.git.gitService.refreshReferencesAndSelectAnAvailableCommit",
+        ),
       });
 
     return {
@@ -610,8 +619,8 @@ export class GitService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.commit"),
-        message: t("main.git.gitService.aCommitNeedsAMessage"),
-        suggestedAction: t("main.git.gitService.writeAShortSummaryOfTheChangeAndTryAgain"),
+        message: errorText("main.git.gitService.aCommitNeedsAMessage"),
+        suggestedAction: errorText("main.git.gitService.writeAShortSummaryOfTheChangeAndTryAgain"),
         repositoryPath: path,
       });
     }
@@ -753,7 +762,7 @@ export class GitService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.signTag"),
-        message: t("main.git.gitService.chooseSshOrGpgSigningInThisProfile"),
+        message: errorText("main.git.gitService.chooseSshOrGpgSigningInThisProfile"),
       });
 
     const target = options.target === undefined ? [] : [options.target];

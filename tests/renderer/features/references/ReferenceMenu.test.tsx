@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
@@ -203,7 +204,7 @@ it.each([
 
 it("retains the local branch if remote deletion fails", async () => {
   push.mockResolvedValue(
-    err({ kind: "network-failed", operation: "push", message: "Remote unavailable" }),
+    err(errorFixture({ kind: "network-failed", operation: "push", message: "Remote unavailable" })),
   );
   await render();
   await click("Delete branch...");
@@ -216,7 +217,13 @@ it("retains the local branch if remote deletion fails", async () => {
 
 it("reports partial completion and retries only the remaining local deletion, with force opt-in", async () => {
   deleteBranch.mockResolvedValueOnce(
-    err({ kind: "invalid-input", operation: "delete", message: "Branch is not fully merged" }),
+    err(
+      errorFixture({
+        kind: "invalid-input",
+        operation: "delete",
+        message: "Branch is not fully merged",
+      }),
+    ),
   );
   await render();
   await click("Delete branch...");
@@ -294,7 +301,9 @@ it("retains tag checkout, verification, and local deletion in the context menu",
 
 it("retries HTTPS remote deletion with supplied credentials without deleting locally", async () => {
   preparePush.mockResolvedValueOnce(
-    err({ kind: "auth-failed", operation: "delete", message: "Authentication failed" }),
+    err(
+      errorFixture({ kind: "auth-failed", operation: "delete", message: "Authentication failed" }),
+    ),
   );
   await render(remote);
   await click("Delete branch...");

@@ -1,10 +1,11 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
+import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { requireId, requireString } from "../validate";
 import { invalidRequest } from "../request-errors";
 import { broadcast, handle } from "../transport";
+import { requireId, requireString } from "../validate";
 
 export function registerWorkflowHandlers({
   workflows,
@@ -16,7 +17,9 @@ export function registerWorkflowHandlers({
 }: Services) {
   handle(IPC_CHANNELS.historyResumeBranchCheckout, async (_event, rawId, recordId, phase) => {
     if (phase !== "original" && phase !== "undo" && phase !== "redo")
-      throw invalidRequest(t("main.workflowHandlers.reviewTheInterruptedBranchActionFirst"));
+      throw invalidRequest(
+        errorText("main.workflowHandlers.reviewTheInterruptedBranchActionFirst"),
+      );
 
     const id = requireId(rawId);
 
@@ -35,7 +38,7 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.historyResumeConfiguration, async (_event, rawId, recordId, direction) => {
     if (direction !== "undo" && direction !== "redo")
-      throw invalidRequest(t("main.workflowHandlers.reviewTheInterruptedDirectionFirst"));
+      throw invalidRequest(errorText("main.workflowHandlers.reviewTheInterruptedDirectionFirst"));
 
     const id = requireId(rawId);
 
@@ -49,7 +52,7 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.historyResumeIndex, async (_event, rawId, recordId, direction) => {
     if (direction !== "undo" && direction !== "redo")
-      throw invalidRequest(t("main.workflowHandlers.reviewTheInterruptedDirectionFirst"));
+      throw invalidRequest(errorText("main.workflowHandlers.reviewTheInterruptedDirectionFirst"));
 
     const id = requireId(rawId);
 
@@ -66,7 +69,9 @@ export function registerWorkflowHandlers({
       !Number.isSafeInteger(publishedCommits) ||
       publishedCommits < 0
     )
-      throw invalidRequest(t("main.workflowHandlers.reviewPublishedHistoryBeforeResumingTheReset"));
+      throw invalidRequest(
+        errorText("main.workflowHandlers.reviewPublishedHistoryBeforeResumingTheReset"),
+      );
 
     const id = requireId(rawId);
 
@@ -79,7 +84,7 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.historyReconcile, async (_event, rawId, recordId, state) => {
     if (state !== "applied" && state !== "undone")
-      throw invalidRequest(t("main.workflowHandlers.reviewTheRecoveryStateFirst"));
+      throw invalidRequest(errorText("main.workflowHandlers.reviewTheRecoveryStateFirst"));
     const id = requireId(rawId);
     await historyReversal.reconcile(id, requireId(recordId), state);
     broadcast(IPC_EVENTS.repositoryChanged, id);
@@ -94,14 +99,16 @@ export function registerWorkflowHandlers({
     IPC_CHANNELS.historyReverse,
     async (_event, rawId, recordId, direction, publishedCommits) => {
       if (direction !== "undo" && direction !== "redo")
-        throw invalidRequest(t("main.workflowHandlers.chooseUndoOrRedo"));
+        throw invalidRequest(errorText("main.workflowHandlers.chooseUndoOrRedo"));
 
       if (
         typeof publishedCommits !== "number" ||
         !Number.isSafeInteger(publishedCommits) ||
         publishedCommits < 0
       )
-        throw invalidRequest(t("main.workflowHandlers.reviewThePublicationCountBeforeUndoOrRedo"));
+        throw invalidRequest(
+          errorText("main.workflowHandlers.reviewThePublicationCountBeforeUndoOrRedo"),
+        );
 
       const id = requireId(rawId);
 
@@ -121,10 +128,10 @@ export function registerWorkflowHandlers({
       source !== "unreachable" &&
       source !== "rewrites"
     )
-      throw invalidRequest(t("main.workflowHandlers.chooseARecoverySource"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseARecoverySource"));
 
     if (offset !== undefined && typeof offset !== "number")
-      throw invalidRequest(t("main.workflowHandlers.chooseARecoveryPage"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseARecoveryPage"));
 
     return ok(await historyRecovery.list(requireId(id), source, offset));
   });
@@ -153,7 +160,7 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.resetPrepare, async (_event, rawId, target, mode) => {
     if (mode !== "soft" && mode !== "mixed" && mode !== "hard")
-      throw invalidRequest(t("main.workflowHandlers.chooseAResetMode"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseAResetMode"));
     return ok(
       await reset.prepare(requireId(rawId), requireString(target, t("fields.resetTarget")), mode),
     );
@@ -173,16 +180,16 @@ export function registerWorkflowHandlers({
       (kind !== "cherry-pick" && kind !== "revert") ||
       (action !== "start" && action !== "continue" && action !== "skip" && action !== "abort")
     )
-      throw invalidRequest(t("main.workflowHandlers.chooseACherryPickOrRevertAction"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseACherryPickOrRevertAction"));
 
     if (
       commits !== undefined &&
       (!Array.isArray(commits) || commits.some((oid) => typeof oid !== "string"))
     )
-      throw invalidRequest(t("main.workflowHandlers.chooseCommitIDsInExecutionOrder"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseCommitIDsInExecutionOrder"));
 
     if (mainline !== undefined && typeof mainline !== "number")
-      throw invalidRequest(t("main.workflowHandlers.chooseAMainlineParentNumber"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseAMainlineParentNumber"));
 
     return ok(await replay.prepare(requireId(rawId), kind, action, commits, mainline));
   });
@@ -198,7 +205,7 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.rebasePrepare, async (_event, rawId, action, onto, interactive) => {
     if (interactive !== undefined && typeof interactive !== "boolean")
-      throw invalidRequest(t("main.workflowHandlers.chooseWhetherToEditTheRebasePlan"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseWhetherToEditTheRebasePlan"));
 
     if (
       action !== "start" &&
@@ -207,7 +214,7 @@ export function registerWorkflowHandlers({
       action !== "abort" &&
       action !== "amend"
     )
-      throw invalidRequest(t("main.workflowHandlers.chooseARebaseAction"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseARebaseAction"));
 
     return ok(
       await rebase.prepare(
@@ -244,7 +251,7 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.workflowPrepareStart, async (_event, id, source, mode) => {
     if (mode !== "ff" && mode !== "no-ff" && mode !== "ff-only" && mode !== "squash")
-      throw invalidRequest(t("main.workflowHandlers.chooseASupportedMergePolicy"));
+      throw invalidRequest(errorText("main.workflowHandlers.chooseASupportedMergePolicy"));
     return ok(
       await workflows.prepareStart(
         requireId(id),
@@ -290,7 +297,7 @@ export function registerWorkflowHandlers({
     const id = requireId(rawId);
 
     if (typeof message !== "string" || !message.trim() || message.length > 1024 * 1024)
-      throw invalidRequest(t("main.workflowHandlers.enterAMergeMessageWithinThe1MiBLimit"));
+      throw invalidRequest(errorText("main.workflowHandlers.enterAMergeMessageWithinThe1MiBLimit"));
 
     try {
       return ok(await workflows.continueMerge(repositoryId, id, message));

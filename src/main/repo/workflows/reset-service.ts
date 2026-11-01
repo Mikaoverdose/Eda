@@ -1,22 +1,23 @@
-import { t } from "@shared/i18n";
-import { createHash, randomUUID } from "node:crypto";
-import { publishedRangeCount } from "../history/shared-history";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
-import type { ResetMode, ResetResult, ResetReview } from "@shared/workflows/reset";
+import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
+import type { ResetMode, ResetResult, ResetReview } from "@shared/workflows/reset";
+import { createHash, randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import { assertFullObjectId } from "../../git/validation";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
-import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
-import type { RepositoryManager } from "../lifecycle/repository-manager";
-import type { RepositoryWriter } from "../working-tree/repository-writer";
-import type { WorkflowService } from "./workflow-service";
-import { workflowFingerprint } from "./workflow-fingerprint";
-import { repositoryCommonDirectory } from "../lifecycle/repository-location";
 import { pruneHistoryRecords } from "../history/history-retention";
+import { publishedRangeCount } from "../history/shared-history";
+import { repositoryCommonDirectory } from "../lifecycle/repository-location";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
+import { workflowFingerprint } from "./workflow-fingerprint";
+import type { WorkflowService } from "./workflow-service";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.reset"), message });
 
 export async function protectResetPaths(
@@ -36,7 +37,9 @@ export async function protectResetPaths(
   for (const row of targetFiles.stdout.split("\0").filter(Boolean)) {
     const match = /^(100644|100755) blob [a-f0-9]{40,64}\t([\s\S]+)$/.exec(row);
     if (!match)
-      throw invalid(t("main.resetService.hardResetRecoveryCurrentlySupportsRegularFilesResolve"));
+      throw invalid(
+        errorText("main.resetService.hardResetRecoveryCurrentlySupportsRegularFilesResolve"),
+      );
     targets.push(match[2]!);
   }
 
@@ -71,7 +74,7 @@ export async function protectResetPaths(
 
   if (blocked.length)
     throw invalid(
-      t("main.resetService.untrackedOrIgnoredContentBlocksThisResetMove", {
+      errorText("main.resetService.untrackedOrIgnoredContentBlocksThisResetMove", {
         value1: blocked.slice(0, 5).join(", "),
       }),
     );
@@ -111,7 +114,7 @@ export class ResetService {
       (await this.workflows.observe(root, status)) ||
       status.changes.some((item) => item.kind === "unmerged")
     )
-      throw invalid(t("main.resetService.finishTheCurrentOperationAndUseARepository"));
+      throw invalid(errorText("main.resetService.finishTheCurrentOperationAndUseARepository"));
 
     const resolved = await this.git.exec(["rev-parse", "--verify", `${target}^{commit}`], {
       cwd: root,
@@ -119,7 +122,7 @@ export class ResetService {
     });
 
     if (resolved.stdout.trim() !== target)
-      throw invalid(t("main.resetService.selectACommitObjectAsTheResetTarget"));
+      throw invalid(errorText("main.resetService.selectACommitObjectAsTheResetTarget"));
 
     const flags = await this.git.exec(["ls-files", "-v", "-z"], {
       cwd: root,
@@ -127,7 +130,9 @@ export class ResetService {
     });
 
     if (mode === "hard" && flags.stdout.split("\0").some((line) => /^[a-zS] /.test(line)))
-      throw invalid(t("main.resetService.hardResetReviewRequiresOrdinaryTrackedFilesDisable"));
+      throw invalid(
+        errorText("main.resetService.hardResetReviewRequiresOrdinaryTrackedFilesDisable"),
+      );
 
     const changedIndex =
       mode === "soft"
@@ -166,7 +171,7 @@ export class ResetService {
 
     if (Math.max(indexPaths.length, workingPaths.length) > 256)
       throw invalid(
-        t("main.resetService.thisResetExceedsThe256PathRecoveryLimitNoFilesWereChanged"),
+        errorText("main.resetService.thisResetExceedsThe256PathRecoveryLimitNoFilesWereChanged"),
       );
     if (mode === "hard" && workingPaths.length)
       await protectResetPaths(this.git, root, target, workingPaths);
@@ -190,7 +195,7 @@ export class ResetService {
     assertFullObjectId(target, t("operations.reviewResetTarget"));
 
     if (!["soft", "mixed", "hard"].includes(mode))
-      throw invalid(t("main.resetService.chooseSoftMixedOrHardReset"));
+      throw invalid(errorText("main.resetService.chooseSoftMixedOrHardReset"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -253,7 +258,7 @@ export class ResetService {
       pending.identity.id !== repository.identityId
     )
       throw invalid(
-        t("main.resetService.thisResetReviewExpiredOrBelongsToAnotherContextReviewAgain"),
+        errorText("main.resetService.thisResetReviewExpiredOrBelongsToAnotherContextReviewAgain"),
       );
 
     return this.writer.remoteOperation(
@@ -264,14 +269,18 @@ export class ResetService {
         const current = await this.inspect(root, review.target, review.mode);
 
         if (current.fingerprint !== pending.fingerprint)
-          throw invalid(t("main.resetService.theRepositoryChangedAfterReviewReviewTheResetAgain"));
+          throw invalid(
+            errorText("main.resetService.theRepositoryChangedAfterReviewReviewTheResetAgain"),
+          );
 
         if (
           (await publishedRangeCount(this.git, root, review.head, review.target)) !==
           review.publishedCommits
         )
           throw invalid(
-            t("main.resetService.remoteTrackingHistoryChangedAfterReviewReviewTheResetAgain"),
+            errorText(
+              "main.resetService.remoteTrackingHistoryChangedAfterReviewReviewTheResetAgain",
+            ),
           );
 
         const commonDirectory = await repositoryCommonDirectory(this.git, root);
@@ -380,7 +389,9 @@ commit
           const after = await this.git.status(root);
 
           if (after.branch.oid !== review.target)
-            throw invalid(t("main.resetService.headChangedWhileResettingRecoverySnapshotsWere"));
+            throw invalid(
+              errorText("main.resetService.headChangedWhileResettingRecoverySnapshotsWere"),
+            );
 
           record.refChange!.afterHead = after.branch.oid;
           record.refChange!.afterFingerprint = await workflowFingerprint(this.git, root, after);

@@ -1,7 +1,6 @@
-import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { and, eq, isNull, isNotNull } from "drizzle-orm";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import {
   builtInSetting,
   SETTING_DEFINITIONS,
@@ -9,9 +8,11 @@ import {
   validateSetting,
   type ResolvedSetting,
   type SettingKey,
-  type SettingScope,
   type SettingsContext,
+  type SettingScope,
 } from "@shared/preferences/settings";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { identities, repositories, settingOverrides, settings } from "./schema";
 import type { Database } from "./types";
 
@@ -131,7 +132,7 @@ function missing(): GitError {
   return new GitError({
     kind: "invalid-input",
     operation: t("operations.preferences"),
-    message: t(
+    message: errorText(
       "main.persistence.settingsRepository.thatPreferenceOwnerNoLongerExistsOrBelongsToAnotherProfile",
     ),
   });

@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ok, type Result } from "@shared/errors";
@@ -180,7 +181,11 @@ it("rejects stale image responses after file switches and retains a retry after 
     await act(async () =>
       requests[1]!({
         ok: false,
-        error: { kind: "unknown", operation: "image preview", message: "Image read failed" },
+        error: errorFixture({
+          kind: "unknown",
+          operation: "image preview",
+          message: "Image read failed",
+        }),
       }),
     );
     expect(document.body.textContent).toContain("Image read failed");

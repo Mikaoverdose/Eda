@@ -1,14 +1,15 @@
-import type { GitEnginePreference } from "../integrations/git-engine";
-import { isPullStrategy, type PullStrategy } from "../workflows/pull";
-import type { SshAgentMode } from "../identity/ssh";
-import type { DiffMode } from "../repository/repository-read";
-import { supportedLocales } from "../i18n";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { t } from "@shared/i18n";
-import { DEFAULT_COMMIT_PREFIXES, isCommitPrefix } from "./commit-prefix";
-import { isHexColor, type AccentColor } from "./accent";
 import { GitError } from "../errors";
+import { supportedLocales } from "../i18n";
 import { isCommitIdentity, type CommitIdentity } from "../identity/identity";
+import type { SshAgentMode } from "../identity/ssh";
+import type { GitEnginePreference } from "../integrations/git-engine";
 import { defaultMergeTool, isMergeTool, type MergeTool } from "../integrations/merge-tool";
+import type { DiffMode } from "../repository/repository-read";
+import { isPullStrategy, type PullStrategy } from "../workflows/pull";
+import { isHexColor, type AccentColor } from "./accent";
+import { DEFAULT_COMMIT_PREFIXES, isCommitPrefix } from "./commit-prefix";
 
 export type SettingScope =
   | { kind: "application" }
@@ -316,7 +317,7 @@ export function builtInSetting<K extends SettingKey>(key: K): ResolvedSetting<K>
 
 export function requireSettingKey(value: unknown): SettingKey {
   if (typeof value !== "string" || !Object.hasOwn(SETTING_DEFINITIONS, value))
-    throw invalid(t("shared.settings.unknownPreference"));
+    throw invalid(errorText("shared.settings.unknownPreference"));
   return value as SettingKey;
 }
 
@@ -327,10 +328,13 @@ export function validateSetting<K extends SettingKey>(
 ): asserts value is SettingValues[K] {
   if (!(SETTING_DEFINITIONS[key].scopes as readonly string[]).includes(scope.kind))
     throw invalid(
-      t("shared.settings.thePreferenceCannotBeChangedAtScope", { key: key, kind: scope.kind }),
+      errorText("shared.settings.thePreferenceCannotBeChangedAtScope", {
+        key: key,
+        kind: scope.kind,
+      }),
     );
   if (!SETTING_DEFINITIONS[key].validate(value))
-    throw invalid(t("shared.settings.invalidValueFor", { key: key }));
+    throw invalid(errorText("shared.settings.invalidValueFor", { key: key }));
 }
 
 export function settingScopes(context: SettingsContext): SettingScope[] {
@@ -346,11 +350,11 @@ export function settingScopes(context: SettingsContext): SettingScope[] {
         repositoryId: context.repositoryId,
       });
   } else if (context.repositoryId)
-    throw invalid(t("shared.settings.repositoryPreferencesRequireAProfile"));
+    throw invalid(errorText("shared.settings.repositoryPreferencesRequireAProfile"));
 
   return result;
 }
 
-function invalid(message: string): GitError {
+function invalid(message: ErrorText): GitError {
   return new GitError({ kind: "invalid-input", operation: t("operations.preferences"), message });
 }

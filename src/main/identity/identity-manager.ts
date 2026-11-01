@@ -1,7 +1,6 @@
+import { ERROR_CODE, ERROR_MESSAGE_KEYS, errorText } from "@shared/error-codes";
+import { AppError, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { existsSync } from "node:fs";
-import { GitError } from "@shared/errors";
-import { isCommitIdentity, profileGitConfig } from "@shared/identity/identity";
 import type {
   EffectiveIdentityCheck,
   Identity,
@@ -9,6 +8,8 @@ import type {
   IdentitySwitchReport,
   IdentitySwitchStep,
 } from "@shared/identity/identity";
+import { isCommitIdentity, profileGitConfig } from "@shared/identity/identity";
+import { existsSync } from "node:fs";
 import type { GitService } from "../git/git-service";
 import type { IdentityRepository } from "../persistence/identity-repository";
 import type { SettingsRepository } from "../persistence/settings-repository";
@@ -65,7 +66,7 @@ export class IdentityManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.applyGlobalGitSettings"),
-          message: t(
+          message: errorText(
             "main.identity.identityManager.theActiveProfileChangedReviewItsGitSettingsBeforeApplyingThem",
           ),
         });
@@ -73,7 +74,7 @@ export class IdentityManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.applyGlobalGitSettings"),
-          message: t(
+          message: errorText(
             "main.identity.identityManager.globalGitSynchronizationIsDisabledForThisProfile",
           ),
         });
@@ -98,8 +99,8 @@ export class IdentityManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.commitIdentity"),
-        message: t("main.identity.identityManager.theSavedCommitIdentityIsInvalid"),
-        suggestedAction: t(
+        message: errorText("main.identity.identityManager.theSavedCommitIdentityIsInvalid"),
+        suggestedAction: errorText(
           "main.identity.identityManager.setAValidAuthorNameAndEmailInProfileOrRepositorySettings",
         ),
       });
@@ -152,7 +153,7 @@ export class IdentityManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.saveProfile"),
-          message: t("main.identity.identityManager.aProfileWithThatNameAlreadyExists"),
+          message: errorText("main.identity.identityManager.aProfileWithThatNameAlreadyExists"),
         });
       }
 
@@ -171,8 +172,8 @@ export class IdentityManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.profile"),
-        message: t("main.identity.identityManager.thatProfileNoLongerExists"),
-        suggestedAction: t("main.identity.identityManager.refreshProfilesAndTryAgain"),
+        message: errorText("main.identity.identityManager.thatProfileNoLongerExists"),
+        suggestedAction: errorText("main.identity.identityManager.refreshProfilesAndTryAgain"),
       });
 
     return identity;
@@ -207,8 +208,10 @@ export class IdentityManager {
             throw new GitError({
               kind: "config-write-refused",
               operation: t("operations.switchProfile"),
-              message: t("main.identity.identityManager.gitDidNotRecordCorrectly", { key: key }),
-              suggestedAction: t(
+              message: errorText("main.identity.identityManager.gitDidNotRecordCorrectly", {
+                key: key,
+              }),
+              suggestedAction: errorText(
                 "main.identity.identityManager.checkWhetherYourGlobalGitConfigurationIsWritable",
               ),
             });
@@ -269,10 +272,10 @@ export class IdentityManager {
         throw new GitError({
           kind: "config-write-refused",
           operation: t("operations.switchProfile"),
-          message: t(
+          message: errorText(
             "main.identity.identityManager.theProfileWasNotSwitchedSomeGlobalGitValuesCouldNotBeRestored",
           ),
-          suggestedAction: t(
+          suggestedAction: errorText(
             "main.identity.identityManager.inspectInYourGlobalGitConfigurationExternalEditsWerePreserved",
             { incomplete: incomplete.join(", ") },
           ),
@@ -345,8 +348,8 @@ export class IdentityManager {
 
       for (const [key, value] of Object.entries(expected))
         if ((await this.git.readConfig(key, options)) !== value)
-          throw new Error(
-            t("main.identity.identityManager.gitDidNotRecordCorrectly", { key: key }),
+          throw new AppError(
+            errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.IDENTITY_NOT_RECORDED], { key: key }),
           );
     } catch (error) {
       const incomplete: string[] = [];
@@ -373,7 +376,7 @@ export class IdentityManager {
         throw new GitError({
           kind: "config-write-refused",
           operation: t("operations.applyProfile"),
-          message: t(
+          message: errorText(
             "main.identity.identityManager.someLocalGitValuesCouldNotBeRestoredExternalEditsWerePreserved",
             { incomplete: incomplete.join(", ") },
           ),

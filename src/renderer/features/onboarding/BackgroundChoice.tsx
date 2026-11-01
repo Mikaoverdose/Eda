@@ -1,10 +1,11 @@
-import { BackgroundImageControls } from "../settings/appearance/BackgroundImageControls";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
-import { ImagePlus, X } from "lucide-react";
 import type { BackgroundPreference } from "@shared/preferences/settings";
+import { ImagePlus, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { AsyncButton, Button } from "../../components/ui/index";
 import { previewBackground } from "../../stores/preferences-store";
+import { BackgroundImageControls } from "../settings/appearance/BackgroundImageControls";
 
 export function BackgroundChoice({
   value,
@@ -37,7 +38,7 @@ export function BackgroundChoice({
             const result = await window.eda.settings.chooseBackgroundImage();
 
             if (!result.ok) {
-              setError(result.error.message);
+              setError(errorMessage(result.error));
               return false;
             }
 

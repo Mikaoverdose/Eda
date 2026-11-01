@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ok } from "@shared/errors";
@@ -114,7 +115,7 @@ it("allows retry after profile saving rejects and retains the input", async () =
         (button) => button.textContent === "Save profile",
       )!;
     await act(async () => save().click());
-    expect(document.body.textContent).toContain("Transport unavailable");
+    expect(document.body.textContent).toContain("Something went wrong. Please try again.");
     expect(save().disabled).toBe(false);
     expect(onClose).not.toHaveBeenCalled();
     const dismiss = [...document.querySelectorAll("button")].find(
@@ -139,7 +140,10 @@ it.each(["repository", "initial commit"])(
   "resets replay selection when the %s changes",
   async (change) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    const prepare = vi.fn(async () => ({ ok: false, error: { message: "Preview unavailable" } }));
+    const prepare = vi.fn(async () => ({
+      ok: false,
+      error: errorFixture({ message: "Preview unavailable" }),
+    }));
     vi.stubGlobal("eda", { replay: { prepare } });
     const container = document.createElement("div");
     document.body.append(container);

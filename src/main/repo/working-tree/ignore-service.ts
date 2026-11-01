@@ -1,26 +1,29 @@
-import { t } from "@shared/i18n";
-import { lstat, readFile, open } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { IgnoreInspection, IgnoreKind } from "@shared/repository/ignore";
-import { assertRepositoryPath } from "../../git/validation";
+import { lstat, open, readFile } from "node:fs/promises";
+import { join, posix } from "node:path";
 import type { GitService } from "../../git/git-service";
+import { assertRepositoryPath } from "../../git/validation";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.ignoreFile"), message });
 
 export function ignoreRule(path: string, kind: IgnoreKind): string {
   assertRepositoryPath(path, t("operations.ignoreFile"));
 
   if (/[\r\n\\]/.test(path))
-    throw invalid(t("main.ignoreService.thisPathCannotBeRepresentedSafelyByThisIgnoreEditor"));
+    throw invalid(
+      errorText("main.ignoreService.thisPathCannotBeRepresentedSafelyByThisIgnoreEditor"),
+    );
 
   const escape = (value: string) => value.replace(/[\[\]*?!# ]/g, "\\$&");
 
   if (kind === "extension") {
     const extension = posix.extname(path);
     if (!extension)
-      throw invalid(t("main.ignoreService.thisFileHasNoExtensionIgnoreItsPathInstead"));
+      throw invalid(errorText("main.ignoreService.thisFileHasNoExtensionIgnoreItsPathInstead"));
     return `*${escape(extension)}`;
   }
 
@@ -28,7 +31,7 @@ export function ignoreRule(path: string, kind: IgnoreKind): string {
     const directory = posix.dirname(path);
     if (directory === ".")
       throw invalid(
-        t("main.ignoreService.thisFileIsInTheRepositoryRootChoosePathOrExtensionInstead"),
+        errorText("main.ignoreService.thisFileIsInTheRepositoryRootChoosePathOrExtensionInstead"),
       );
     return `/${escape(directory)}/`;
   }
@@ -74,7 +77,7 @@ export class IgnoreService {
 
     if (stat && (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024))
       throw invalid(
-        t("main.ignoreService.theRootGitignoreMustBeARegularFileUnder1MiBEditItExternally"),
+        errorText("main.ignoreService.theRootGitignoreMustBeARegularFileUnder1MiBEditItExternally"),
       );
 
     const bytes = stat ? await readFile(filename) : Buffer.alloc(0);
@@ -84,7 +87,9 @@ export class IgnoreService {
       content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     } catch {
       throw invalid(
-        t("main.ignoreService.theGitignoreFileIsNotUtf8EditItExternallyToPreserveItsEncoding"),
+        errorText(
+          "main.ignoreService.theGitignoreFileIsNotUtf8EditItExternallyToPreserveItsEncoding",
+        ),
       );
     }
 
@@ -100,7 +105,7 @@ export class IgnoreService {
         stat &&
         (current.ino !== stat.ino || current.size !== stat.size || current.mtimeMs !== stat.mtimeMs)
       )
-        throw invalid(t("main.ignoreService.theGitignoreFileChangedPreviewTheRuleAgain"));
+        throw invalid(errorText("main.ignoreService.theGitignoreFileChangedPreviewTheRuleAgain"));
 
       const appended = `${content && !content.endsWith("\n") ? newline : ""}${rule}${newline}`;
 

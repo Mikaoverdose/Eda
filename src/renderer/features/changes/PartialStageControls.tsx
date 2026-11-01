@@ -1,10 +1,17 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ErrorDialog } from "../../components/ui/index";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { PartialStagePreview, PartialStageRequest } from "@shared/repository/partial-stage";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Button,
+  CheckboxControl,
+  CodeBlock,
+  Dialog,
+  ErrorDialog,
+  TextButton,
+} from "../../components/ui/index";
 import type { UnifiedRow } from "../../repository/diff-model";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Button, Dialog, CheckboxControl, TextButton, CodeBlock } from "../../components/ui/index";
 import { DiscardDialog } from "./DiscardDialog";
 
 const Context = createContext<{
@@ -113,7 +120,7 @@ export function PartialStageProvider({
       )
         return;
 
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else if (hunks) {
         if (await current.applyPartial(result.value.token)) setSelected(new Set());
       } else setPreview(result.value);

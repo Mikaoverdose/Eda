@@ -1,25 +1,26 @@
-import { t } from "@shared/i18n";
-import { createHash, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type {
   DuplicateProfileOptions,
   ProfileDeletePreview,
 } from "@shared/identity/profile-session";
-import type { IdentityManager } from "./identity-manager";
+import { builtInSetting, requireSettingKey, validateSetting } from "@shared/preferences/settings";
+import { and, eq } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
 import type { IdentityRepository } from "../persistence/identity-repository";
-import type { Database } from "../persistence/types";
+import type { ProfileSessionRepository } from "../persistence/profile-session-repository";
 import {
-  profileDrafts,
-  profileSessions,
-  profileRecovery,
   contentRecovery,
+  profileDrafts,
+  profileRecovery,
+  profileSessions,
   repositories,
   settingOverrides,
 } from "../persistence/schema";
+import type { Database } from "../persistence/types";
 import type { SecretStore } from "../secrets/secret-store";
-import type { ProfileSessionRepository } from "../persistence/profile-session-repository";
-import { builtInSetting, requireSettingKey, validateSetting } from "@shared/preferences/settings";
+import type { IdentityManager } from "./identity-manager";
 
 export class ProfileService {
   constructor(
@@ -34,7 +35,7 @@ export class ProfileService {
     const owner = this.identity.getActive()?.id;
 
     if (!owner || owner === targetProfileId)
-      throw invalid(t("main.identity.profileService.chooseADifferentDestinationProfile"));
+      throw invalid(errorText("main.identity.profileService.chooseADifferentDestinationProfile"));
 
     return this.identity.serialize(async () =>
       this.db.transaction(() => {
@@ -46,7 +47,9 @@ export class ProfileService {
 
         if (!source || !this.identities.findById(targetProfileId))
           throw invalid(
-            t("main.identity.profileService.theSourceRepositoryOrDestinationProfileNoLongerExists"),
+            errorText(
+              "main.identity.profileService.theSourceRepositoryOrDestinationProfileNoLongerExists",
+            ),
           );
 
         const existing = this.db
@@ -77,11 +80,14 @@ export class ProfileService {
     return this.identity.serialize(async () => {
       const source = this.identities.findById(id);
 
-      if (!source) throw invalid(t("main.identity.profileService.thatProfileNoLongerExists"));
+      if (!source)
+        throw invalid(errorText("main.identity.profileService.thatProfileNoLongerExists"));
       if (!options.name.trim() || options.name.length > 100)
-        throw invalid(t("main.identity.profileService.enterAProfileNameOf1To100Characters"));
+        throw invalid(
+          errorText("main.identity.profileService.enterAProfileNameOf1To100Characters"),
+        );
       if (options.tabs && !options.repositories)
-        throw invalid(t("main.identity.profileService.copyRepositoriesToCopyTheirTabs"));
+        throw invalid(errorText("main.identity.profileService.copyRepositoriesToCopyTheirTabs"));
 
       return this.db.transaction(() => {
         const copy = this.identities.create({
@@ -154,7 +160,9 @@ export class ProfileService {
 
             if (saved.recovery)
               throw invalid(
-                t("main.identity.profileService.recoverTheSourceSavedStateBeforeCopyingItsTabs"),
+                errorText(
+                  "main.identity.profileService.recoverTheSourceSavedStateBeforeCopyingItsTabs",
+                ),
               );
 
             const tabs = saved.session.tabs.flatMap((old) => remap.get(old) ?? []);
@@ -183,7 +191,8 @@ export class ProfileService {
   previewDelete(id: string): ProfileDeletePreview {
     const profile = this.identities.findById(id);
 
-    if (!profile) throw invalid(t("main.identity.profileService.thatProfileNoLongerExists"));
+    if (!profile)
+      throw invalid(errorText("main.identity.profileService.thatProfileNoLongerExists"));
 
     const active = this.identity.getActive()?.id === id;
     const fallback = active ? this.identities.list().find((item) => item.id !== id) : undefined;
@@ -248,7 +257,7 @@ export class ProfileService {
     await this.identity.replaceAfterDelete(id, preview.fallback?.id ?? null, async () => {
       if (this.previewDelete(id).token !== token)
         throw invalid(
-          t(
+          errorText(
             "main.identity.profileService.theProfileChangedAfterThePreviewReviewTheUpdatedDeletionPreview",
           ),
         );
@@ -263,13 +272,15 @@ export class ProfileService {
         });
       } catch {
         throw invalid(
-          t("main.identity.profileService.rememberedCredentialsWereRemovedButProfileMetadataCould"),
+          errorText(
+            "main.identity.profileService.rememberedCredentialsWereRemovedButProfileMetadataCould",
+          ),
         );
       }
     });
   }
 }
 
-function invalid(message: string): GitError {
+function invalid(message: ErrorText): GitError {
   return new GitError({ kind: "invalid-input", operation: t("operations.manageProfile"), message });
 }

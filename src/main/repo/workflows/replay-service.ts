@@ -1,6 +1,6 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { GitError } from "@shared/errors";
 import type { Identity } from "@shared/identity/identity";
 import type {
   ReplayAction,
@@ -9,19 +9,20 @@ import type {
   ReplayResult,
   ReplayReview,
 } from "@shared/workflows/replay";
+import { randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import { assertFullObjectId } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
-import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
-import type { RepositoryManager } from "../lifecycle/repository-manager";
-import type { RepositoryWriter } from "../working-tree/repository-writer";
-import { matchesNativeWorkflow, type WorkflowService } from "./workflow-service";
-import { workflowFingerprint } from "./workflow-fingerprint";
 import { captureRewriteStart, finalizeRewrite } from "../history/rewrite-history";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
+import { workflowFingerprint } from "./workflow-fingerprint";
+import { matchesNativeWorkflow, type WorkflowService } from "./workflow-service";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.replayCommits"), message });
 
 export class ReplayService {
@@ -64,11 +65,11 @@ export class ReplayService {
 
     if (fields.at(-1) === "") fields.pop();
     if (fields.length !== oids.length * 3)
-      throw invalid(t("main.replayService.gitReturnedAnIncompleteCommitSelection"));
+      throw invalid(errorText("main.replayService.gitReturnedAnIncompleteCommitSelection"));
 
     return oids.map((oid, index) => {
       if (fields[index * 3] !== oid)
-        throw invalid(t("main.replayService.gitReturnedADifferentCommitOrderReviewAgain"));
+        throw invalid(errorText("main.replayService.gitReturnedADifferentCommitOrderReviewAgain"));
 
       return {
         oid,
@@ -89,7 +90,7 @@ export class ReplayService {
       !["cherry-pick", "revert"].includes(kind) ||
       !["start", "continue", "skip", "abort"].includes(action)
     )
-      throw invalid(t("main.replayService.chooseACherryPickOrRevertAction"));
+      throw invalid(errorText("main.replayService.chooseACherryPickOrRevertAction"));
 
     if (
       !Array.isArray(oids) ||
@@ -97,12 +98,12 @@ export class ReplayService {
       new Set(oids).size !== oids.length ||
       (action === "start" && !oids.length)
     )
-      throw invalid(t("main.replayService.choose1To100DistinctCommitIDsInExecutionOrder"));
+      throw invalid(errorText("main.replayService.choose1To100DistinctCommitIDsInExecutionOrder"));
 
     for (const oid of oids) assertFullObjectId(oid, t("operations.reviewReplayCommit"));
 
     if (mainline !== undefined && (!Number.isInteger(mainline) || mainline < 1 || mainline > 1024))
-      throw invalid(t("main.replayService.chooseAValidMainlineParentNumber"));
+      throw invalid(errorText("main.replayService.chooseAValidMainlineParentNumber"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -120,25 +121,27 @@ export class ReplayService {
             !status.branch.head ||
             !status.branch.oid
           )
-            throw invalid(t("main.replayService.checkOutACleanExistingBranchAndFinish"));
+            throw invalid(errorText("main.replayService.checkOutACleanExistingBranchAndFinish"));
 
           record = undefined;
         } else {
           if (workflow?.kind !== kind || !workflow.originalHead)
             throw invalid(
-              t("main.replayService.noIsAvailableRefreshRepositoryState", { kind: kind }),
+              errorText("main.replayService.noIsAvailableRefreshRepositoryState", { kind: kind }),
             );
           if (!matchesNativeWorkflow(record, workflow)) record = undefined;
 
           if (record && record.profileId !== identity.id)
             throw invalid(
-              t(
+              errorText(
                 "main.replayService.switchToTheProfileThatOwnsThisOperationBeforeContinuingOrAborting",
               ),
             );
 
           if (action === "continue" && workflow.conflicts.length)
-            throw invalid(t("main.replayService.resolveAndStageEveryConflictBeforeContinuing"));
+            throw invalid(
+              errorText("main.replayService.resolveAndStageEveryConflictBeforeContinuing"),
+            );
         }
 
         const commits = await this.commits(
@@ -147,7 +150,7 @@ export class ReplayService {
         );
 
         if (mainline !== undefined && commits.some((commit) => mainline > commit.parents.length))
-          throw invalid(t("main.replayService.thatMainlineParentDoesNotExistInEvery"));
+          throw invalid(errorText("main.replayService.thatMainlineParentDoesNotExistInEvery"));
 
         let snapshot: OperationSnapshot | undefined;
 
@@ -230,7 +233,7 @@ export class ReplayService {
       pending.identity.id !== repository.identityId
     )
       throw invalid(
-        t("main.replayService.thisReplayReviewExpiredOrBelongsToAnotherContextReviewAgain"),
+        errorText("main.replayService.thisReplayReviewExpiredOrBelongsToAnotherContextReviewAgain"),
       );
 
     const { review, identity } = pending;
@@ -240,7 +243,9 @@ export class ReplayService {
       review.commits.some((commit) => commit.parents.length > 1) &&
       review.mainline === undefined
     )
-      throw invalid(t("main.replayService.chooseTheMainlineParentBeforeReplayingAMergeCommit"));
+      throw invalid(
+        errorText("main.replayService.chooseTheMainlineParentBeforeReplayingAMergeCommit"),
+      );
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -254,11 +259,11 @@ export class ReplayService {
           (await workflowFingerprint(this.git, root, status)) !== pending.fingerprint
         )
           throw invalid(
-            t("main.replayService.theOperationOrRepositoryChangedAfterReviewReviewAgain"),
+            errorText("main.replayService.theOperationOrRepositoryChangedAfterReviewReviewAgain"),
           );
 
         if (workflow?.ownerProfileId && workflow.ownerProfileId !== identity.id)
-          throw invalid(t("main.replayService.anotherProfileOwnsThisOperation"));
+          throw invalid(errorText("main.replayService.anotherProfileOwnsThisOperation"));
 
         if (review.action !== "abort") this.identities.assertOperationIdentity(identity);
 
@@ -364,7 +369,7 @@ export class ReplayService {
 
           if (result.exitCode !== 0 && !remaining)
             throw invalid(
-              t(
+              errorText(
                 "main.replayService.gitCouldNotCompleteThisActionInspectActivityAndRepositoryState",
               ),
             );
@@ -385,10 +390,10 @@ export class ReplayService {
                 {
                   kind: review.kind,
                   head: record.head,
-                  value3:
-                    error instanceof Error
-                      ? error.message
-                      : t("main.replayService.recoveryMetadataCouldNotBeSaved"),
+                  value3: errorMessage(
+                    error,
+                    errorText("main.replayService.recoveryMetadataCouldNotBeSaved"),
+                  ),
                 },
               );
             }

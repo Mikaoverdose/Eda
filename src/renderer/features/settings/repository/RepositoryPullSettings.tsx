@@ -1,9 +1,10 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
-import type { PullStrategy } from "@shared/workflows/pull";
 import type { ResolvedSetting } from "@shared/preferences/settings";
-import { preferenceSource } from "../../../stores/preferences-store";
+import type { PullStrategy } from "@shared/workflows/pull";
+import { useEffect, useState } from "react";
 import { Button, ErrorDialog, Select } from "../../../components/ui/index";
+import { preferenceSource } from "../../../stores/preferences-store";
 
 export function RepositoryPullSettings({ repositoryId }: { repositoryId: string }) {
   const [setting, setSetting] = useState<ResolvedSetting<"pullStrategy"> | null>(null);
@@ -15,7 +16,7 @@ export function RepositoryPullSettings({ repositoryId }: { repositoryId: string 
     void window.eda.pull.preference(repositoryId).then((result) => {
       if (cancelled) return;
       if (result.ok) setSetting(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     });
     return () => {
       cancelled = true;
@@ -27,11 +28,11 @@ export function RepositoryPullSettings({ repositoryId }: { repositoryId: string 
     setError(null);
     try {
       const result = await window.eda.pull.setPreference(repositoryId, strategy);
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else {
         const refreshed = await window.eda.pull.preference(repositoryId);
         if (refreshed.ok) setSetting(refreshed.value);
-        else setError(refreshed.error.message);
+        else setError(errorMessage(refreshed.error));
       }
     } finally {
       setBusy(false);

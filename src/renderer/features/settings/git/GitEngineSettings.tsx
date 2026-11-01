@@ -1,4 +1,7 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { SettingValues } from "@shared/preferences/settings";
+import { useEffect, useId, useState } from "react";
 import {
   DefinitionList,
   Disclosure,
@@ -6,9 +9,7 @@ import {
   NoticeBanner,
   RadioCard,
 } from "../../../components/ui/index";
-import { useEffect, useId, useState } from "react";
 import { useAppStore } from "../../../stores/app-store";
-import type { SettingValues } from "@shared/preferences/settings";
 
 export function GitEngineSettings() {
   const groupName = useId();
@@ -25,7 +26,7 @@ export function GitEngineSettings() {
       .then((result) => {
         if (cancelled) return;
         if (result.ok) setSelected(result.value.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       })
       .catch(() => {
         if (!cancelled)
@@ -51,7 +52,7 @@ export function GitEngineSettings() {
       const result = await window.eda.settings.set("gitEngine", { kind: "application" }, value);
       if (!result.ok) {
         setSelected(previous);
-        setError(result.error.message);
+        setError(errorMessage(result.error));
       }
     } catch {
       setSelected(previous);

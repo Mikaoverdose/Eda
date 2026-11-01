@@ -1,16 +1,17 @@
-import { initializeLocalization } from "./i18n/initialize";
-import { t } from "@shared/i18n";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { initializeLocalization } from "./i18n/initialize";
 
-import { SshHostTrustDialog } from "./features/credentials/SshHostTrustDialog";
-import { IconDefaults } from "./components/ui/index";
 import { RendererFailureBoundary } from "./app/RendererFailure";
+import { IconDefaults } from "./components/ui/index";
+import { SshHostTrustDialog } from "./features/credentials/SshHostTrustDialog";
 import "./styles/base.css";
 
 const container = document.getElementById("root");
 
-if (!container) throw new Error(t("main.rootElementIsMissingFromIndexHtml"));
+if (!container) throw new AppError(ERROR_CODE.ROOT_ELEMENT_MISSING);
 
 await initializeLocalization();
 

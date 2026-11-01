@@ -1,31 +1,32 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { randomUUID, createHash } from "node:crypto";
-import { open } from "node:fs/promises";
-import { join } from "node:path";
-import { GitError } from "@shared/errors";
-import { conflictSides } from "@shared/workflows/conflict-sides";
-import type {
-  MergeContinuation,
-  MergeAbortPreview,
-  MergeStartPreview,
-  MergeStartResult,
-  MergeMode,
-  WorkflowState,
-} from "@shared/workflows/workflow";
 import type { Identity } from "@shared/identity/identity";
 import type { RepositoryStatus } from "@shared/repository/repository-read";
-import { createPullAutostash, dropPullAutostash } from "../../git/operations/pull-autostash";
-import { assertFullObjectId } from "../../git/validation";
+import { conflictSides } from "@shared/workflows/conflict-sides";
+import type {
+  MergeAbortPreview,
+  MergeContinuation,
+  MergeMode,
+  MergeStartPreview,
+  MergeStartResult,
+  WorkflowState,
+} from "@shared/workflows/workflow";
+import { createHash, randomUUID } from "node:crypto";
+import { open } from "node:fs/promises";
+import { join } from "node:path";
 import type { GitService } from "../../git/git-service";
+import { createPullAutostash, dropPullAutostash } from "../../git/operations/pull-autostash";
 import { readWorkflowState } from "../../git/operations/workflow-state";
+import { assertFullObjectId } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
+import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
-import type { RepositoryWriter } from "../working-tree/repository-writer";
 import { DiscardService } from "../working-tree/discard-service";
-import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({
     kind: "invalid-input",
     operation: t("operations.mergeWorkflow"),
@@ -160,10 +161,10 @@ export class WorkflowService {
   ): Promise<void> {
     try {
       const applied = await this.applyStashInPlace(root, repositoryId, identity, oid, true);
-      if (!applied) throw invalid(t("main.workflowService.localChangesNeedAttention"));
+      if (!applied) throw invalid(errorText("main.workflowService.localChangesNeedAttention"));
     } catch {
       throw invalid(
-        t("main.workflowService.localChangesCouldNotBeFullyRestoredThey", {
+        errorText("main.workflowService.localChangesCouldNotBeFullyRestoredThey", {
           oid: oid.slice(0, 12),
         }),
       );
@@ -172,7 +173,7 @@ export class WorkflowService {
       await dropPullAutostash(this.git, root, oid);
     } catch {
       throw invalid(
-        t("main.workflowService.localChangesWereRestoredButTheTemporaryEda", {
+        errorText("main.workflowService.localChangesWereRestoredButTheTemporaryEda", {
           oid: oid.slice(0, 12),
         }),
       );
@@ -181,7 +182,7 @@ export class WorkflowService {
 
   private requireWorkflowOwner(workflow: WorkflowState, profileId: string) {
     if (workflow.ownerProfileId && workflow.ownerProfileId !== profileId)
-      throw invalid(t("main.workflowService.thisOperationBelongsToAnotherProfileSwitchTo"));
+      throw invalid(errorText("main.workflowService.thisOperationBelongsToAnotherProfileSwitchTo"));
   }
 
   private async cleanStart(root: string, allowChanges = false) {
@@ -189,7 +190,9 @@ export class WorkflowService {
 
     if (await this.observe(root, status))
       throw invalid(
-        t("main.workflowService.finishOrAbortTheCurrentGitOperationBeforeStartingAnotherOperation"),
+        errorText(
+          "main.workflowService.finishOrAbortTheCurrentGitOperationBeforeStartingAnotherOperation",
+        ),
       );
 
     const previous = this.journal.activeLocal(root);
@@ -201,10 +204,12 @@ export class WorkflowService {
     }
 
     if (!status.branch.oid || !status.branch.head || status.branch.detached || status.branch.unborn)
-      throw invalid(t("main.workflowService.checkOutAnExistingBranchBeforeStartingThisOperation"));
+      throw invalid(
+        errorText("main.workflowService.checkOutAnExistingBranchBeforeStartingThisOperation"),
+      );
     if (status.changes.length && !allowChanges)
       throw invalid(
-        t("main.workflowService.commitStashOrMoveLocalChangesBeforeStartingThisOperation"),
+        errorText("main.workflowService.commitStashOrMoveLocalChangesBeforeStartingThisOperation"),
       );
 
     return status;
@@ -231,7 +236,7 @@ export class WorkflowService {
       .slice(1);
 
     if (parents.length < 2 || parents.length > 3)
-      throw invalid(t("main.workflowService.unsupportedStashStructure"));
+      throw invalid(errorText("main.workflowService.unsupportedStashStructure"));
 
     const introducedPaths = parents[2]
       ? (
@@ -257,7 +262,9 @@ export class WorkflowService {
       before.record.savedIndex?.length
     )
       throw invalid(
-        t("main.workflowService.aStashedUntrackedPathAlreadyExistsHereMoveItBeforeApplying"),
+        errorText(
+          "main.workflowService.aStashedUntrackedPathAlreadyExistsHereMoveItBeforeApplying",
+        ),
       );
 
     const record: WorkflowJournalRecord = {
@@ -330,12 +337,16 @@ export class WorkflowService {
         const workflow = await this.observe(root, await this.git.status(root));
 
         if (workflow?.kind !== "stash" || workflow.token !== token)
-          throw invalid(t("main.workflowService.theStashOperationChangedRefreshBeforeFinishing"));
+          throw invalid(
+            errorText("main.workflowService.theStashOperationChangedRefreshBeforeFinishing"),
+          );
 
         this.requireWorkflowOwner(workflow, identity.id);
 
         if (workflow.conflicts.length)
-          throw invalid(t("main.workflowService.resolveAndStageEveryConflictBeforeFinishing"));
+          throw invalid(
+            errorText("main.workflowService.resolveAndStageEveryConflictBeforeFinishing"),
+          );
 
         const record = this.journal.activeLocal(root)!;
 
@@ -388,7 +399,7 @@ export class WorkflowService {
     assertFullObjectId(source, t("operations.reviewMerge"));
 
     if (!["ff", "no-ff", "ff-only", "squash"].includes(mode))
-      throw invalid(t("main.workflowService.chooseASupportedMergePolicy"));
+      throw invalid(errorText("main.workflowService.chooseASupportedMergePolicy"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -423,7 +434,9 @@ export class WorkflowService {
 
         if (mode === "ff-only" && !preview.fastForward && !preview.upToDate)
           throw invalid(
-            t("main.workflowService.theseBranchesHaveDivergedFastForwardOnlyCannotMergeThem"),
+            errorText(
+              "main.workflowService.theseBranchesHaveDivergedFastForwardOnlyCannotMergeThem",
+            ),
           );
 
         preview.prediction = await this.predictMerge(root, preview.head, source);
@@ -455,7 +468,9 @@ export class WorkflowService {
       pending.identity.id !== repository.identityId
     )
       throw invalid(
-        t("main.workflowService.thisMergeReviewExpiredOrBelongsToAnotherContextReviewAgain"),
+        errorText(
+          "main.workflowService.thisMergeReviewExpiredOrBelongsToAnotherContextReviewAgain",
+        ),
       );
 
     return this.writer.remoteOperation(
@@ -467,7 +482,7 @@ export class WorkflowService {
 
         if (status.branch.oid !== preview.head || status.branch.head !== preview.branch)
           throw invalid(
-            t("main.workflowService.theTargetBranchChangedAfterReviewReviewTheMergeAgain"),
+            errorText("main.workflowService.theTargetBranchChangedAfterReviewReviewTheMergeAgain"),
           );
 
         this.identity.assertOperationIdentity(identity);
@@ -566,7 +581,9 @@ export class WorkflowService {
           }
 
           if (result.exitCode !== 0)
-            throw invalid(t("main.workflowService.gitCouldNotStartThisMergeInspectActivity"));
+            throw invalid(
+              errorText("main.workflowService.gitCouldNotStartThisMergeInspectActivity"),
+            );
 
           record.state = "completed";
           record.result = after.branch.oid!;
@@ -605,7 +622,9 @@ export class WorkflowService {
           !workflow.originalHead
         )
           throw invalid(
-            t("main.workflowService.noNativeMergeOrEdaSquashWithAnOriginalHeadIsAvailableToAbort"),
+            errorText(
+              "main.workflowService.noNativeMergeOrEdaSquashWithAnOriginalHeadIsAvailableToAbort",
+            ),
           );
 
         this.requireWorkflowOwner(workflow, repository.identityId);
@@ -653,7 +672,9 @@ export class WorkflowService {
 
           if (!/^[a-f0-9]{40,64}$/.test(oid))
             throw invalid(
-              t("main.workflowService.invalidNativeAutostashStateInspectItWithGitBeforeAborting"),
+              errorText(
+                "main.workflowService.invalidNativeAutostashStateInspectItWithGitBeforeAborting",
+              ),
             );
 
           const changed = await this.git.exec(
@@ -720,7 +741,7 @@ export class WorkflowService {
       pending.snapshot.record.root !== repository.path
     )
       throw invalid(
-        t("main.workflowService.theAbortReviewExpiredOrBelongsToAnotherContextReviewAgain"),
+        errorText("main.workflowService.theAbortReviewExpiredOrBelongsToAnotherContextReviewAgain"),
       );
 
     return this.writer.remoteOperation(
@@ -738,7 +759,7 @@ export class WorkflowService {
           JSON.stringify(status) !== pending.status
         )
           throw invalid(
-            t(
+            errorText(
               "main.workflowService.theMergeOrRepositoryStateChangedAfterReviewReviewTheAbortAgain",
             ),
           );
@@ -785,13 +806,13 @@ export class WorkflowService {
           throw new GitError({
             kind: error instanceof GitError ? error.kind : "unknown",
             operation: t("operations.abortMerge"),
-            message: t(
+            message: errorText(
               "main.workflowService.recoveryCopiesWereSavedInspectRecoveryBeforeChanging",
               {
-                value1:
-                  error instanceof Error
-                    ? error.message
-                    : t("main.workflowService.gitCouldNotAbortTheMerge"),
+                value1: errorMessage(
+                  error,
+                  errorText("main.workflowService.gitCouldNotAbortTheMerge"),
+                ),
               },
             ),
           });
@@ -807,10 +828,14 @@ export class WorkflowService {
     const workflow = await this.observe(root, status);
 
     if ((workflow?.kind !== "merge" && workflow?.kind !== "squash") || !workflow.head)
-      throw invalid(t("main.workflowService.thereIsNoNativeMergeToContinueRefreshRepositoryState"));
+      throw invalid(
+        errorText("main.workflowService.thereIsNoNativeMergeToContinueRefreshRepositoryState"),
+      );
     if (workflow.conflicts.length)
       throw invalid(
-        t("main.workflowService.resolveAndStageEveryConflictedPathBeforeContinuingTheMerge"),
+        errorText(
+          "main.workflowService.resolveAndStageEveryConflictedPathBeforeContinuingTheMerge",
+        ),
       );
 
     const { stdout } = await this.git.exec(["write-tree"], {
@@ -863,7 +888,9 @@ export class WorkflowService {
           const buffer = Buffer.alloc(1024 * 1024 + 1);
           const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
           if (bytesRead > 1024 * 1024)
-            throw invalid(t("main.workflowService.theMergeMessageExceedsThe1MiBEditorLimit"));
+            throw invalid(
+              errorText("main.workflowService.theMergeMessageExceedsThe1MiBEditorLimit"),
+            );
           message = buffer.subarray(0, bytesRead).toString("utf8");
         } finally {
           await handle.close();
@@ -913,7 +940,7 @@ export class WorkflowService {
 
   continueMerge(repositoryId: string, id: string, message: string): Promise<string> {
     if (!message.trim() || Buffer.byteLength(message) > 1024 * 1024)
-      throw invalid(t("main.workflowService.enterAMergeMessageWithinThe1MiBLimit"));
+      throw invalid(errorText("main.workflowService.enterAMergeMessageWithinThe1MiBLimit"));
 
     const repository = this.repositories.resolveActiveRepository(repositoryId);
     const record = this.journal.latest(repository.identityId, repositoryId);
@@ -924,7 +951,7 @@ export class WorkflowService {
       record.root !== repository.path ||
       record.state === "completed"
     )
-      throw invalid(t("main.workflowService.reviewThisMergeAgainBeforeCompletingIt"));
+      throw invalid(errorText("main.workflowService.reviewThisMergeAgainBeforeCompletingIt"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -936,7 +963,9 @@ export class WorkflowService {
 
         if (workflow.token !== record.workflowToken || tree !== record.tree)
           throw invalid(
-            t("main.workflowService.theMergeOrStagedContentChangedReviewItAgainBeforeCommitting"),
+            errorText(
+              "main.workflowService.theMergeOrStagedContentChangedReviewItAgainBeforeCommitting",
+            ),
           );
 
         this.identity.assertOperationIdentity(record.identity);

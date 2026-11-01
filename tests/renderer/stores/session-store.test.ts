@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { err, ok, type Result } from "@shared/errors";
 import {
@@ -117,7 +118,9 @@ describe("session save acknowledgements", () => {
   });
 
   it("keeps input and the old context after a failed save; retry acknowledges it", async () => {
-    save.mockResolvedValueOnce(err({ kind: "unknown", operation: "save", message: "Disk full" }));
+    save.mockResolvedValueOnce(
+      err(errorFixture({ kind: "unknown", operation: "save", message: "Disk full" })),
+    );
 
     const store = useSessionStore.getState();
 
@@ -130,7 +133,9 @@ describe("session save acknowledgements", () => {
   });
 
   it("does not load the next profile when the previous session cannot save", async () => {
-    save.mockResolvedValue(err({ kind: "unknown", operation: "save", message: "read-only" }));
+    save.mockResolvedValue(
+      err(errorFixture({ kind: "unknown", operation: "save", message: "read-only" })),
+    );
     useSessionStore
       .getState()
       .setDraft("repo", { version: 1, message: "unacknowledged", amend: false });

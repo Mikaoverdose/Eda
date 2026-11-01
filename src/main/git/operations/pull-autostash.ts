@@ -1,7 +1,8 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { GitError } from "@shared/errors";
 import type { Identity } from "@shared/identity/identity";
+import { randomUUID } from "node:crypto";
 import type { GitService } from "../git-service";
 import { assertFullObjectId } from "../validation";
 
@@ -11,13 +12,15 @@ export async function createPullAutostash(git: GitService, root: string, identit
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.pull"),
-      message: t("main.git.pullAutostash.resolveExistingConflictsBeforePulling"),
+      message: errorText("main.git.pullAutostash.resolveExistingConflictsBeforePulling"),
     });
   if (status.changes.some((change) => change.submodule.startsWith("S")))
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.pull"),
-      message: t("main.git.pullAutostash.commitOrStashChangesInsideSubmodulesBeforePulling"),
+      message: errorText(
+        "main.git.pullAutostash.commitOrStashChangesInsideSubmodulesBeforePulling",
+      ),
     });
   const message = t("main.git.pullAutostash.edaPullAutostash", { value1: randomUUID() });
   try {
@@ -54,7 +57,7 @@ export async function createPullAutostash(git: GitService, root: string, identit
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.pull"),
-        message: t(
+        message: errorText(
           "main.git.pullAutostash.theStashListChangedDuringPullInspectStashesBeforeRetrying",
         ),
       });
@@ -63,11 +66,11 @@ export async function createPullAutostash(git: GitService, root: string, identit
     throw new GitError({
       kind: error instanceof GitError ? error.kind : "unknown",
       operation: t("operations.pull"),
-      message: t("main.git.pullAutostash.couldNotFinishSavingLocalChangesForPull", {
-        value1:
-          error instanceof Error
-            ? error.message
-            : t("main.git.pullAutostash.inspectTheRepositoryBeforeRetrying"),
+      message: errorText("main.git.pullAutostash.couldNotFinishSavingLocalChangesForPull", {
+        value1: errorMessage(
+          error,
+          errorText("main.git.pullAutostash.inspectTheRepositoryBeforeRetrying"),
+        ),
       }),
     });
   }

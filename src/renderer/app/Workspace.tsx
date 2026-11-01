@@ -1,31 +1,33 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useAppStore } from "../stores/app-store";
-import { useLayoutStore, type PanelId } from "../stores/layout-store";
-import { useRepositoryStore } from "../stores/repository-store";
-import { Button, Dialog } from "../components/ui/index";
-import { ChangesPanel } from "../features/changes/ChangesPanel";
-import { CommitBox } from "../features/changes/CommitBox";
-import { CommitGraph } from "../features/history/CommitGraph";
-import { DiffViewer } from "../features/diff/DiffViewer";
-import { CommitChangesPanel } from "../features/history/CommitChangesPanel";
 import { CollapsiblePanel } from "../components/layout/CollapsiblePanel";
 import { usePanel } from "../components/layout/hooks/usePanel";
 import { Split } from "../components/layout/Split";
 import { LayoutTransition } from "../components/layout/ViewTransition";
-import { RepositoryHome } from "../features/repositories/RepositoryHome";
-import { MissingRepository } from "../features/repositories/MissingRepository";
-import { RepositoryOverview } from "../features/repositories/RepositoryOverview";
-import { RemotesDialog } from "../features/sync/RemotesDialog";
-import { StashesDialog } from "../features/stashes/StashesDialog";
-import { ReferenceSidebar } from "../features/references/ReferenceSidebar";
+import { Button, Dialog } from "../components/ui/index";
+import { ChangesPanel } from "../features/changes/ChangesPanel";
+import { CommitBox } from "../features/changes/CommitBox";
+import { DiscardDialog } from "../features/changes/DiscardDialog";
+import { DiffViewer } from "../features/diff/DiffViewer";
+import { CommitChangesPanel } from "../features/history/CommitChangesPanel";
+import { CommitGraph } from "../features/history/CommitGraph";
+import { CommitMenu } from "../features/history/CommitMenu";
 import { GraphFilterDialog } from "../features/history/GraphFilterDialog";
 import { ManageReferencesDialog } from "../features/references/ManageReferencesDialog";
-import { DiscardDialog } from "../features/changes/DiscardDialog";
+import { ReferenceSidebar } from "../features/references/ReferenceSidebar";
+import { MissingRepository } from "../features/repositories/MissingRepository";
+import { RepositoryHome } from "../features/repositories/RepositoryHome";
+import { RepositoryOverview } from "../features/repositories/RepositoryOverview";
+import { StashesDialog } from "../features/stashes/StashesDialog";
+import { RemotesDialog } from "../features/sync/RemotesDialog";
 import { HistoryRecoveryDialog } from "../features/workflows/HistoryRecoveryDialog";
 import { UndoRedoDialog } from "../features/workflows/UndoRedoDialog";
-import { CommitMenu } from "../features/history/CommitMenu";
+import { useAppStore } from "../stores/app-store";
+import { useLayoutStore, type PanelId } from "../stores/layout-store";
+import { useRepositoryStore } from "../stores/repository-store";
 import { GlobalGitWarning } from "./GlobalGitWarning";
 
 const PANELS: readonly PanelId[] = ["graph", "diff", "rail"];
@@ -180,7 +182,7 @@ function WorkspaceContent({ onReviewGitSettings }: { onReviewGitSettings: () => 
       {phase === "error" && (
         <WorkspaceState
           title={t("workspace.repositoryCouldNotBeRead")}
-          detail={error?.message ?? t("workspace.anUnexpectedReadErrorOccurred")}
+          detail={errorMessage(error, errorText("workspace.anUnexpectedReadErrorOccurred"))}
           action={() => void refresh()}
         />
       )}

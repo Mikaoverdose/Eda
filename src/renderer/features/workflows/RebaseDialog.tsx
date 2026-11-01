@@ -1,9 +1,10 @@
-import { t, getLocale } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
+import type { RebaseAction, RebasePlanEntry, RebaseReview } from "@shared/workflows/rebase";
 import { useEffect, useState } from "react";
-import type { RebaseAction, RebaseReview, RebasePlanEntry } from "@shared/workflows/rebase";
+import { Checkbox, Dialog, ErrorDialog, ReviewActions, Textarea } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Dialog, Checkbox, ErrorDialog, Textarea, ReviewActions } from "../../components/ui/index";
 import { RebasePlanEditor } from "./RebasePlanEditor";
 
 const labels: Record<RebaseAction, string> = {
@@ -47,7 +48,7 @@ export function RebaseDialog({
         setReview(result.value);
         setPlan(result.value.plan);
         setMessage(result.value.message ?? "");
-      } else setError(result.error.message);
+      } else setError(errorMessage(result.error));
     } finally {
       setBusy(false);
     }
@@ -74,7 +75,7 @@ export function RebaseDialog({
       await useRepositoryStore.getState().syncFromDisk();
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setConfirmed(false);
         return;
       }

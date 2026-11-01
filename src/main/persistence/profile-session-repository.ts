@@ -1,7 +1,6 @@
-import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import {
   emptySession,
   isDraft,
@@ -9,14 +8,16 @@ import {
   isSessionChange,
   type SessionSnapshot,
 } from "@shared/identity/profile-session";
-import type { Database } from "./types";
+import { and, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   identities,
-  repositories,
-  profileSessions,
   profileDrafts,
   profileRecovery,
+  profileSessions,
+  repositories,
 } from "./schema";
+import type { Database } from "./types";
 
 export class ProfileSessionRepository {
   constructor(private readonly db: Database) {}
@@ -90,11 +91,12 @@ export class ProfileSessionRepository {
 
   change(profileId: string, windowId: string, change: unknown): void {
     if (!isSessionChange(change))
-      throw invalid(t("main.persistence.profileSessionRepository.invalidSavedStateUpdate"));
+      throw invalid(errorText("main.persistence.profileSessionRepository.invalidSavedStateUpdate"));
 
     const current = this.read(profileId, windowId);
 
-    if (current.recovery) throw invalid(current.recovery);
+    if (current.recovery)
+      throw invalid(errorText("errors.operationBlocked", { reason: current.recovery }));
 
     if (change.kind === "tabs") {
       for (const repositoryId of change.tabs) this.requireRepository(profileId, repositoryId);
@@ -186,7 +188,9 @@ export class ProfileSessionRepository {
         .where(eq(identities.id, profileId))
         .get()
     )
-      throw invalid(t("main.persistence.profileSessionRepository.thatProfileNoLongerExists"));
+      throw invalid(
+        errorText("main.persistence.profileSessionRepository.thatProfileNoLongerExists"),
+      );
   }
 
   private requireRepository(profileId: string, repositoryId: string): void {
@@ -198,7 +202,9 @@ export class ProfileSessionRepository {
         .get()
     )
       throw invalid(
-        t("main.persistence.profileSessionRepository.theRepositoryDoesNotBelongToThisProfile"),
+        errorText(
+          "main.persistence.profileSessionRepository.theRepositoryDoesNotBelongToThisProfile",
+        ),
       );
   }
 }
@@ -219,7 +225,7 @@ function parse(value: string): unknown {
   }
 }
 
-function invalid(message: string): GitError {
+function invalid(message: ErrorText): GitError {
   return new GitError({
     kind: "invalid-input",
     operation: t("operations.saveProfileSession"),

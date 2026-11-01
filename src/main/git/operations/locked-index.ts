@@ -1,8 +1,9 @@
+import { ERROR_CODE, errorText } from "@shared/error-codes";
+import { AppError, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { randomUUID } from "node:crypto";
 import { open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { GitError } from "@shared/errors";
 import type { GitService } from "../git-service";
 
 export async function withLockedIndex<T>(
@@ -28,7 +29,7 @@ export async function withLockedIndex<T>(
     throw new GitError({
       kind: "lock-contention",
       operation: t("operations.reverseLocalAction"),
-      message: t("main.git.lockedIndex.anotherGitOperationHoldsTheIndexLockWait"),
+      message: errorText("main.git.lockedIndex.anotherGitOperationHoldsTheIndexLockWait"),
     });
   });
 
@@ -49,8 +50,7 @@ export async function withLockedIndex<T>(
         prepared = true;
       },
       async publish() {
-        if (!prepared || !ownsLock)
-          throw new Error(t("main.git.lockedIndex.noPreparedIndexIsAvailableToPublish"));
+        if (!prepared || !ownsLock) throw new AppError(ERROR_CODE.PREPARED_INDEX_MISSING);
         await lock.writeFile(await readFile(temporary));
         await lock.sync();
         await lock.close();

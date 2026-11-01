@@ -1,7 +1,8 @@
+import { errorText } from "@shared/error-codes";
+import { AppError, GitError, err, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { IPC_CHANNELS, type IPC_EVENTS, type IpcChannel } from "@shared/ipc";
 import { BrowserWindow, ipcMain } from "electron";
-import { GitError, err, type Result } from "@shared/errors";
-import { IPC_CHANNELS, type IpcChannel, type IPC_EVENTS } from "@shared/ipc";
 
 let activeRequests = 0;
 let resetting = false;
@@ -12,7 +13,7 @@ export function beginUpdateInstall(): () => void {
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.installUpdate"),
-      message: t("main.transport.waitForOtherRequestsToFinishThenInstallTheUpdateAgain"),
+      message: errorText("main.transport.waitForOtherRequestsToFinishThenInstallTheUpdateAgain"),
     });
   installingUpdate = true;
   return () => {
@@ -25,7 +26,7 @@ export async function exclusivelyReset(work: () => Promise<void>): Promise<void>
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.resetAppData"),
-      message: t("main.transport.waitForOtherRequestsToFinishThenResetEdaAgain"),
+      message: errorText("main.transport.waitForOtherRequestsToFinishThenResetEdaAgain"),
     });
   resetting = true;
   try {
@@ -46,22 +47,28 @@ export function handle(channel: IpcChannel, handler: Handler): void {
         kind: "invalid-input",
         operation: channel,
         message: installingUpdate
-          ? t("main.transport.edaIsRestartingToInstallAnUpdatePleaseWait")
-          : t("main.transport.edaIsResettingPleaseWait"),
+          ? errorText("main.transport.edaIsRestartingToInstallAnUpdatePleaseWait")
+          : errorText("main.transport.edaIsResettingPleaseWait"),
       });
     activeRequests++;
     try {
       return await handler(event, ...args);
     } catch (error) {
       if (error instanceof GitError) return err(error);
-
       console.error(`IPC handler ${channel} failed unexpectedly.`);
+      if (error instanceof AppError)
+        return err({
+          kind: "unknown",
+          operation: channel,
+          code: error.code,
+          message: error.text,
+        });
 
       return err({
         kind: "unknown",
         operation: channel,
-        message: t("main.transport.somethingWentWrongInsideEda"),
-        suggestedAction: t("main.transport.ifThisKeepsHappeningPleaseReportItWithTheLog"),
+        message: errorText("main.transport.somethingWentWrongInsideEda"),
+        suggestedAction: errorText("main.transport.ifThisKeepsHappeningPleaseReportItWithTheLog"),
       });
     } finally {
       activeRequests--;

@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../../helpers/error";
 import { act } from "react";
 import { useShellStore } from "@renderer/stores/shell-store";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,7 +79,9 @@ it("does not execute a blocked fast-forward-only pull", async () => {
 
 it("requests HTTPS credentials only after auth failure and retries with the same strategy", async () => {
   prepare.mockResolvedValueOnce(
-    err({ kind: "auth-failed", operation: "fetch", message: "Authentication failed" }),
+    err(
+      errorFixture({ kind: "auth-failed", operation: "fetch", message: "Authentication failed" }),
+    ),
   );
   await act(async () => api.pull("rebase"));
   expect(api.authentication).toBe("rebase");
@@ -123,7 +126,7 @@ it("does not apply a pull after the selected repository changes during fetch", a
 
 it("does not offer HTTPS credentials for SSH authentication failures", async () => {
   prepare.mockResolvedValue(
-    err({ kind: "auth-failed", operation: "fetch", message: "Unlock your SSH key" }),
+    err(errorFixture({ kind: "auth-failed", operation: "fetch", message: "Unlock your SSH key" })),
   );
   inspect.mockResolvedValue(
     ok({
@@ -161,7 +164,9 @@ it("shows the shared spinner and check inside Pull without opening a progress di
 
 it("shows an inline X on failure and only opens error details when requested", async () => {
   prepare.mockResolvedValueOnce(
-    err({ kind: "network-failed", operation: "fetch", message: "Network unavailable" }),
+    err(
+      errorFixture({ kind: "network-failed", operation: "fetch", message: "Network unavailable" }),
+    ),
   );
   await act(async () => root.render(<RepositorySyncActions />));
   const pullButton = [...container.querySelectorAll("button")].find(
@@ -180,7 +185,13 @@ it("shows an inline X on failure and only opens error details when requested", a
 it("allows cancelling the GitHub settings prompt without navigating or retrying the pull", async () => {
   useShellStore.setState({ request: null });
   prepare.mockResolvedValueOnce(
-    err({ kind: "github-auth-required", operation: "fetch", message: "Sign in with GitHub" }),
+    err(
+      errorFixture({
+        kind: "github-auth-required",
+        operation: "fetch",
+        message: "Sign in with GitHub",
+      }),
+    ),
   );
   await act(async () => root.render(<RepositorySyncActions />));
   const button = (label: string) =>

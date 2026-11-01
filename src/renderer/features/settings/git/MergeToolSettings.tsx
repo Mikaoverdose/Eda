@@ -1,12 +1,12 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useScopedSetting } from "../hooks/useScopedSetting";
-import { useEffect, useId, useState } from "react";
 import {
   defaultMergeTool,
   isMergeTool,
   type DetectedMergeTool,
   type MergeTool,
 } from "@shared/integrations/merge-tool";
+import { useEffect, useId, useState } from "react";
 import {
   Button,
   Disclosure,
@@ -15,6 +15,7 @@ import {
   Select,
   Textarea,
 } from "../../../components/ui/index";
+import { useScopedSetting } from "../hooks/useScopedSetting";
 
 export function MergeToolSettings({
   owner = "application",
@@ -40,7 +41,7 @@ export function MergeToolSettings({
       .then((result) => {
         if (!alive) return;
         if (result.ok) setTools(result.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       })
       .catch(() => {
         if (alive)
@@ -134,7 +135,7 @@ export function MergeToolSettings({
     try {
       const result = await window.eda.app.chooseMergeTool();
 
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else if (result.value) {
         const detected = tools.find((item) => item.executable === result.value);
 

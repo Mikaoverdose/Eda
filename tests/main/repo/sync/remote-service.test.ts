@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { GitError } from "@shared/errors";
 import { FetchHistoryRepository } from "@main/persistence/fetch-history-repository";
 import { afterEach, expect, it, vi } from "vitest";
@@ -829,7 +830,7 @@ it("keeps the named stash recoverable when cancellation prevents restoration", a
     if (args.includes("merge") && args.includes("--ff-only")) cancelled = true;
     if (cancelled)
       return Promise.reject(
-        new GitError({ kind: "cancelled", operation: "pull", message: "Cancelled" }),
+        new GitError(errorFixture({ kind: "cancelled", operation: "pull", message: "Cancelled" })),
       );
     return original(args, options);
   });
@@ -886,7 +887,9 @@ it("leaves local work and existing stashes untouched when fetching fails", async
   const spy = vi
     .spyOn(service, "fetchInPlace")
     .mockRejectedValue(
-      new GitError({ kind: "auth-failed", operation: "fetch", message: "Authentication failed" }),
+      new GitError(
+        errorFixture({ kind: "auth-failed", operation: "fetch", message: "Authentication failed" }),
+      ),
     );
   try {
     await expect(pull.prepare({ repositoryId: client.id, strategy: "rebase" })).rejects.toThrow(
@@ -989,12 +992,14 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
     );
     expect(options.redactValues).toContain(expected.password);
     if (rejected)
-      throw new GitError({
-        kind: "auth-failed",
-        operation: "fetch",
-        message: "Authentication failed",
-        ...(accessDenied ? { rawStderr: "The requested URL returned error: 403" } : {}),
-      });
+      throw new GitError(
+        errorFixture({
+          kind: "auth-failed",
+          operation: "fetch",
+          message: "Authentication failed",
+          ...(accessDenied ? { rawStderr: "The requested URL returned error: 403" } : {}),
+        }),
+      );
     const local = [...args];
     local[index] = ctx.server.path;
     return execute(local, options);

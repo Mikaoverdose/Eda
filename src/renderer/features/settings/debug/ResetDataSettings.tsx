@@ -1,3 +1,4 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { useState } from "react";
 import { Button } from "../../../components/ui/actions/Button";
@@ -12,7 +13,7 @@ export function ResetDataSettings() {
     setError(null);
     try {
       const result = await window.eda.app.debug("reset-data");
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
     } catch {
       setError(t("settings.resetDataSettings.couldNotResetEdaPleaseTryAgain"));
     } finally {

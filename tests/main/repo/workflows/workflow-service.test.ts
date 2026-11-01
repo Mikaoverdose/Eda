@@ -76,7 +76,7 @@ it("aborts only a current review and retains working and staged resolution copie
 
   expect(preview.paths).toEqual(["file.txt"]);
   await expect(context.workflow.abortMerge(repository.id, preview.token)).rejects.toThrow(
-    /not uptodate/,
+    /Recovery copies were saved/,
   );
   expect(await readFile(join(repo.path, "file.txt"), "utf8")).toBe("working resolution\n");
 

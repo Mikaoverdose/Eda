@@ -1,10 +1,11 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
-import { ArrowRight } from "lucide-react";
 import type { RepositorySummary } from "@shared/repository/repository";
+import { ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { Button, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionStore } from "../../stores/session-store";
-import { Button, Dialog, ErrorDialog } from "../../components/ui/index";
 
 export function MissingRepository({ repository }: { repository: RepositorySummary }) {
   const [candidate, setCandidate] = useState<string | null>(null);
@@ -17,7 +18,7 @@ export function MissingRepository({ repository }: { repository: RepositorySummar
     try {
       await action();
     } catch (failure) {
-      setError(String(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }
@@ -26,7 +27,7 @@ export function MissingRepository({ repository }: { repository: RepositorySummar
   const choose = () =>
     run(async () => {
       const result = await window.eda.repository.chooseFolder();
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else setCandidate(result.value);
     });
 
@@ -37,7 +38,7 @@ export function MissingRepository({ repository }: { repository: RepositorySummar
       const result = await window.eda.repository.relocate(repository.id, candidate);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 

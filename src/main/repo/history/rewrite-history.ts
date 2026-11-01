@@ -1,9 +1,11 @@
+import { ERROR_CODE, errorText } from "@shared/error-codes";
+import { AppError, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { GitService } from "../../git/git-service";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
-import type { DiscardService } from "../working-tree/discard-service";
 import { repositoryCommonDirectory } from "../lifecycle/repository-location";
 import { workflowFingerprint } from "../workflows/workflow-fingerprint";
+import type { DiscardService } from "../working-tree/discard-service";
 
 export interface RewriteStart {
   flags: string;
@@ -46,8 +48,7 @@ export async function ensureRecoveryRefs(
   for (const [suffix, oid] of expected) {
     const name = `${recoveryRef}/${suffix}`;
     const current = existing.get(name);
-    if (current && current !== oid)
-      throw new Error(t("main.rewriteHistory.aRequiredRewriteRecoveryRefIsMissingOrChanged"));
+    if (current && current !== oid) throw new AppError(ERROR_CODE.REWRITE_RECOVERY_REF_CHANGED);
     if (!current) missing.push(`create ${name} ${oid}`);
   }
 
@@ -81,7 +82,7 @@ export async function finalizeRewrite(
   const status = await git.status(root);
 
   if (status.branch.oid !== resultHead || status.branch.head !== record.branch)
-    throw new Error(t("main.rewriteHistory.theCompletedRewriteIsNotCheckedOutOnItsRecordedBranch"));
+    throw new AppError(ERROR_CODE.REWRITE_BRANCH_MISMATCH);
 
   const afterFingerprint = await workflowFingerprint(git, root, status);
   const afterFlags = (
@@ -135,7 +136,7 @@ export async function finalizeRewrite(
   let blockedReason: string | undefined;
 
   if (record.refOperation || record.refChange)
-    throw new Error(t("main.rewriteHistory.thisRecordAlreadyHasReferenceOrResetRecovery"));
+    throw new AppError(ERROR_CODE.REWRITE_RECOVERY_ALREADY_SET);
 
   const beforeFlags = start?.flags ?? "";
 
@@ -159,10 +160,10 @@ export async function finalizeRewrite(
 
       snapshotId = snapshot.id;
     } catch (error) {
-      blockedReason =
-        error instanceof Error
-          ? error.message
-          : t("main.rewriteHistory.savedRewriteContentCouldNotBePreparedUse");
+      blockedReason = errorMessage(
+        error,
+        errorText("main.rewriteHistory.savedRewriteContentCouldNotBePreparedUse"),
+      );
     }
   }
 

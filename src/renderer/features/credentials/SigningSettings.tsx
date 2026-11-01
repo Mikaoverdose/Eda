@@ -1,10 +1,11 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { GpgKeyPicker } from "./GpgKeyPicker";
-import { useGpgKeys } from "./hooks/useGpgKeys";
-import { useState } from "react";
 import type { Identity, SigningFormat } from "@shared/identity/identity";
 import type { SshKey } from "@shared/identity/ssh";
-import { Button, Checkbox, Field, ErrorDialog, Select } from "../../components/ui/index";
+import { useState } from "react";
+import { Button, Checkbox, ErrorDialog, Field, Select } from "../../components/ui/index";
+import { GpgKeyPicker } from "./GpgKeyPicker";
+import { useGpgKeys } from "./hooks/useGpgKeys";
 
 export function SigningSettings({
   identity,
@@ -60,7 +61,7 @@ export function SigningSettings({
         identity.id,
       );
 
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else {
         await onSaved();
       }
@@ -149,7 +150,7 @@ export function SigningSettings({
               void window.eda.ssh
                 .choosePublicKey()
                 .then((result) => {
-                  if (!result.ok) setError(result.error.message);
+                  if (!result.ok) setError(errorMessage(result.error));
                   else if (result.value) {
                     setKeyRefs((current) => ({ ...current, ssh: result.value! }));
                     void save("ssh", result.value);

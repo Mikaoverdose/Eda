@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { err, ok } from "@shared/errors";
@@ -126,11 +127,13 @@ it("opens GitHub with the displayed verification code, honors polling intervals,
 
 it("does not claim the code was copied when opening GitHub fails", async () => {
   github.openVerification.mockResolvedValue(
-    err({
-      kind: "unknown",
-      operation: "GitHub sign-in",
-      message: "Could not open GitHub.",
-    }),
+    err(
+      errorFixture({
+        kind: "unknown",
+        operation: "GitHub sign-in",
+        message: "Could not open GitHub.",
+      }),
+    ),
   );
   await render();
   await click("Sign in with GitHub");
@@ -324,11 +327,13 @@ it("offers reconnection when the saved login is rejected during repository acces
       ok({ ...status, account: { id: "1", login: "work-user", state: "expired" } }),
     );
   github.repositoryAccess.mockResolvedValue(
-    err({
-      kind: "github-auth-required",
-      operation: "GitHub sign-in",
-      message: "Your GitHub login expired.",
-    }),
+    err(
+      errorFixture({
+        kind: "github-auth-required",
+        operation: "GitHub sign-in",
+        message: "Your GitHub login expired.",
+      }),
+    ),
   );
   await render();
   expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnect required");

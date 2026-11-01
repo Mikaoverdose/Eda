@@ -1,21 +1,21 @@
+import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { LoadingContent, Skeleton } from "../../components/ui/feedback/Skeleton";
-import { ErrorDialog } from "../../components/ui/index";
-import { useMemo, useState } from "react";
 import { defaultGraphColumns } from "@shared/preferences/graph-view";
-import { useSessionStore } from "../../stores/session-store";
-import { GraphColumnsDialog } from "./GraphColumnsDialog";
-import { GraphFilterDialog } from "./GraphFilterDialog";
-import { CommitMenu, type CommitMenuTarget } from "./CommitMenu";
-import { CommitRow } from "./CommitRow";
-import { layoutCommitPages } from "../../repository/dag-layout";
-import { ROW_HEIGHT, graphColumnWidth } from "../../repository/graph-geometry";
-import { useRepositoryStore } from "../../stores/repository-store";
 import { ArrowLeft, ArrowRight, GitCommitHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
 import { PanelControls } from "../../components/layout/PanelControls";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
-import { IconButton, TextButton } from "../../components/ui/index";
+import { LoadingContent, Skeleton } from "../../components/ui/feedback/Skeleton";
+import { ErrorDialog, IconButton, TextButton } from "../../components/ui/index";
+import { layoutCommitPages } from "../../repository/dag-layout";
+import { ROW_HEIGHT, graphColumnWidth } from "../../repository/graph-geometry";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { useSessionStore } from "../../stores/session-store";
+import { CommitMenu, type CommitMenuTarget } from "./CommitMenu";
+import { CommitRow } from "./CommitRow";
+import { GraphColumnsDialog } from "./GraphColumnsDialog";
+import { GraphFilterDialog } from "./GraphFilterDialog";
 
 export function CommitGraph({ pending = false }: { pending?: boolean }) {
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
@@ -206,8 +206,8 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
                 </TextButton>
               }
             >
-              <p>{historyError.message}</p>
-              <p>{historyError.suggestedAction}</p>
+              <p>{errorMessage(historyError)}</p>
+              <p>{errorAction(historyError)}</p>
             </ErrorDialog>
           )}
           {historyTip && (

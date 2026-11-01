@@ -1,20 +1,21 @@
-import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { basename, dirname, join } from "node:path";
-import { lstat, writeFile } from "node:fs/promises";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
-import type { RepositorySummary, InitRepositoryOptions } from "@shared/repository/repository";
-import { assertValidRefName } from "../../git/validation";
-import { initFiles } from "./init-files";
+import type { InitRepositoryOptions, RepositorySummary } from "@shared/repository/repository";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { lstat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import type { GitService } from "../../git/git-service";
+import { assertValidRefName } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
 import { findIdentityForPath } from "../../identity/path-rules";
 import type { IdentityRepository } from "../../persistence/identity-repository";
 import { repositories, type RepositoryRow } from "../../persistence/schema";
 import type { Database } from "../../persistence/types";
+import { initFiles } from "./init-files";
 
 export class RepositoryManager {
   constructor(
@@ -59,8 +60,8 @@ export class RepositoryManager {
       throw new GitError({
         kind: "not-a-repository",
         operation: t("operations.openRepository"),
-        message: t("main.repositoryManager.isNotAGitRepository", { path: path }),
-        suggestedAction: t(
+        message: errorText("main.repositoryManager.isNotAGitRepository", { path: path }),
+        suggestedAction: errorText(
           "main.repositoryManager.chooseAFolderContainingAGitRepositoryOrInitializeOneHere",
         ),
         repositoryPath: path,
@@ -88,7 +89,7 @@ export class RepositoryManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.createRepository"),
-          message: t("main.repositoryManager.theOriginatingProfileNoLongerExists"),
+          message: errorText("main.repositoryManager.theOriginatingProfileNoLongerExists"),
         });
 
       assertValidRefName(options.branch, t("operations.createRepository"));
@@ -97,15 +98,15 @@ export class RepositoryManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.createRepository"),
-          message: t("main.repositoryManager.headIsReservedChooseABranchName"),
+          message: errorText("main.repositoryManager.headIsReservedChooseABranchName"),
         });
 
       if (await this.git.isRepository(path)) {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.createRepository"),
-          message: t("main.repositoryManager.isAlreadyAGitRepository", { path: path }),
-          suggestedAction: t("main.repositoryManager.openItInsteadOrChooseAnEmptyFolder"),
+          message: errorText("main.repositoryManager.isAlreadyAGitRepository", { path: path }),
+          suggestedAction: errorText("main.repositoryManager.openItInsteadOrChooseAnEmptyFolder"),
           repositoryPath: path,
         });
       }
@@ -122,9 +123,12 @@ export class RepositoryManager {
           throw new GitError({
             kind: "invalid-input",
             operation: t("operations.createRepository"),
-            message: t("main.repositoryManager.alreadyExistsDeselectItToPreserveTheExistingFile", {
-              name: name,
-            }),
+            message: errorText(
+              "main.repositoryManager.alreadyExistsDeselectItToPreserveTheExistingFile",
+              {
+                name: name,
+              },
+            ),
           });
       }
 
@@ -154,7 +158,7 @@ export class RepositoryManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.locateRepository"),
-          message: t("main.repositoryManager.theRepositoryChangedRefreshAndTryAgain"),
+          message: errorText("main.repositoryManager.theRepositoryChangedRefreshAndTryAgain"),
         });
       }
 
@@ -162,7 +166,7 @@ export class RepositoryManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.locateRepository"),
-          message: t(
+          message: errorText(
             "main.repositoryManager.theSavedRepositoryIsStillAvailableOpenTheOtherFolderSeparately",
           ),
         });
@@ -172,7 +176,7 @@ export class RepositoryManager {
         throw new GitError({
           kind: "not-a-repository",
           operation: t("operations.locateRepository"),
-          message: t("main.repositoryManager.chooseTheMovedGitRepositorySFolder"),
+          message: errorText("main.repositoryManager.chooseTheMovedGitRepositorySFolder"),
         });
       }
 
@@ -189,7 +193,7 @@ export class RepositoryManager {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.locateRepository"),
-          message: t("main.repositoryManager.thisProfileAlreadyListsThatFolderItsSeparate"),
+          message: errorText("main.repositoryManager.thisProfileAlreadyListsThatFolderItsSeparate"),
         });
       }
 
@@ -233,8 +237,8 @@ export class RepositoryManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.accessRepository"),
-        message: t("main.repositoryManager.thatRepositoryDoesNotBelongToTheActiveIdentity"),
-        suggestedAction: t(
+        message: errorText("main.repositoryManager.thatRepositoryDoesNotBelongToTheActiveIdentity"),
+        suggestedAction: errorText(
           "main.repositoryManager.switchToItsOwningIdentityOrRefreshTheRepositoryList",
         ),
       });
@@ -291,7 +295,9 @@ export class RepositoryManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.updateRepository"),
-        message: t("main.repositoryManager.useARepositoryNameBetween1And120CharactersWithout"),
+        message: errorText(
+          "main.repositoryManager.useARepositoryNameBetween1And120CharactersWithout",
+        ),
       });
 
     this.db
@@ -308,8 +314,8 @@ export class RepositoryManager {
       throw new GitError({
         kind: "invalid-input",
         operation,
-        message: t("main.repositoryManager.noIdentityIsActive"),
-        suggestedAction: t(
+        message: errorText("main.repositoryManager.noIdentityIsActive"),
+        suggestedAction: errorText(
           "main.repositoryManager.createOrSelectAnIdentityFirstBecauseRepositories",
         ),
       });

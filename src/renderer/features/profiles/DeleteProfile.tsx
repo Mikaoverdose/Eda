@@ -1,9 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ErrorDialog } from "../../components/ui/index";
-import { useState } from "react";
 import type { ProfileDeletePreview } from "@shared/identity/profile-session";
+import { useState } from "react";
+import { Button, Dialog, ErrorDialog, TextButton } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
-import { Button, Dialog, TextButton } from "../../components/ui/index";
 
 export function DeleteProfile({
   preview,
@@ -26,7 +26,7 @@ export function DeleteProfile({
           t("profiles.deleteProfile.deletionWasNotCompletedReviewTheLatestPreviewAndTryAgain"),
         );
     } catch (error) {
-      setError(String(error));
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }

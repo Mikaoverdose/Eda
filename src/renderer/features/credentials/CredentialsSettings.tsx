@@ -1,14 +1,13 @@
+import type { Result } from "@shared/errors";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { SshKeyList } from "./SshKeyList";
-import { useEffect, useState } from "react";
 import type {
   AgentStatus,
   ConnectionTestResult,
   SecretMetadata,
   SshKey,
 } from "@shared/identity/ssh";
-import type { Result } from "@shared/errors";
-import { useAppStore } from "../../stores/app-store";
+import { useEffect, useState } from "react";
 import {
   Button,
   Checkbox,
@@ -18,7 +17,9 @@ import {
   NoticeBanner,
   StateMessage,
 } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
 import { SigningSettings } from "./SigningSettings";
+import { SshKeyList } from "./SshKeyList";
 
 export function CredentialsSettings() {
   const identity = useAppStore((state) => state.activeIdentity);
@@ -56,7 +57,7 @@ export function CredentialsSettings() {
 
     const failure = [keyResult, agentResult, secretResult].find((result) => !result.ok);
 
-    if (failure && !failure.ok) setMessage(failure.error.message);
+    if (failure && !failure.ok) setMessage(errorMessage(failure.error));
 
     return !failure;
   };
@@ -104,16 +105,16 @@ export function CredentialsSettings() {
     run("import", async () => {
       const chosen = await window.eda.ssh.choosePrivateKey();
 
-      if (!chosen.ok) return chosen.error.message;
+      if (!chosen.ok) return errorMessage(chosen.error);
       if (!chosen.value) return undefined;
 
       const imported = await window.eda.ssh.importKey(chosen.value);
 
-      if (!imported.ok) return imported.error.message;
+      if (!imported.ok) return errorMessage(imported.error);
 
       const assigned = await window.eda.identity.assignSshKey(imported.value.path, identity.id);
 
-      if (!assigned.ok) return assigned.error.message;
+      if (!assigned.ok) return errorMessage(assigned.error);
 
       await refreshIdentities();
 
@@ -126,7 +127,7 @@ export function CredentialsSettings() {
     run("generate", async () => {
       const chosen = await window.eda.ssh.chooseKeyDestination();
 
-      if (!chosen.ok) return chosen.error.message;
+      if (!chosen.ok) return errorMessage(chosen.error);
       if (!chosen.value) return undefined;
 
       const generated = await window.eda.ssh.generateKey({
@@ -135,11 +136,11 @@ export function CredentialsSettings() {
         comment: identity.gitEmail,
       });
 
-      if (!generated.ok) return generated.error.message;
+      if (!generated.ok) return errorMessage(generated.error);
 
       const assigned = await window.eda.identity.assignSshKey(generated.value.path, identity.id);
 
-      if (!assigned.ok) return assigned.error.message;
+      if (!assigned.ok) return errorMessage(assigned.error);
 
       await refreshIdentities();
 
@@ -151,7 +152,7 @@ export function CredentialsSettings() {
   const assign = (path: string | null) =>
     run("assign", async () => {
       const result = await window.eda.identity.assignSshKey(path, identity.id);
-      if (!result.ok) return result.error.message;
+      if (!result.ok) return errorMessage(result.error);
       await refreshIdentities();
       return undefined;
     });
@@ -170,7 +171,7 @@ export function CredentialsSettings() {
         identity.id,
       );
 
-      if (!result.ok) return result.error.message;
+      if (!result.ok) return errorMessage(result.error);
 
       setPassphrase("");
 
@@ -180,7 +181,7 @@ export function CredentialsSettings() {
   const forget = () =>
     run("forget", async () => {
       const result = await window.eda.credentials.forgetActivePassphrase(identity.id);
-      if (!result.ok) return result.error.message;
+      if (!result.ok) return errorMessage(result.error);
       setRemember(false);
       return t("credentialsSettings.forgotTheSavedPassphrase");
     });
@@ -373,7 +374,7 @@ export function CredentialsSettings() {
             >
               {connectionResult.ok
                 ? connectionResult.value.message
-                : connectionResult.error.message}
+                : errorMessage(connectionResult.error)}
             </NoticeBanner>
           </div>
         )}

@@ -1,6 +1,8 @@
+import { redactDiagnostic } from "@shared/diagnostics";
+import { errorText } from "@shared/error-codes";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { redactDiagnostic } from "@shared/diagnostics";
 import { Button } from "../components/ui/actions/Button";
 
 interface Props {
@@ -36,7 +38,7 @@ export class RendererFailureBoundary extends Component<Props, State> {
   static getDerivedStateFromError(error: Error): State {
     return {
       error: redactDiagnostic(
-        error.message || t("rendererFailure.anUnexpectedRendererErrorOccurred"),
+        errorMessage(error, errorText("rendererFailure.anUnexpectedRendererErrorOccurred")),
       ),
     };
   }

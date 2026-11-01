@@ -1,6 +1,7 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { BackgroundFetchState, FetchHistory } from "@shared/integrations/background-fetch";
-import { GitError } from "@shared/errors";
 import type { IdentityManager } from "../../identity/identity-manager";
 import type { ProfileSessionRepository } from "../../persistence/profile-session-repository";
 import type { SettingsRepository } from "../../persistence/settings-repository";
@@ -88,7 +89,9 @@ export class BackgroundFetchService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.retryBackgroundFetch"),
-        message: t("main.backgroundFetchService.backgroundFetchIsPausedByNetworkConditionsOr"),
+        message: errorText(
+          "main.backgroundFetchService.backgroundFetchIsPausedByNetworkConditionsOr",
+        ),
       });
 
     await this.remotes.fetch({ repositoryId, remote, prune: false, tags: false });

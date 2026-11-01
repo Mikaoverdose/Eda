@@ -1,3 +1,4 @@
+import { errorText } from "@shared/error-codes";
 import { t } from "@shared/i18n";
 import { GitError } from "../errors";
 
@@ -20,7 +21,7 @@ export function accountOwnerKey(owner: AccountOwner): string {
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.accountOwnership"),
-      message: t("shared.accounts.invalidProfileHostOrAccountOwner"),
+      message: errorText("shared.accounts.invalidProfileHostOrAccountOwner"),
     });
   }
 

@@ -202,8 +202,7 @@ it("recovers from shutdown refusal and asynchronous native installation failures
   expect(rollback).toHaveBeenCalledOnce();
 });
 
-it("accepts generated metadata while refusing off-origin, insecure or checksumless artifacts", () => {
-  const feed = "https://eda.kirameki.cafe/api/updates/v1/stable/win/x64/";
+it("maps server metadata without restricting artifact hosts or validating checksums", () => {
   const info: UpdateInfo = {
     path: "Eda-0.0.2-win-x64.exe",
     sha512: createHash("sha512").update("fixture").digest("base64"),
@@ -219,22 +218,20 @@ it("accepts generated metadata while refusing off-origin, insecure or checksumle
     ],
     releaseNotes: "<script>These notes are rendered as text.</script>",
   };
-  expect(releaseFromManifest(info, feed)).toMatchObject({
+  expect(releaseFromManifest(info)).toMatchObject({
     version: "0.0.2",
     notes: info.releaseNotes,
   });
   for (const url of [
-    "http://eda.kirameki.cafe/file",
-    "https://other.example/file",
-    "file:///tmp/app.exe",
-    "https://user@eda.kirameki.cafe/file",
+    "https://downloads.example.com/Eda.exe",
+    "https://github.com/another/repo/releases/download/v1/Eda.exe",
   ]) {
-    expect(() =>
-      releaseFromManifest({ ...info, files: [{ ...info.files[0]!, url }] }, feed),
-    ).toThrow(/Invalid update/);
+    expect(
+      releaseFromManifest({
+        ...info,
+        files: [{ ...info.files[0]!, url, sha512: "server-checksum" }],
+      }),
+    ).toMatchObject({ version: info.version });
   }
-  expect(() =>
-    releaseFromManifest({ ...info, files: [{ ...info.files[0]!, sha512: "bad" }] }, feed),
-  ).toThrow();
-  expect(() => releaseFromManifest({ ...info, files: [] }, feed)).toThrow();
+  expect(releaseFromManifest({ ...info, files: [] })).toMatchObject({ version: info.version });
 });

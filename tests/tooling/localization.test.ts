@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkLocalization } from "../../scripts/check-localization.ts";
+import { checkLocalization } from "./localization.ts";
 
 test("catalogs preserve keys, parameters, plural forms, and externalized JSX copy", () => {
   assert.deepEqual(checkLocalization(process.cwd()), []);

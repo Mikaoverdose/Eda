@@ -1,3 +1,4 @@
+import { errorMessage } from "@shared/errors";
 import { useCallback, useRef } from "react";
 import { flushSync } from "react-dom";
 import { prefersReducedMotion } from "../../../motion";
@@ -140,7 +141,7 @@ export function useViewTransition() {
         }
       })
       .catch((error: unknown) => {
-        captureError = error instanceof Error ? error.message : String(error);
+        captureError = errorMessage(error);
 
         if (running !== job || prefersReducedMotion() || motion === "layout") return;
 

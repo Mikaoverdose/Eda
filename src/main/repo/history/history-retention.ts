@@ -1,9 +1,10 @@
-import { t } from "@shared/i18n";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { GitService } from "../../git/git-service";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({
     kind: "invalid-input",
     operation: t("operations.retainHistoryRecovery"),
@@ -22,7 +23,9 @@ export async function pruneHistoryRecords(
     !["undoing", "redoing"].includes(record.refChange?.reversal?.state ?? "");
 
   if (records.filter((record) => !completed(record)).length >= 100)
-    throw invalid(t("main.historyRetention.thereAreTooManyUnfinishedHistoryRecordsInspect"));
+    throw invalid(
+      errorText("main.historyRetention.thereAreTooManyUnfinishedHistoryRecordsInspect"),
+    );
 
   const complete = records.filter(completed);
 

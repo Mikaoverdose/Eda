@@ -1,19 +1,20 @@
-import { stateLabel } from "@shared/i18n/labels";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { formatDateTime } from "../utils/format";
-import { BackgroundFetchPanel } from "../features/sync/BackgroundFetchPanel";
-import {
-  ErrorDialog,
-  Disclosure,
-  TextButton,
-  ListItemButton,
-  CodeBlock,
-} from "../components/ui/index";
-import { useEffect, useState } from "react";
-import { Activity, ChevronUp, RefreshCw } from "lucide-react";
+import { stateLabel } from "@shared/i18n/labels";
 import type { OperationRecord } from "@shared/operations";
+import { Activity, ChevronUp, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  CodeBlock,
+  Disclosure,
+  ErrorDialog,
+  ListItemButton,
+  TextButton,
+} from "../components/ui/index";
+import { BackgroundFetchPanel } from "../features/sync/BackgroundFetchPanel";
 import { useAppStore } from "../stores/app-store";
 import { useRepositoryStore } from "../stores/repository-store";
+import { formatDateTime } from "../utils/format";
 
 export function ActivityPanel() {
   const repositories = useAppStore((state) => state.repositories);
@@ -34,7 +35,7 @@ export function ActivityPanel() {
       if (result.ok) {
         setRecords(result.value);
         setError(null);
-      } else setError(result.error.message);
+      } else setError(errorMessage(result.error));
     };
 
     void load();
@@ -66,7 +67,7 @@ export function ActivityPanel() {
 
     try {
       const result = await window.eda.operations[action](id);
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
     } finally {
       setBusy(null);
     }

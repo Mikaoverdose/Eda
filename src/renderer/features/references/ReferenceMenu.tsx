@@ -1,21 +1,20 @@
+import { ERROR_CODE, errorText } from "@shared/error-codes";
+import type { Result } from "@shared/errors";
+import { AppError, errorAction, errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { copyText } from "../../utils/clipboard";
-import { useContext, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Copy, GitBranch, GitMerge, GitPullRequestArrow, Link, Pencil, Trash2 } from "lucide-react";
 import type {
   BranchSummary,
   TagSummary,
   TagVerification,
 } from "@shared/repository/repository-write";
-import type { Result } from "@shared/errors";
+import { Copy, GitBranch, GitMerge, GitPullRequestArrow, Link, Pencil, Trash2 } from "lucide-react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
   repositoryCommandReason,
 } from "../../commands/repository-commands";
-import { useRepositoryStore } from "../../stores/repository-store";
-import { branchDeleteTargets } from "../../repository/branch-delete-targets";
 import {
   Button,
   Checkbox,
@@ -27,9 +26,12 @@ import {
   PopoverSurface,
   Radio,
 } from "../../components/ui/index";
+import { ModalSurfaceContext } from "../../components/ui/overlays/ModalSurface";
+import { branchDeleteTargets } from "../../repository/branch-delete-targets";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { copyText } from "../../utils/clipboard";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { RebaseDialog } from "../workflows/RebaseDialog";
-import { ModalSurfaceContext } from "../../components/ui/overlays/ModalSurface";
 
 export type ReferenceTarget = (
   { kind: "branch"; ref: BranchSummary } | { kind: "tag"; ref: TagSummary }
@@ -89,14 +91,12 @@ export function ReferenceMenu({
   };
   const assertContext = () => {
     const reason = repositoryCommandReason(context);
-    if (reason) throw new Error(reason);
+    if (reason) throw new AppError(errorText("errors.operationBlocked", { reason }));
   };
   const requireResult = <T,>(result: Result<T>): T => {
     if (!result.ok) {
       setNeedsAuth(result.error.kind === "auth-failed");
-      throw new Error(
-        [result.error.message, result.error.suggestedAction].filter(Boolean).join(" "),
-      );
+      throw new GitError(result.error);
     }
     return result.value;
   };
@@ -114,7 +114,12 @@ export function ReferenceMenu({
       if (options.dismiss !== false) onClose();
     } catch (failure) {
       setError(
-        failure instanceof Error ? failure.message : t("referenceMenu.theReferenceActionFailed"),
+        [
+          errorMessage(failure, errorText("referenceMenu.theReferenceActionFailed")),
+          errorAction(failure),
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
     } finally {
       running.current = false;
@@ -131,13 +136,16 @@ export function ReferenceMenu({
         await refresh();
         return;
       }
-      if (!targets) throw new Error(t("referenceMenu.waitForBranchTargetsToLoad"));
+      if (!targets) throw new AppError(ERROR_CODE.BRANCH_TARGETS_NOT_READY);
       if (includesLocal && (!targets.local || targets.localBlocked))
-        throw new Error(targets.localBlocked ?? t("referenceMenu.noMatchingLocalBranchExists"));
+        throw new AppError(
+          errorText("errors.operationBlocked", {
+            reason: targets.localBlocked ?? t("referenceMenu.noMatchingLocalBranchExists"),
+          }),
+        );
       try {
         if (includesRemote && !remoteDeleted) {
-          if (!targets.remote)
-            throw new Error(t("referenceMenu.noTrackedRemoteBranchIsConfigured"));
+          if (!targets.remote) throw new AppError(ERROR_CODE.TRACKED_BRANCH_MISSING);
           const credentials = needsAuth ? auth : undefined;
           const preview = requireResult(
             await window.eda.remotes.preparePush({
@@ -287,10 +295,7 @@ export function ReferenceMenu({
                       target.ref.name,
                     ),
                   );
-                  if (!url)
-                    throw new Error(
-                      t("referenceMenu.noSupportedBrowserUrlIsAvailableForTheDefaultRemote"),
-                    );
+                  if (!url) throw new AppError(ERROR_CODE.REMOTE_BROWSER_URL_UNAVAILABLE);
                   await copyText(url);
                 },
                 { write: false },

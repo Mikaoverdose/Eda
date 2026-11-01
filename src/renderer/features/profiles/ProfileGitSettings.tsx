@@ -1,22 +1,23 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { RotateCcw, UserRound } from "lucide-react";
 import {
   commitConfigKeys,
   type CommitConfigGroup,
   type GitConfigEntry,
   type ProfileGitInspection,
 } from "@shared/identity/profile-session";
-import { useAppStore } from "../../stores/app-store";
-import { RepositoryCommitIdentity } from "../settings/repository/RepositoryCommitIdentity";
+import { RotateCcw, UserRound } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   AsyncButton,
   DefinitionList,
   Disclosure,
   ErrorDialog,
-  StateMessage,
   RefreshButton,
+  StateMessage,
 } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { RepositoryCommitIdentity } from "../settings/repository/RepositoryCommitIdentity";
 
 export function ProfileGitSettings() {
   return <GitSettings scope="profile" />;
@@ -57,7 +58,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
         return true;
       }
 
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
 
       return false;
     } catch {
@@ -95,7 +96,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
       if (request !== generation.current) return false;
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return false;
       }
 
@@ -127,7 +128,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
 
       return refreshed;
     } catch (error) {
-      if (request === generation.current) setError(String(error));
+      if (request === generation.current) setError(errorMessage(error));
       return false;
     } finally {
       setBusy(null);

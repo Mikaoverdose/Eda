@@ -1,10 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
-import { TriangleAlert } from "lucide-react";
 import { profileGitConfig, type Identity } from "@shared/identity/identity";
 import type { GitConfigEntry } from "@shared/identity/profile-session";
-import { useAppStore } from "../stores/app-store";
-import { usePreferencesStore } from "../stores/preferences-store";
+import { TriangleAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   AsyncButton,
   Button,
@@ -14,6 +13,8 @@ import {
   Disclosure,
   NoticeBanner,
 } from "../components/ui/index";
+import { useAppStore } from "../stores/app-store";
+import { usePreferencesStore } from "../stores/preferences-store";
 
 export function GlobalGitWarning({ onReview }: { onReview: () => void }) {
   const profile = useAppStore((state) => state.activeIdentity);
@@ -55,7 +56,7 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
         const result = await window.eda.identity.inspectGit();
         if (!mounted.current || request !== generation.current) return false;
         if (!result.ok) {
-          setError(result.error.message);
+          setError(errorMessage(result.error));
           return false;
         }
         if (result.value.profileId !== profile.id) return false;
@@ -101,7 +102,7 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
       const result = await window.eda.identity.reapplyGlobal(profile.id);
       if (!mounted.current) return false;
       if (!result.ok) {
-        setApplyError(result.error.message);
+        setApplyError(errorMessage(result.error));
         return false;
       }
       const matches = await refreshRef.current();

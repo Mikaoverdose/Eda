@@ -1,42 +1,48 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { createTextSearch } from "../../utils/search";
-import { FetchSettings } from "./git/FetchSettings";
-import { RepositoryRemotesSettings } from "./repository/RepositoryRemotesSettings";
+import {
+  FlaskConical,
+  FolderGit2,
+  GitBranch,
+  Info,
+  KeyRound,
+  Monitor,
+  Palette,
+  PanelsTopLeft,
+  Plug,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ViewTransition } from "../../components/layout/ViewTransition";
 import { useViewTransition } from "../../components/layout/hooks/useViewTransition";
-import { ErrorDialog } from "../../components/ui/index";
-import { RepositoryPullSettings } from "./repository/RepositoryPullSettings";
+import {
+  cx,
+  ErrorDialog,
+  ListItemButton,
+  SearchField,
+  StateMessage,
+} from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { usePreferencesStore } from "../../stores/preferences-store";
+import { createTextSearch } from "../../utils/search";
+import { CredentialsSettings } from "../credentials/CredentialsSettings";
+import { ProfileGitSettings, RepositoryGitSettings } from "../profiles/ProfileGitSettings";
+import { ProfileRepositoriesSettings } from "../profiles/ProfileRepositoriesSettings";
+import { ProfilesSettings } from "../profiles/ProfilesSettings";
+import { ScopedPreferences } from "./ScopedPreferences";
+import { AccentSettings } from "./appearance/AccentSettings";
+import { AppearanceControls } from "./appearance/AppearanceControls";
+import { AboutSettings } from "./application/AboutSettings";
+import { ApplicationPreferences } from "./application/ApplicationPreferences";
+import { FailureSimulations } from "./debug/FailureSimulations";
+import { ResetDataSettings } from "./debug/ResetDataSettings";
+import { FetchSettings } from "./git/FetchSettings";
 import { GitEngineSettings } from "./git/GitEngineSettings";
 import { SshAgentSettings } from "./git/SshAgentSettings";
 import { IntegrationsSettings } from "./integrations/IntegrationsSettings";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { useAppStore } from "../../stores/app-store";
-import { usePreferencesStore } from "../../stores/preferences-store";
-import { cx, SearchField, ListItemButton, StateMessage } from "../../components/ui/index";
-import { CredentialsSettings } from "../credentials/CredentialsSettings";
-import { ProfilesSettings } from "../profiles/ProfilesSettings";
-import { ProfileGitSettings, RepositoryGitSettings } from "../profiles/ProfileGitSettings";
-import { ProfileRepositoriesSettings } from "../profiles/ProfileRepositoriesSettings";
-import { ApplicationPreferences } from "./application/ApplicationPreferences";
-import { AppearanceControls } from "./appearance/AppearanceControls";
-import { AccentSettings } from "./appearance/AccentSettings";
-import { ScopedPreferences } from "./ScopedPreferences";
-import { FailureSimulations } from "./debug/FailureSimulations";
-import { ResetDataSettings } from "./debug/ResetDataSettings";
-import { AboutSettings } from "./application/AboutSettings";
-import {
-  UsersRound,
-  Palette,
-  Monitor,
-  GitBranch,
-  FolderGit2,
-  KeyRound,
-  Plug,
-  PanelsTopLeft,
-  FlaskConical,
-  Info,
-  type LucideIcon,
-} from "lucide-react";
+import { RepositoryPullSettings } from "./repository/RepositoryPullSettings";
+import { RepositoryRemotesSettings } from "./repository/RepositoryRemotesSettings";
 
 const ComponentGallery = lazy(() =>
   import("../../devtools/component-gallery/ComponentGallery").then((module) => ({
@@ -324,7 +330,7 @@ export function Settings({
         <ViewTransition ref={navigation.ref} className="mx-auto max-w-[68rem] px-6 py-8 lg:px-10">
           {error && (
             <ErrorDialog onDismiss={() => usePreferencesStore.setState({ error: null })}>
-              {error.message}
+              {errorMessage(error)}
             </ErrorDialog>
           )}
           {sections.map((section) => (

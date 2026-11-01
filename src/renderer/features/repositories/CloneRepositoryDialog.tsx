@@ -1,8 +1,9 @@
+import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
 import type { TransportCredentials } from "@shared/integrations/remotes";
+import { useState } from "react";
+import { Button, Dialog, ErrorDialog, Input } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
-import { Button, Dialog, Input, ErrorDialog } from "../../components/ui/index";
 import { TransferProgress, TransportFields } from "../sync/TransportFields";
 
 export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
@@ -31,8 +32,8 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
       if (!result.ok) {
         setError(
           t("cloneRepositoryDialog.anyIncompleteDestinationIsPreservedInspectItBefore", {
-            message: result.error.message,
-            value2: result.error.suggestedAction ?? "",
+            message: errorMessage(result.error),
+            value2: errorAction(result.error) ?? "",
           }),
         );
         return;
@@ -92,7 +93,7 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
           onClick={() =>
             void window.eda.repository.chooseFolder().then((result) => {
               if (result.ok && result.value) setParent(result.value);
-              else if (!result.ok) setError(result.error.message);
+              else if (!result.ok) setError(errorMessage(result.error));
             })
           }
         >

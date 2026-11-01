@@ -1,11 +1,8 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { commits, demoBranches, demoTags, containingDemoRefs } from "./demo-history";
-export { commits } from "./demo-history";
-import type { EdaApi } from "@shared/ipc";
 import type { Identity } from "@shared/identity/identity";
-import type { RepositorySummary } from "@shared/repository/repository";
-import type { RepositoryStatus, UnifiedDiff } from "@shared/repository/repository-read";
-import type { StashEntry } from "@shared/workflows/stashes";
+import type { EdaApi } from "@shared/ipc";
 import {
   builtInSetting,
   type ResolvedSetting,
@@ -13,6 +10,11 @@ import {
   type SettingScope,
   type SettingValues,
 } from "@shared/preferences/settings";
+import type { RepositorySummary } from "@shared/repository/repository";
+import type { RepositoryStatus, UnifiedDiff } from "@shared/repository/repository-read";
+import type { StashEntry } from "@shared/workflows/stashes";
+import { commits, containingDemoRefs, demoBranches, demoTags } from "./demo-history";
+export { commits } from "./demo-history";
 
 export const demoIdentity: Identity = {
   id: "tour-profile",
@@ -190,11 +192,11 @@ export function createDemo() {
         if (key !== "diffMode" || (value !== "unified" && value !== "split"))
           return {
             ok: false as const,
-            error: {
-              kind: "cancelled" as const,
+            error: new GitError({
+              kind: "cancelled",
               operation: "tour.settings.set",
-              message: t("tutorial.demo.thisSettingCannotBeChangedInTheGuidedDemo"),
-            },
+              message: errorText("tutorial.demo.thisSettingCannotBeChangedInTheGuidedDemo"),
+            }).toData(),
           };
         diffMode = { key: "diffMode", value, source: scope, hasOverride: true };
         return ok(undefined);
@@ -216,13 +218,13 @@ export function createDemo() {
           if (group === "events") return () => () => {};
           return async () => ({
             ok: false,
-            error: {
+            error: new GitError({
               kind: "cancelled",
               operation: `tour.${group}.${method}`,
-              message: t(
+              message: errorText(
                 "tutorial.demo.thisActionIsOutsideTheGuidedDemoYourRealWorkspaceIsUnchanged",
               ),
-            },
+            }).toData(),
           });
         },
       });

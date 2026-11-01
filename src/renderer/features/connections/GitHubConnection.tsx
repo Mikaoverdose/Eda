@@ -1,28 +1,29 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, ExternalLink, MapPin } from "lucide-react";
 import type {
-  GitHubSignIn,
-  GitHubStatus,
   GitHubAccountProfile,
   GitHubRepositoryAccess,
+  GitHubSignIn,
+  GitHubStatus,
 } from "@shared/integrations/github";
-import {
-  ActionIndicator,
-  Button,
-  CopyButton,
-  ErrorDialog,
-  CodeBlock,
-  TextButton,
-  Skeleton,
-} from "../../components/ui/index";
-import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
-import { useAppStore } from "../../stores/app-store";
-import { ServiceAccountCard } from "./ServiceAccountCard";
 import {
   GITHUB_INSTALLATION_POLL_MS,
   GITHUB_INSTALLATION_WAIT_MS,
 } from "@shared/integrations/github";
+import { Copy, ExternalLink, MapPin } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
+import {
+  ActionIndicator,
+  Button,
+  CodeBlock,
+  CopyButton,
+  ErrorDialog,
+  Skeleton,
+  TextButton,
+} from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { ServiceAccountCard } from "./ServiceAccountCard";
 
 export function GitHubConnection({
   profileId,
@@ -79,7 +80,7 @@ export function GitHubConnection({
           finish(() => {
             setAccess(null);
             if (refreshed?.ok) setStatus(refreshed.value);
-            setError(result.error.message);
+            setError(errorMessage(result.error));
           });
           return false;
         }
@@ -101,7 +102,7 @@ export function GitHubConnection({
         });
         if (openIfRequired && result.value.accounts.length === 0) {
           const opened = await window.eda.github.openInstallations(profileId);
-          if (valid() && !opened.ok) setError(opened.error.message);
+          if (valid() && !opened.ok) setError(errorMessage(opened.error));
         }
         return true;
       } catch {
@@ -169,7 +170,7 @@ export function GitHubConnection({
       .then((result) => {
         if (!active) return;
         if (result.ok) setStatus(result.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       })
       .catch(() => {
         if (active)
@@ -227,7 +228,7 @@ export function GitHubConnection({
         if (!result.ok) {
           current.current = null;
           setPending(null);
-          setError(result.error.message);
+          setError(errorMessage(result.error));
         } else if (result.value.state !== "pending") {
           const connectedStatus = result.value.status;
           authorizedSignIn.current = connectedStatus.pendingAccountId ? pending.id : null;
@@ -262,7 +263,7 @@ export function GitHubConnection({
       const result = await window.eda.github.openVerification(profileId, signIn.id);
       if (!alive.current || current.current?.id !== signIn.id) return;
       if (result.ok) setCopiedSignIn(signIn.id);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } catch {
       if (alive.current)
         setError(t("settings.gitHubConnection.couldNotCopyTheCodeAndOpenGitHubTryAgain"));
@@ -278,7 +279,7 @@ export function GitHubConnection({
         return;
       }
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
       current.current = result.value;
@@ -324,7 +325,7 @@ export function GitHubConnection({
         authorizedSignIn.current = null;
         const refreshed = await window.eda.github.status(profileId);
         if (alive.current && refreshed.ok) setStatus(refreshed.value);
-      } else setError(result.error.message);
+      } else setError(errorMessage(result.error));
     } catch {
       if (alive.current) setError(t("settings.gitHubConnection.couldNotDisconnectGitHubTryAgain"));
     } finally {
@@ -336,7 +337,7 @@ export function GitHubConnection({
     setAccessWaitExpired(false);
     try {
       const result = await window.eda.github.openInstallations(profileId);
-      if (alive.current && !result.ok) setError(result.error.message);
+      if (alive.current && !result.ok) setError(errorMessage(result.error));
     } catch {
       if (alive.current) setError(t("settings.gitHubConnection.couldNotOpenGitHubTryAgain"));
     }
@@ -345,7 +346,7 @@ export function GitHubConnection({
   const openProfile = async () => {
     try {
       const result = await window.eda.github.openProfile(profileId);
-      if (alive.current && !result.ok) setError(result.error.message);
+      if (alive.current && !result.ok) setError(errorMessage(result.error));
     } catch {
       if (alive.current)
         setError(t("settings.gitHubConnection.couldNotOpenTheGitHubProfileTryAgain"));

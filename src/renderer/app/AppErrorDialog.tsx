@@ -1,5 +1,6 @@
-import { useAppStore } from "../stores/app-store";
+import { errorAction, errorMessage } from "@shared/errors";
 import { ErrorDialog } from "../components/ui/index";
+import { useAppStore } from "../stores/app-store";
 
 export function AppErrorDialog() {
   const error = useAppStore((state) => state.error);
@@ -8,9 +9,9 @@ export function AppErrorDialog() {
   if (!error) return null;
 
   return (
-    <ErrorDialog key={error.message} onDismiss={dismiss}>
-      <p>{error.message}</p>
-      {error.suggestedAction && <p className="mt-2">{error.suggestedAction}</p>}
+    <ErrorDialog key={errorMessage(error)} onDismiss={dismiss}>
+      <p>{errorMessage(error)}</p>
+      {errorAction(error) && <p className="mt-2">{errorAction(error)}</p>}
       {error.repositoryPath && (
         <p className="mt-2 break-all font-mono text-xs">{error.repositoryPath}</p>
       )}

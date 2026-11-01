@@ -1,11 +1,16 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, GitBranch } from "lucide-react";
 import {
   builtInSetting,
   SETTING_DEFINITIONS,
   type SettingValues,
 } from "@shared/preferences/settings";
+import { ArrowLeft, ArrowRight, Check, GitBranch } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ViewTransition } from "../../components/layout/ViewTransition";
+import { useViewTransition } from "../../components/layout/hooks/useViewTransition";
+import { Button, Checkbox, cx, Field, Input } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import {
   previewAccent,
@@ -14,13 +19,10 @@ import {
   previewMotion,
   usePreferencesStore,
 } from "../../stores/preferences-store";
-import { Button, Checkbox, cx, Field, Input } from "../../components/ui/index";
-import { ViewTransition } from "../../components/layout/ViewTransition";
-import { useViewTransition } from "../../components/layout/hooks/useViewTransition";
-import { Welcome, WelcomeBranches, WelcomeComplete } from "./Welcome";
 import { AppearanceStep } from "./AppearanceStep";
-import { ConnectionsStep } from "./ConnectionsStep";
 import { CommitStyleStep, parsePrefixes } from "./CommitStyleStep";
+import { ConnectionsStep } from "./ConnectionsStep";
+import { Welcome, WelcomeBranches, WelcomeComplete } from "./Welcome";
 
 const steps = [
   {
@@ -177,8 +179,10 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
         (prefixesValid && !(await saveGlobal("commitPrefixes", parsedPrefixes)))
       ) {
         setError(
-          usePreferencesStore.getState().error?.message ??
-            t("firstRun.yourPreferencesCouldNotBeSavedTryAgain"),
+          errorMessage(
+            usePreferencesStore.getState().error,
+            errorText("firstRun.yourPreferencesCouldNotBeSavedTryAgain"),
+          ),
         );
         return;
       }
@@ -199,8 +203,10 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
 
       if (!created)
         setError(
-          useAppStore.getState().error?.message ??
-            t("firstRun.yourProfileCouldNotBeCreatedTryAgain"),
+          errorMessage(
+            useAppStore.getState().error,
+            errorText("firstRun.yourProfileCouldNotBeCreatedTryAgain"),
+          ),
         );
     } catch {
       setError(t("firstRun.setupCouldNotBeCompletedYourChoicesAreStillHereTryAgain"));
@@ -408,7 +414,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
             </fieldset>
             {(error || appError) && (
               <p role="alert" className="py-3 text-sm text-git-deleted">
-                {error || appError?.message}
+                {error || errorMessage(appError)}
               </p>
             )}
             <footer className="onboarding-footer mt-5 flex shrink-0 items-center justify-between gap-3 border-t border-border-subtle pt-5">

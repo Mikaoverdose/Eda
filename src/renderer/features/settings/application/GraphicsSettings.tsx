@@ -1,9 +1,10 @@
 import type { GraphicsStatus } from "@shared/application";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { useEffect, useState } from "react";
 import { Checkbox, ErrorDialog, NoticeBanner } from "../../../components/ui/index";
-import { useScopedSetting } from "../hooks/useScopedSetting";
 import { usePreferencesStore } from "../../../stores/preferences-store";
+import { useScopedSetting } from "../hooks/useScopedSetting";
 
 export function GraphicsSettings() {
   const setting = useScopedSetting("hardwareAcceleration", "application");
@@ -22,7 +23,7 @@ export function GraphicsSettings() {
         if (cancelled) return;
 
         if (!result.ok) {
-          setError(result.error.message);
+          setError(errorMessage(result.error));
           return;
         }
 

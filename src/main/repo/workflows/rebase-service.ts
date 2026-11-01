@@ -1,22 +1,12 @@
-import { stateLabel } from "@shared/i18n/labels";
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { GitError } from "@shared/errors";
+import { stateLabel } from "@shared/i18n/labels";
 import type { Identity } from "@shared/identity/identity";
 import type { RebaseAction, RebaseResult, RebaseReview } from "@shared/workflows/rebase";
+import { randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import { createPullAutostash } from "../../git/operations/pull-autostash";
-import { assertFullObjectId } from "../../git/validation";
-import type { IdentityManager } from "../../identity/identity-manager";
-import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
-import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
-import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
-import type { RepositoryManager } from "../lifecycle/repository-manager";
-import type { RepositoryWriter } from "../working-tree/repository-writer";
-import { matchesNativeWorkflow, type WorkflowService } from "./workflow-service";
-import { workflowFingerprint } from "./workflow-fingerprint";
-import { publishedRangeCount } from "../history/shared-history";
-import { captureRewriteStart, finalizeRewrite } from "../history/rewrite-history";
 import {
   readRebasePlan,
   rebaseMessageEditor,
@@ -24,8 +14,19 @@ import {
   validateRebasePlan,
   writeRebasePlan,
 } from "../../git/operations/rebase-plan";
+import { assertFullObjectId } from "../../git/validation";
+import type { IdentityManager } from "../../identity/identity-manager";
+import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
+import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { captureRewriteStart, finalizeRewrite } from "../history/rewrite-history";
+import { publishedRangeCount } from "../history/shared-history";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
+import { workflowFingerprint } from "./workflow-fingerprint";
+import { matchesNativeWorkflow, type WorkflowService } from "./workflow-service";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.rebase"), message });
 
 export class RebaseService {
@@ -66,7 +67,7 @@ export class RebaseService {
     autostash = false,
   ): Promise<RebaseReview> {
     if (!["start", "continue", "skip", "abort", "amend"].includes(action))
-      throw invalid(t("main.rebaseService.chooseARebaseAction"));
+      throw invalid(errorText("main.rebaseService.chooseARebaseAction"));
     if (action === "start") assertFullObjectId(onto ?? "", t("operations.reviewRebaseBase"));
 
     return this.writer.remoteOperation(
@@ -85,7 +86,7 @@ export class RebaseService {
             !status.branch.head ||
             !status.branch.oid
           )
-            throw invalid(t("main.rebaseService.checkOutACleanExistingBranchAndFinish"));
+            throw invalid(errorText("main.rebaseService.checkOutACleanExistingBranchAndFinish"));
 
           await this.git.exec(["cat-file", "-e", `${onto}^{commit}`], {
             cwd: root,
@@ -99,7 +100,7 @@ export class RebaseService {
 
           if (merges.stdout.trim())
             throw invalid(
-              t("main.rebaseService.thisRangeContainsMergeCommitsMergePreservingRebase"),
+              errorText("main.rebaseService.thisRangeContainsMergeCommitsMergePreservingRebase"),
             );
 
           if (interactive) {
@@ -109,31 +110,35 @@ export class RebaseService {
             );
 
             if (roots.stdout.trim())
-              throw invalid(t("main.rebaseService.rootEditingIsNotSupportedChooseABase"));
+              throw invalid(errorText("main.rebaseService.rootEditingIsNotSupportedChooseABase"));
           }
 
           record = undefined;
         } else {
           if (workflow?.kind !== "rebase" || !workflow.originalHead)
-            throw invalid(t("main.rebaseService.noNativeRebaseIsAvailableRefreshRepositoryState"));
+            throw invalid(
+              errorText("main.rebaseService.noNativeRebaseIsAvailableRefreshRepositoryState"),
+            );
           if (!matchesNativeWorkflow(record, workflow)) record = undefined;
 
           if (record && record.profileId !== identity.id)
             throw invalid(
-              t(
+              errorText(
                 "main.rebaseService.switchToTheProfileThatOwnsThisRebaseBeforeContinuingOrAborting",
               ),
             );
 
           if (action === "continue" && workflow.conflicts.length)
-            throw invalid(t("main.rebaseService.resolveAndStageEveryConflictBeforeContinuing"));
+            throw invalid(
+              errorText("main.rebaseService.resolveAndStageEveryConflictBeforeContinuing"),
+            );
           if (action === "amend" && !workflow.rebaseEdit)
             throw invalid(
-              t("main.rebaseService.amendIsOnlyAvailableAtAResolvedInteractiveEditStop"),
+              errorText("main.rebaseService.amendIsOnlyAvailableAtAResolvedInteractiveEditStop"),
             );
 
           if (action === "skip" && workflow.rebaseEdit)
-            throw invalid(t("main.rebaseService.thisCommitHasAlreadyBeenReplayedAmendOr"));
+            throw invalid(errorText("main.rebaseService.thisCommitHasAlreadyBeenReplayedAmendOr"));
         }
 
         const captured = record?.identity ?? identity;
@@ -257,7 +262,7 @@ export class RebaseService {
       pending.identity.id !== repository.identityId
     )
       throw invalid(
-        t("main.rebaseService.thisRebaseReviewExpiredOrBelongsToAnotherContextReviewAgain"),
+        errorText("main.rebaseService.thisRebaseReviewExpiredOrBelongsToAnotherContextReviewAgain"),
       );
 
     const plan = pending.review.plan
@@ -265,7 +270,7 @@ export class RebaseService {
       : undefined;
 
     if (!plan && inputPlan !== undefined)
-      throw invalid(t("main.rebaseService.reviewAnInteractivePlanBeforeEditingCommits"));
+      throw invalid(errorText("main.rebaseService.reviewAnInteractivePlanBeforeEditingCommits"));
 
     if (
       pending.review.action === "amend" &&
@@ -274,7 +279,7 @@ export class RebaseService {
         message.includes("\0") ||
         Buffer.byteLength(message) > 64 * 1024)
     )
-      throw invalid(t("main.rebaseService.enterAnAmendMessageWithin64KiB"));
+      throw invalid(errorText("main.rebaseService.enterAnAmendMessageWithin64KiB"));
 
     return this.writer.remoteOperation(repositoryId, t("operationTitles.rebase"), async (root) => {
       const { review, identity } = pending;
@@ -285,10 +290,12 @@ export class RebaseService {
         (workflow?.token ?? null) !== pending.workflowToken ||
         (await workflowFingerprint(this.git, root, status)) !== pending.fingerprint
       )
-        throw invalid(t("main.rebaseService.theRebaseOrRepositoryChangedAfterReviewReviewAgain"));
+        throw invalid(
+          errorText("main.rebaseService.theRebaseOrRepositoryChangedAfterReviewReviewAgain"),
+        );
 
       if (workflow?.ownerProfileId && workflow.ownerProfileId !== identity.id)
-        throw invalid(t("main.rebaseService.anotherProfileOwnsThisRebase"));
+        throw invalid(errorText("main.rebaseService.anotherProfileOwnsThisRebase"));
 
       if (
         Math.max(
@@ -301,7 +308,9 @@ export class RebaseService {
           ),
         ) !== review.publishedCommits
       )
-        throw invalid(t("main.rebaseService.remoteTrackingHistoryChangedAfterReviewReviewAgain"));
+        throw invalid(
+          errorText("main.rebaseService.remoteTrackingHistoryChangedAfterReviewReviewAgain"),
+        );
 
       if (review.action !== "abort") this.identities.assertOperationIdentity(identity);
 
@@ -442,7 +451,7 @@ export class RebaseService {
         record.state = remaining?.kind === "rebase" ? "paused" : "completed";
 
         if (result.exitCode !== 0 && !remaining)
-          throw invalid(t("main.rebaseService.gitCouldNotCompleteTheRebaseActionInspect"));
+          throw invalid(errorText("main.rebaseService.gitCouldNotCompleteTheRebaseActionInspect"));
 
         if (record.state === "completed" && rewriteStart) {
           try {
@@ -459,10 +468,10 @@ export class RebaseService {
               "main.rebaseService.rebaseCompletedButAutomaticUndoCouldNotBe",
               {
                 head: record.head,
-                value2:
-                  error instanceof Error
-                    ? error.message
-                    : t("main.rebaseService.recoveryMetadataCouldNotBeSaved"),
+                value2: errorMessage(
+                  error,
+                  errorText("main.rebaseService.recoveryMetadataCouldNotBeSaved"),
+                ),
               },
             );
           }

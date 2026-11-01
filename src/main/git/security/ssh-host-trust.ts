@@ -1,10 +1,11 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { SshHostPrompt } from "@shared/identity/ssh";
 import { mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { GitError } from "@shared/errors";
-import type { SshHostPrompt } from "@shared/identity/ssh";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "../execution/process-runner";
 
 export type ConfirmSshHost = (prompt: SshHostPrompt, signal: AbortSignal) => Promise<boolean>;
@@ -106,7 +107,9 @@ export class SshHostTrustRunner implements ProcessRunner {
         throw new GitError({
           kind: "cancelled",
           operation: t("operations.verifySshHost"),
-          message: t("main.git.sshHostTrust.theSshHostWasNotTrustedTheConnectionWasCancelled"),
+          message: errorText(
+            "main.git.sshHostTrust.theSshHostWasNotTrustedTheConnectionWasCancelled",
+          ),
         });
       return result;
     } finally {

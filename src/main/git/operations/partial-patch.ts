@@ -1,9 +1,10 @@
-import { GIT_FILE_MODE } from "@shared/repository/git-file-mode";
-import { t } from "@shared/i18n";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { GIT_FILE_MODE } from "@shared/repository/git-file-mode";
 import type { PartialStageRequest } from "@shared/repository/partial-stage";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({
     kind: "invalid-input",
     operation: t("operations.preparePartialStaging"),
@@ -33,7 +34,7 @@ export function partialPatch(
       raw,
     )
   )
-    throw invalid(t("main.git.partialPatch.useWholeFileStagingForBinaryRenamedMode"));
+    throw invalid(errorText("main.git.partialPatch.useWholeFileStagingForBinaryRenamedMode"));
 
   const hunks: PatchHunk[] = [];
   let current: PatchHunk | undefined;
@@ -63,14 +64,16 @@ export function partialPatch(
   }
 
   if (files !== 1 || hunks.length === 0)
-    throw invalid(t("main.git.partialPatch.thereIsNoEditableTextPatchForThisFileRefreshItsDiff"));
+    throw invalid(
+      errorText("main.git.partialPatch.thereIsNoEditableTextPatchForThisFileRefreshItsDiff"),
+    );
 
   const hunkSet = new Set(selection.hunks ?? []);
   const lineSet = new Set((selection.lines ?? []).map((item) => `${item.hunk}:${item.line}`));
 
   for (const index of hunkSet)
     if (!Number.isInteger(index) || !hunks[index])
-      throw invalid(t("main.git.partialPatch.aSelectedHunkNoLongerExists"));
+      throw invalid(errorText("main.git.partialPatch.aSelectedHunkNoLongerExists"));
 
   for (const item of selection.lines ?? [])
     if (
@@ -80,7 +83,7 @@ export function partialPatch(
         hunks[item.hunk]?.lines.find((line) => line.index === item.line)?.type ?? "",
       )
     )
-      throw invalid(t("main.git.partialPatch.selectAddedOrDeletedLinesFromTheCurrentDiff"));
+      throw invalid(errorText("main.git.partialPatch.selectAddedOrDeletedLinesFromTheCurrentDiff"));
 
   const reverse = selection.area === "staged";
   let all = true;
@@ -137,7 +140,7 @@ export function partialPatch(
     delta += newCount - oldCount;
   }
 
-  if (!count) throw invalid(t("main.git.partialPatch.selectAtLeastOneChangedLineOrHunk"));
+  if (!count) throw invalid(errorText("main.git.partialPatch.selectAtLeastOneChangedLineOrHunk"));
 
   const added = /^new file mode /m.test(raw);
   const deleted = /^deleted file mode /m.test(raw);

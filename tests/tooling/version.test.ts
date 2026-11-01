@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { readBuildInfo } from "../../scripts/version.ts";
+import { readBuildInfo } from "../../scripts/build.ts";
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "eda-version-"));

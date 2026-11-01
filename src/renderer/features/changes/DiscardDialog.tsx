@@ -1,18 +1,19 @@
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
-import { t, getLocale } from "@shared/i18n";
-import { formatDateTime } from "../../utils/format";
-import { useEffect, useState } from "react";
-import type { DiscardPreview, RecoverySummary } from "@shared/workflows/recovery";
 import type { PartialStageRequest } from "@shared/repository/partial-stage";
-import { useRepositoryStore } from "../../stores/repository-store";
+import type { DiscardPreview, RecoverySummary } from "@shared/workflows/recovery";
+import { useEffect, useState } from "react";
 import {
   Button,
-  Dialog,
   Checkbox,
+  CodeBlock,
+  Dialog,
   ErrorDialog,
   TextButton,
-  CodeBlock,
 } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { formatDateTime } from "../../utils/format";
 
 export function DiscardDialog({
   repositoryId,
@@ -41,12 +42,12 @@ export function DiscardDialog({
           : await window.eda.repository.previewDiscard(repositoryId, paths);
         if (!alive) return;
         if (result.ok) setPreview(result.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       } else {
         const result = await window.eda.repository.listRecovery(repositoryId);
         if (!alive) return;
         if (result.ok) setRecords(result.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       }
     };
 
@@ -71,7 +72,7 @@ export function DiscardDialog({
       if (!result) return;
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
@@ -179,7 +180,7 @@ export function DiscardDialog({
                         void window.eda.repository
                           .exportRecoveryFile(repositoryId, record.id, path)
                           .then((result) => {
-                            if (!result.ok) setError(result.error.message);
+                            if (!result.ok) setError(errorMessage(result.error));
                           })
                       }
                     >
@@ -195,7 +196,7 @@ export function DiscardDialog({
                       void window.eda.repository
                         .exportRecoveryFile(repositoryId, record.id, path, stage)
                         .then((result) => {
-                          if (!result.ok) setError(result.error.message);
+                          if (!result.ok) setError(errorMessage(result.error));
                         })
                     }
                   >
@@ -235,7 +236,7 @@ export function DiscardDialog({
                           if (result.ok) {
                             setRecords((items) => items.filter((item) => item.id !== record.id));
                             setForgetId(null);
-                          } else setError(result.error.message);
+                          } else setError(errorMessage(result.error));
                         } finally {
                           setBusy(false);
                         }

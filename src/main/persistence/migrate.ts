@@ -1,6 +1,7 @@
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { t } from "@shared/i18n";
 
 export interface Migration {
   id: string;
@@ -12,7 +13,7 @@ export function applyMigrations(
   migrations: readonly Migration[],
   options: { backupPath?: string } = {},
 ): void {
-  if (sqlite.isTransaction) throw new Error(t("main.persistence.migrate.transactionRequired"));
+  if (sqlite.isTransaction) throw new AppError(ERROR_CODE.MIGRATION_TRANSACTION_REQUIRED);
 
   // VACUUM INTO includes WAL changes and must run outside the transaction.
   // It also refuses to overwrite an existing backup.
@@ -51,14 +52,14 @@ export function applyMigrations(
       new Set(expected.map((migration) => migration.id)).size !== expected.length ||
       expected.some((migration, i) => i > 0 && migration.id <= expected[i - 1]!.id)
     )
-      throw new Error(t("main.persistence.migrate.invalidOrder"));
+      throw new AppError(ERROR_CODE.INVALID_MIGRATION_ORDER);
 
     if (
       applied.some(
         (migration, i) => migration.id !== expected[i]?.id || migration.hash !== expected[i]?.hash,
       )
     )
-      throw new Error(t("main.persistence.migrate.historyMismatch"));
+      throw new AppError(ERROR_CODE.MIGRATION_HISTORY_MISMATCH);
 
     const record = sqlite.prepare(
       "INSERT INTO __drizzle_migrations (id, hash, created_at) VALUES (?, ?, ?)",
@@ -73,7 +74,7 @@ export function applyMigrations(
       applied.length < migrations.length &&
       sqlite.prepare("PRAGMA foreign_key_check").all().length
     )
-      throw new Error(t("main.persistence.migrate.invalidForeignKeys"));
+      throw new AppError(ERROR_CODE.INVALID_FOREIGN_KEYS);
 
     sqlite.exec("COMMIT");
   } catch (error) {

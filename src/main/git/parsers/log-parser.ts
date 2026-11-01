@@ -1,4 +1,5 @@
-import { t } from "@shared/i18n";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import type { CommitDecoration, HistoryCommit } from "@shared/repository/repository-read";
 
 const FULL_OID = /^[0-9a-f]{40,64}$/;
@@ -82,5 +83,5 @@ function assertOid(value: string): void {
 }
 
 function malformed(): never {
-  throw new Error(t("main.git.logParser.malformedGitHistoryOutput"));
+  throw new AppError(ERROR_CODE.INVALID_HISTORY_OUTPUT);
 }

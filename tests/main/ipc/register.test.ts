@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { GitError, type Result } from "@shared/errors";
@@ -250,7 +251,9 @@ describe("IPC registration", () => {
       "https://github.com/login/device",
     );
     github.verifyPending.mockImplementationOnce(() => {
-      throw new GitError({ kind: "invalid-input", operation: "sign-in", message: "expired" });
+      throw new GitError(
+        errorFixture({ kind: "invalid-input", operation: "sign-in", message: "expired" }),
+      );
     });
     expect(
       await invoke(IPC_CHANNELS.githubOpenVerification, profile.id, repositoryId),
@@ -365,7 +368,11 @@ describe("IPC registration", () => {
 
     expect(await invoke(IPC_CHANNELS.appDebug, "ipc-error")).toMatchObject({
       ok: false,
-      error: { kind: "unknown", message: "Something went wrong inside Eda." },
+      error: {
+        kind: "unknown",
+        code: "DEBUG_IPC_FAILURE",
+        message: "Eda debug simulation: unexpected IPC error.",
+      },
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain("debug simulation");
   });
@@ -439,11 +446,13 @@ describe("IPC registration", () => {
 
   it("preserves domain errors without emitting successful invalidations", async () => {
     const { writer } = setup();
-    const failure = new GitError({
-      kind: "lock-contention",
-      operation: "stage",
-      message: "Index is locked.",
-    });
+    const failure = new GitError(
+      errorFixture({
+        kind: "lock-contention",
+        operation: "stage",
+        message: "Index is locked.",
+      }),
+    );
 
     writer.stage.mockRejectedValueOnce(failure);
     expect(await invoke(IPC_CHANNELS.repositoryStage, { repositoryId })).toEqual({

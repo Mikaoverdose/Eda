@@ -1,33 +1,34 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { boundDiff } from "@shared/repository/diff-limits";
 import {
   MAX_STASH_ENTRIES,
   MAX_STASH_NAME_LENGTH,
+  type StashArea,
+  type StashBranchPreview,
   type StashContents,
   type StashCreateOptions,
   type StashEntry,
+  type StashFilePreview,
   type StashInspection,
   type StashList,
-  type StashArea,
-  type StashFilePreview,
-  type StashBranchPreview,
 } from "@shared/workflows/stashes";
-import { t } from "@shared/i18n";
 import { createHash, randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import { resolve } from "node:path";
-import { GitError } from "@shared/errors";
-import { boundDiff } from "@shared/repository/diff-limits";
 
 import type { GitService } from "../../git/git-service";
-import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "../../git/validation";
 import { createScopedStash } from "../../git/operations/scoped-stash";
+import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
+import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
+import { DiscardService } from "../working-tree/discard-service";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
 import type { WorkflowService } from "./workflow-service";
-import { DiscardService } from "../working-tree/discard-service";
-import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.manageStashes"), message });
 
 export class StashService {
@@ -88,7 +89,9 @@ export class StashService {
 
     if (fields.length % 4)
       throw invalid(
-        t("main.stashService.gitReturnedAnUnreadableStashListInspectItWithGitBeforeChangingIt"),
+        errorText(
+          "main.stashService.gitReturnedAnUnreadableStashListInspectItWithGitBeforeChangingIt",
+        ),
       );
 
     const entries: StashEntry[] = [];
@@ -106,7 +109,7 @@ export class StashService {
         !/^stash@\{\d+\}$/.test(selector) ||
         !/^\d+$/.test(timestamp)
       )
-        throw invalid(t("main.stashService.gitReturnedAnUnreadableStashEntry"));
+        throw invalid(errorText("main.stashService.gitReturnedAnUnreadableStashEntry"));
 
       entries.push({ oid, selector, message, timestamp: Number(timestamp) });
     }
@@ -130,20 +133,20 @@ export class StashService {
     options: StashCreateOptions = {},
   ): Promise<void> {
     if (!message.trim() || message.length > MAX_STASH_NAME_LENGTH)
-      throw invalid(t("main.stashService.enterAStashNameOf1To1024Characters"));
+      throw invalid(errorText("main.stashService.enterAStashNameOf1To1024Characters"));
     if (!["tracked", "untracked", "all"].includes(contents))
-      throw invalid(t("main.stashService.chooseWhichFilesToStash"));
+      throw invalid(errorText("main.stashService.chooseWhichFilesToStash"));
 
     const { stagedOnly = false, keepIndex = false } = options;
     const paths = options.paths ? [...new Set(options.paths)] : undefined;
 
     if (paths && (!paths.length || paths.length > 256))
-      throw invalid(t("main.stashService.selectBetween1And256PathsToStash"));
+      throw invalid(errorText("main.stashService.selectBetween1And256PathsToStash"));
 
     for (const path of paths ?? []) assertRepositoryPath(path, t("operations.stashSelectedPaths"));
 
     if (stagedOnly && (contents !== "tracked" || paths || keepIndex))
-      throw invalid(t("main.stashService.stagedOnlyStashesCannotIncludeUntrackedPathsOr"));
+      throw invalid(errorText("main.stashService.stagedOnlyStashesCannotIncludeUntrackedPathsOr"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -157,13 +160,17 @@ export class StashService {
           status.changes.some((item) => item.kind === "unmerged")
         )
           throw invalid(
-            t("main.stashService.finishTheCurrentOperationAndCreateAnInitialCommitBeforeStashing"),
+            errorText(
+              "main.stashService.finishTheCurrentOperationAndCreateAnInitialCommitBeforeStashing",
+            ),
           );
 
         const effective = await this.identity.verifyEffectiveIdentity(root, identity);
 
         if (!effective.matches)
-          throw invalid(t("main.stashService.theRepositoryAuthorDiffersFromThisProfileApply"));
+          throw invalid(
+            errorText("main.stashService.theRepositoryAuthorDiffersFromThisProfileApply"),
+          );
 
         const included = (path: string) =>
           !paths ||
@@ -181,7 +188,7 @@ export class StashService {
 
           if (paths.length > 256)
             throw invalid(
-              t("main.stashService.selectUpTo256PathsIncludingBothSidesOfRenamedFiles"),
+              errorText("main.stashService.selectUpTo256PathsIncludingBothSidesOfRenamedFiles"),
             );
         }
 
@@ -216,7 +223,7 @@ export class StashService {
 
           if (!ignored?.stdout)
             throw invalid(
-              t("main.stashService.thereAreNoEligibleChangesForTheSelectedStashContents"),
+              errorText("main.stashService.thereAreNoEligibleChangesForTheSelectedStashContents"),
             );
         }
 
@@ -273,7 +280,9 @@ export class StashService {
     const entry = listed.entries.find((item) => item.selector === selector && item.oid === oid);
 
     if (!entry)
-      throw invalid(t("main.stashService.theStashListChangedRefreshAndChooseTheStashAgain"));
+      throw invalid(
+        errorText("main.stashService.theStashListChangedRefreshAndChooseTheStashAgain"),
+      );
 
     const parents = (
       await this.git.exec(["rev-list", "--parents", "-n", "1", oid], {
@@ -290,7 +299,7 @@ export class StashService {
       parents.length > 3 ||
       parents.some((parent) => !/^[a-f0-9]{40,64}$/.test(parent))
     )
-      throw invalid(t("main.stashService.thisEntryDoesNotHaveASupportedStashStructure"));
+      throw invalid(errorText("main.stashService.thisEntryDoesNotHaveASupportedStashStructure"));
 
     const [tracked, staged, untracked] = await Promise.all([
       this.git.compareDiff(repository.path, parents[0]!, oid),
@@ -344,7 +353,7 @@ export class StashService {
       preview.root !== repository.path
     )
       throw invalid(
-        t("main.stashService.theStashReviewExpiredOrBelongsToAnotherContextInspectItAgain"),
+        errorText("main.stashService.theStashReviewExpiredOrBelongsToAnotherContextInspectItAgain"),
       );
 
     return preview;
@@ -363,20 +372,22 @@ export class StashService {
     const source = stash.trees[area];
 
     if (!source || !stash.paths[area]?.includes(path))
-      throw invalid(t("main.stashService.chooseAChangedFileFromThisPartOfTheStash"));
+      throw invalid(errorText("main.stashService.chooseAChangedFileFromThisPartOfTheStash"));
 
     return this.writer.remoteOperation(
       repositoryId,
       t("main.stashService.reviewStashFileRestore"),
       async (root, identity) => {
         if ((await this.read(root)).fingerprint !== stash.fingerprint)
-          throw invalid(t("main.stashService.theStashListChangedInspectItAgain"));
+          throw invalid(errorText("main.stashService.theStashListChangedInspectItAgain"));
 
         const status = await this.git.status(root);
 
         if (await this.workflows.observe(root, status))
           throw invalid(
-            t("main.stashService.finishOrAbortTheCurrentGitOperationBeforeRestoringAStashFile"),
+            errorText(
+              "main.stashService.finishOrAbortTheCurrentGitOperationBeforeRestoringAStashFile",
+            ),
           );
 
         const result = await this.git.exec(
@@ -393,7 +404,7 @@ export class StashService {
 
         if (result.stdout && (!entry || entry[3] !== path))
           throw invalid(
-            t("main.stashService.individualRestoreSupportsRegularFilesUseTheDedicated"),
+            errorText("main.stashService.individualRestoreSupportsRegularFilesUseTheDedicated"),
           );
 
         const size = entry
@@ -408,7 +419,7 @@ export class StashService {
           : 0;
 
         if (!Number.isSafeInteger(size) || size > 32 * 1024 * 1024)
-          throw invalid(t("main.stashService.thisSavedFileExceedsThe32MiBRestoreLimit"));
+          throw invalid(errorText("main.stashService.thisSavedFileExceedsThe32MiBRestoreLimit"));
 
         const snapshot = await this.recovery.prepareOperation(root, identity.id, repositoryId, [
           path,
@@ -445,7 +456,7 @@ export class StashService {
   restoreFile(repositoryId: string, token: string): Promise<void> {
     const saved = this.filePreviews.get(token);
 
-    if (!saved) throw invalid(t("main.stashService.reviewTheSavedFileBeforeRestoringIt"));
+    if (!saved) throw invalid(errorText("main.stashService.reviewTheSavedFileBeforeRestoringIt"));
 
     const stash = this.reviewed(repositoryId, saved.stashToken);
 
@@ -460,10 +471,12 @@ export class StashService {
           status.branch.head !== saved.branch ||
           (await this.workflows.observe(root, status))
         )
-          throw invalid(t("main.stashService.theRepositoryStateChangedReviewTheStashFileAgain"));
+          throw invalid(
+            errorText("main.stashService.theRepositoryStateChangedReviewTheStashFileAgain"),
+          );
 
         if ((await this.read(root)).fingerprint !== stash.fingerprint)
-          throw invalid(t("main.stashService.theStashListChangedInspectItAgain"));
+          throw invalid(errorText("main.stashService.theStashListChangedInspectItAgain"));
 
         await this.recovery.saveOperation(saved.snapshot.record, saved.snapshot.index);
         this.filePreviews.delete(token);
@@ -504,7 +517,7 @@ export class StashService {
       status.changes.length ||
       (await this.workflows.observe(root, status))
     )
-      throw invalid(t("main.stashService.commitStashOrMoveLocalChangesAndFinish"));
+      throw invalid(errorText("main.stashService.commitStashOrMoveLocalChangesAndFinish"));
 
     return status;
   }
@@ -519,12 +532,12 @@ export class StashService {
       t("main.stashService.reviewBranchFromStash"),
       async (root) => {
         if (!(await this.git.isRefNameValid(name)))
-          throw invalid(t("main.stashService.chooseAValidBranchName"));
+          throw invalid(errorText("main.stashService.chooseAValidBranchName"));
 
         const status = await this.cleanBranchStart(root);
 
         if ((await this.read(root)).fingerprint !== stash.fingerprint)
-          throw invalid(t("main.stashService.theStashListChangedInspectItAgain"));
+          throw invalid(errorText("main.stashService.theStashListChangedInspectItAgain"));
 
         const existing = await this.git.exec(
           ["show-ref", "--verify", "--quiet", `refs/heads/${name}`],
@@ -532,7 +545,7 @@ export class StashService {
         );
 
         if (existing.exitCode === 0)
-          throw invalid(t("main.stashService.thatBranchAlreadyExistsChooseANewName"));
+          throw invalid(errorText("main.stashService.thatBranchAlreadyExistsChooseANewName"));
 
         const base = (
           await this.git.exec(["rev-parse", `${stash.entry.oid}^1`], {
@@ -564,7 +577,7 @@ export class StashService {
   createBranch(repositoryId: string, token: string): Promise<{ applied: boolean }> {
     const saved = this.branchPreviews.get(token);
 
-    if (!saved) throw invalid(t("main.stashService.reviewTheNewBranchBeforeCreatingIt"));
+    if (!saved) throw invalid(errorText("main.stashService.reviewTheNewBranchBeforeCreatingIt"));
 
     const stash = this.reviewed(repositoryId, saved.stashToken);
 
@@ -577,10 +590,12 @@ export class StashService {
 
         if (status.branch.oid !== preview.head || (status.branch.head ?? null) !== preview.branch)
           throw invalid(
-            t("main.stashService.theCurrentBranchChangedAfterReviewReviewTheNewBranchAgain"),
+            errorText(
+              "main.stashService.theCurrentBranchChangedAfterReviewReviewTheNewBranchAgain",
+            ),
           );
         if ((await this.read(root)).fingerprint !== stash.fingerprint)
-          throw invalid(t("main.stashService.theStashListChangedInspectItAgain"));
+          throw invalid(errorText("main.stashService.theStashListChangedInspectItAgain"));
 
         this.branchPreviews.delete(token);
 
@@ -614,15 +629,12 @@ export class StashService {
             throw new GitError({
               kind: "unknown",
               operation: t("operations.createBranchFromStash"),
-              message: t("main.stashService.branchIsCheckedOutButRestoringTheStash", {
+              message: errorText("main.stashService.branchIsCheckedOutButRestoringTheStash", {
                 name: preview.name,
               }),
-              suggestedAction:
-                error instanceof Error
-                  ? error.message
-                  : t(
-                      "main.stashService.inspectTheBranchAndContinueOrAbortAnyPendingStashApplication",
-                    ),
+              suggestedAction: errorText(
+                "main.stashService.inspectTheBranchAndContinueOrAbortAnyPendingStashApplication",
+              ),
             });
 
           throw error;
@@ -645,7 +657,9 @@ export class StashService {
       async (root, identity) => {
         if ((await this.read(root)).fingerprint !== preview.fingerprint)
           throw invalid(
-            t("main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeApplying"),
+            errorText(
+              "main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeApplying",
+            ),
           );
 
         this.previews.delete(token);
@@ -679,7 +693,7 @@ export class StashService {
     const name = message.trim();
 
     if (!name || name.length > MAX_STASH_NAME_LENGTH || /[\r\n\0]/.test(name))
-      throw invalid(t("main.stashService.enterASingleLineStashNameOf1To1024Characters"));
+      throw invalid(errorText("main.stashService.enterASingleLineStashNameOf1To1024Characters"));
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -689,14 +703,16 @@ export class StashService {
 
         if (workflow?.kind === "stash" && workflow.incoming.includes(preview.entry.oid))
           throw invalid(
-            t("main.stashService.finishOrAbortThisStashApplicationBeforeRenamingItsSource"),
+            errorText("main.stashService.finishOrAbortThisStashApplicationBeforeRenamingItsSource"),
           );
 
         const before = await this.read(root);
 
         if (before.fingerprint !== preview.fingerprint)
           throw invalid(
-            t("main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeRenaming"),
+            errorText(
+              "main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeRenaming",
+            ),
           );
         if (name === preview.entry.message) return { keptOriginal: false };
 
@@ -715,7 +731,7 @@ export class StashService {
         assertFullObjectId(tree, t("operations.renameStash"));
 
         if (parents.length < 2 || parents.length > 3)
-          throw invalid(t("main.stashService.unsupportedStashStructure"));
+          throw invalid(errorText("main.stashService.unsupportedStashStructure"));
 
         for (const parent of parents) assertFullObjectId(parent, t("operations.renameStash"));
 
@@ -748,7 +764,9 @@ export class StashService {
         assertFullObjectId(oid, t("operations.renameStash"));
 
         if ((await this.read(root)).fingerprint !== before.fingerprint)
-          throw invalid(t("main.stashService.theStashListChangedInspectItAgainBeforeRenaming"));
+          throw invalid(
+            errorText("main.stashService.theStashListChangedInspectItAgainBeforeRenaming"),
+          );
 
         this.previews.delete(token);
         await this.git.exec(["stash", "store", "--message", name, oid], {
@@ -803,14 +821,16 @@ export class StashService {
 
         if (workflow?.kind === "stash" && workflow.incoming.includes(preview.entry.oid))
           throw invalid(
-            t("main.stashService.finishOrAbortThisStashApplicationBeforeDroppingItsSource"),
+            errorText("main.stashService.finishOrAbortThisStashApplicationBeforeDroppingItsSource"),
           );
 
         const current = await this.read(root);
 
         if (current.fingerprint !== preview.fingerprint)
           throw invalid(
-            t("main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeDropping"),
+            errorText(
+              "main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeDropping",
+            ),
           );
 
         this.previews.delete(token);

@@ -1,21 +1,22 @@
-import { GIT_FILE_MODE, isRegularFileMode } from "@shared/repository/git-file-mode";
+import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
+import { GIT_FILE_MODE, isRegularFileMode } from "@shared/repository/git-file-mode";
+import { conflictSides } from "@shared/workflows/conflict-sides";
 import type {
   ConflictPreview,
   ConflictVersion,
   ResolveConflictRequest,
 } from "@shared/workflows/workflow";
-import { conflictSides } from "@shared/workflows/conflict-sides";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { useEffect, useState } from "react";
 import {
   Button,
+  CodeBlock,
   Dialog,
+  ErrorDialog,
   Select,
   Textarea,
-  ErrorDialog,
-  CodeBlock,
 } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
 
 const conflictTypes: Record<string, string> = {
   DD: t("conflictDialog.deletedOnBothSides"),
@@ -93,7 +94,7 @@ export function ConflictDialog({
       const result = await window.eda.conflicts.inspect(repositoryId, path);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
@@ -129,7 +130,7 @@ export function ConflictDialog({
       });
 
       if (!result.ok) {
-        setError(`${result.error.message} ${result.error.suggestedAction ?? ""}`);
+        setError(`${errorMessage(result.error)} ${errorAction(result.error) ?? ""}`);
         return;
       }
 
@@ -165,7 +166,7 @@ export function ConflictDialog({
       await useRepositoryStore.getState().syncFromDisk();
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 

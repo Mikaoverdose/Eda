@@ -1,12 +1,14 @@
-import { t } from "@shared/i18n";
-import { create } from "zustand";
+import { errorText } from "@shared/error-codes";
 import type { GitErrorData } from "@shared/errors";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { useRepositoryStore } from "./repository-store";
-import { usePreferencesStore } from "./preferences-store";
-import { useSessionStore } from "./session-store";
+import { create } from "zustand";
 import { useLayoutStore } from "./layout-store";
+import { usePreferencesStore } from "./preferences-store";
+import { useRepositoryStore } from "./repository-store";
+import { useSessionStore } from "./session-store";
 
 interface AppState {
   identities: Identity[];
@@ -314,13 +316,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ selectedRepositoryId: null });
       await get().refreshIdentities();
       await get().refreshRepositories();
-    } catch (error) {
+    } catch {
       set({
-        error: {
+        error: new GitError({
           kind: "unknown",
           operation: t("operations.switchProfile"),
-          message: String(error),
-        },
+          message: errorText("errors.unexpected"),
+        }).toData(),
       });
     } finally {
       useSessionStore.setState({ transitioning: false });

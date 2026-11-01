@@ -1,18 +1,20 @@
-import { t } from "@shared/i18n";
-import { create } from "zustand";
-import type { AccentColor } from "@shared/preferences/accent";
+import { errorText } from "@shared/error-codes";
 import type { GitErrorData } from "@shared/errors";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import type { AccentColor } from "@shared/preferences/accent";
 import {
   builtInSetting,
   themeForAppearance,
+  type BackgroundPreference,
   type ResolvedSetting,
   type SettingKey,
+  type SettingsContext,
   type SettingScope,
   type SettingValues,
   type ThemePreference,
-  type BackgroundPreference,
-  type SettingsContext,
 } from "@shared/preferences/settings";
+import { create } from "zustand";
 import { applyIdentityHue, applyTheme, BUILT_IN_THEMES } from "../styles/themes";
 
 type Values = {
@@ -132,11 +134,11 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
       return true;
     } catch {
       set({
-        error: {
+        error: new GitError({
           kind: "unknown",
           operation: t("operations.savePreferences"),
-          message: t("preferencesStore.preferencesCouldNotBeSavedTryAgain"),
-        },
+          message: errorText("preferencesStore.preferencesCouldNotBeSavedTryAgain"),
+        }).toData(),
       });
 
       return false;

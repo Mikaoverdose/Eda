@@ -1,10 +1,10 @@
-import { t } from "@shared/i18n";
-import { BrowserWindow } from "electron";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
+import { BrowserWindow } from "electron";
 import type { Services } from "../../services";
-import { broadcast, handle } from "../transport";
 import { invalidRequest } from "../request-errors";
+import { broadcast, handle } from "../transport";
 
 export function registerUpdateHandlers(services: Services): void {
   const { updates } = services;
@@ -12,7 +12,7 @@ export function registerUpdateHandlers(services: Services): void {
   const caller = (event: Electron.IpcMainInvokeEvent) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed() || event.senderFrame !== event.sender.mainFrame)
-      throw invalidRequest(t("main.updateHandlers.updatesRequireTheApplicationWindow"));
+      throw invalidRequest(errorText("main.updateHandlers.updatesRequireTheApplicationWindow"));
   };
   handle(IPC_CHANNELS.updatesState, async (event) => {
     caller(event);

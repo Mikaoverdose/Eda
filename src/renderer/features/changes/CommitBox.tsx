@@ -1,27 +1,28 @@
+import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { matchCommitPrefix } from "@shared/preferences/commit-prefix";
-import { usePreferencesStore } from "../../stores/preferences-store";
-import { CommitPrefixPicker } from "./CommitPrefixPicker";
-import { Skeleton } from "../../components/ui/feedback/Skeleton";
-import { KeyRound, ShieldOff } from "lucide-react";
-import { ErrorDialog } from "../../components/ui/index";
-import { DirectPush } from "../sync/DirectPush";
 import { emptyDraft } from "@shared/identity/profile-session";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { matchCommitPrefix } from "@shared/preferences/commit-prefix";
 import type { CommitPreview } from "@shared/repository/repository-write";
-import { useSessionStore } from "../../stores/session-store";
-import { useAppStore } from "../../stores/app-store";
-import { categorizeChanges, useRepositoryStore } from "../../stores/repository-store";
+import { KeyRound, ShieldOff } from "lucide-react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { Skeleton } from "../../components/ui/feedback/Skeleton";
 import {
   Button,
-  IdentityIcon,
-  Dialog,
-  Input,
   Checkbox,
-  Textarea,
+  Dialog,
   Disclosure,
+  ErrorDialog,
+  IdentityIcon,
+  Input,
+  Textarea,
   TextButton,
 } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { usePreferencesStore } from "../../stores/preferences-store";
+import { categorizeChanges, useRepositoryStore } from "../../stores/repository-store";
+import { useSessionStore } from "../../stores/session-store";
+import { DirectPush } from "../sync/DirectPush";
+import { CommitPrefixPicker } from "./CommitPrefixPicker";
 
 export function CommitBox({ pending = false }: { pending?: boolean }) {
   const conventional = usePreferencesStore(
@@ -55,7 +56,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
       void window.eda.repository.previewCommit(repositoryId).then((result) => {
         if (!alive) return;
         if (result.ok) setPreview(result.value);
-        else setPreviewError(result.error.message);
+        else setPreviewError(errorMessage(result.error));
       });
 
     return () => {
@@ -303,7 +304,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                       )
                         return;
 
-                      if (!result.ok) setTemplateMessage(result.error.message);
+                      if (!result.ok) setTemplateMessage(errorMessage(result.error));
                       else if (!result.value)
                         setTemplateMessage(
                           t("commitBox.noCommitTemplateIsConfiguredForThisRepository"),
@@ -412,11 +413,9 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
 
           {writeError && (
             <ErrorDialog>
-              {writeError.message}
-              {writeError.suggestedAction && (
-                <span className="mt-0.5 block text-text-tertiary">
-                  {writeError.suggestedAction}
-                </span>
+              {errorMessage(writeError)}
+              {errorAction(writeError) && (
+                <span className="mt-0.5 block text-text-tertiary">{errorAction(writeError)}</span>
               )}
             </ErrorDialog>
           )}

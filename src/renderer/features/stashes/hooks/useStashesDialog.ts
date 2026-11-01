@@ -1,11 +1,12 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
 import type {
   StashArea,
   StashContents,
   StashInspection,
   StashList,
 } from "@shared/workflows/stashes";
+import { useEffect, useRef, useState } from "react";
 import { useRepositoryStore } from "../../../stores/repository-store";
 
 export function useStashesDialog(repositoryId: string) {
@@ -48,7 +49,7 @@ export function useStashesDialog(repositoryId: string) {
 
     if (revision !== listRevision.current) return;
     if (result.ok) setList(result.value);
-    else setError(result.error.message);
+    else setError(errorMessage(result.error));
   };
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export function useStashesDialog(repositoryId: string) {
       const result = await window.eda.stashes.inspect(repositoryId, entry.selector, entry.oid);
       if (revision !== inspectionRevision.current) return;
       if (result.ok) setInspection(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } finally {
       if (revision === inspectionRevision.current) setBusy(false);
     }
@@ -117,7 +118,7 @@ export function useStashesDialog(repositoryId: string) {
       await useRepositoryStore.getState().syncFromDisk();
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
@@ -166,7 +167,7 @@ export function useStashesDialog(repositoryId: string) {
       await useRepositoryStore.getState().syncFromDisk();
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 

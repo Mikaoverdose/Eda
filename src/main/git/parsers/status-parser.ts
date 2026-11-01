@@ -1,4 +1,5 @@
-import { t } from "@shared/i18n";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import type {
   ChangeCode,
   RepositoryBranchStatus,
@@ -177,5 +178,5 @@ function assertOid(value: string): void {
 }
 
 function malformed(): never {
-  throw new Error(t("main.git.statusParser.malformedGitStatusOutput"));
+  throw new AppError(ERROR_CODE.INVALID_STATUS_OUTPUT);
 }

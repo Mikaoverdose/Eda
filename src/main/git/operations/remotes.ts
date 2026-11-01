@@ -1,18 +1,19 @@
-import { stateLabel } from "@shared/i18n/labels";
-import { t } from "@shared/i18n";
-import { GitError } from "@shared/errors";
 import { redactDiagnostic } from "@shared/diagnostics";
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { stateLabel } from "@shared/i18n/labels";
+import type { Identity } from "@shared/identity/identity";
 import type {
   RemoteChange,
   RemoteSummary,
   TransportCredentials,
 } from "@shared/integrations/remotes";
-import type { Identity } from "@shared/identity/identity";
-import type { GitService, GitExecOptions } from "../git-service";
-import { assertValidRefName, assertAllowedRemoteUrl } from "../validation";
 import { buildSshCommand, SSH_HOST_TRUST_OPTIONS } from "../execution/environment";
+import type { GitExecOptions, GitService } from "../git-service";
+import { assertAllowedRemoteUrl, assertValidRefName } from "../validation";
 
-export function remoteError(message: string): GitError {
+export function remoteError(message: ErrorText): GitError {
   return new GitError({
     kind: "invalid-input",
     operation: t("operations.remoteOperation"),
@@ -22,7 +23,7 @@ export function remoteError(message: string): GitError {
 
 export function remoteName(name: string): void {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(name))
-    throw remoteError(t("main.git.remotes.useARemoteNameStartingWithALetter"));
+    throw remoteError(errorText("main.git.remotes.useARemoteNameStartingWithALetter"));
 }
 
 export const remoteUrl = (value: string) =>
@@ -39,7 +40,7 @@ export class GitRemotes {
     const names = stdout.trim().split("\n").filter(Boolean);
 
     if (names.length > 100)
-      throw remoteError(t("main.git.remotes.thisRepositoryHasMoreThan100RemotesManageIts"));
+      throw remoteError(errorText("main.git.remotes.thisRepositoryHasMoreThan100RemotesManageIts"));
 
     return Promise.all(
       names.map(async (name) => {
@@ -69,7 +70,8 @@ export class GitRemotes {
   async destination(path: string, name: string, push: boolean): Promise<string> {
     const urls = await this.urls(path, name, push);
 
-    if (urls.length !== 1) throw remoteError(t("main.git.remotes.thisRemoteHasMultipleUrLsUseA"));
+    if (urls.length !== 1)
+      throw remoteError(errorText("main.git.remotes.thisRemoteHasMultipleUrLsUseA"));
 
     const url = urls[0]!;
 
@@ -94,7 +96,7 @@ export class GitRemotes {
             : ["set-url", ...(change.push ? ["--push"] : []), change.name, change.url];
 
     if (change.kind === "url" && (await this.urls(path, change.name, change.push)).length > 1)
-      throw remoteError(t("main.git.remotes.thisRemoteHasMultipleUrLsEditIts"));
+      throw remoteError(errorText("main.git.remotes.thisRemoteHasMultipleUrLsEditIts"));
 
     await this.git.exec(["remote", ...args], {
       cwd: path,
@@ -108,7 +110,7 @@ export class GitRemotes {
     if (upstream !== null) {
       assertValidRefName(upstream, t("operations.setUpstream"));
       if (!upstream.startsWith("refs/remotes/"))
-        throw remoteError(t("main.git.remotes.chooseARemoteTrackingBranch"));
+        throw remoteError(errorText("main.git.remotes.chooseARemoteTrackingBranch"));
     }
 
     await this.git.exec(
@@ -168,7 +170,7 @@ export function transportOptions(
 
   if (credentials) {
     if (!url.startsWith("https://"))
-      throw remoteError(t("main.git.remotes.httpsAuthenticationOnly"));
+      throw remoteError(errorText("main.git.remotes.httpsAuthenticationOnly"));
 
     if (
       !credentials.username ||
@@ -176,7 +178,9 @@ export function transportOptions(
       credentials.username.includes(":") ||
       /[\r\n\0]/.test(credentials.username + credentials.password)
     )
-      throw remoteError(t("main.git.remotes.enterAnHttpsUsernameAndTokenWithoutControlCharacters"));
+      throw remoteError(
+        errorText("main.git.remotes.enterAnHttpsUsernameAndTokenWithoutControlCharacters"),
+      );
 
     const encoded = Buffer.from(`${credentials.username}:${credentials.password}`).toString(
       "base64",

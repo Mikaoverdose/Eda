@@ -1,15 +1,16 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { handle, broadcast } from "../transport";
-import { requireId } from "../validate";
 import { invalidRequest } from "../request-errors";
+import { broadcast, handle } from "../transport";
+import { requireId } from "../validate";
 
 export function registerOperationHandlers(services: Services): void {
   const profile = () => {
     const id = services.identity.getActive()?.id;
-    if (!id) throw invalidRequest(t("main.operationHandlers.selectAProfileToViewItsActivity"));
+    if (!id)
+      throw invalidRequest(errorText("main.operationHandlers.selectAProfileToViewItsActivity"));
     return id;
   };
 

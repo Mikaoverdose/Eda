@@ -1,17 +1,18 @@
-import type { DiffMode } from "@shared/repository/repository-read";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { LoadingContent } from "../../components/ui/feedback/Skeleton";
-import { ErrorDialog, SegmentedControl, TextButton, StateMessage } from "../../components/ui/index";
+import { isImagePath } from "@shared/repository/image-preview";
+import type { DiffMode } from "@shared/repository/repository-read";
 import { useEffect, useState } from "react";
+import { PanelControls } from "../../components/layout/PanelControls";
+import { usePanel } from "../../components/layout/hooks/usePanel";
+import { LoadingContent } from "../../components/ui/feedback/Skeleton";
+import { ErrorDialog, SegmentedControl, StateMessage, TextButton } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { usePreferencesStore } from "../../stores/preferences-store";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { PanelControls } from "../../components/layout/PanelControls";
-import { usePanel } from "../../components/layout/hooks/usePanel";
-import { DiffContent } from "./DiffContent";
-import { PartialStageProvider } from "../changes/PartialStageControls";
 import { IgnoreDialog } from "../changes/IgnoreDialog";
-import { isImagePath } from "@shared/repository/image-preview";
+import { PartialStageProvider } from "../changes/PartialStageControls";
+import { DiffContent } from "./DiffContent";
 import { ImageDiff } from "./ImageDiff";
 
 export function DiffViewer({ pending = false }: { pending?: boolean }) {
@@ -161,7 +162,7 @@ export function DiffViewer({ pending = false }: { pending?: boolean }) {
               ) : undefined
             }
           >
-            {error.message}
+            {errorMessage(error)}
           </ErrorDialog>
         ) : !displayedDiff || displayedDiff.files.length === 0 ? (
           <StateMessage className="min-h-0 flex-1" title={t("diffViewer.noTextualChanges")} />

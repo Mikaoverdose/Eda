@@ -1,16 +1,17 @@
-import { isPullStrategy } from "@shared/workflows/pull";
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
-import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
+import { t } from "@shared/i18n";
 import type { RemoteChange, TransportCredentials } from "@shared/integrations/remotes";
+import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
+import { isPullStrategy } from "@shared/workflows/pull";
 import type { Services } from "../../services";
+import { invalidRequest } from "../request-errors";
 import { broadcast, handle } from "../transport";
 import { requireAbsolutePath, requireId, requireRecord, requireString } from "../validate";
-import { invalidRequest } from "../request-errors";
 
 function boolean(value: unknown): boolean {
   if (typeof value !== "boolean")
-    throw invalidRequest(t("main.remoteHandlers.chooseAnExplicitOption"));
+    throw invalidRequest(errorText("main.remoteHandlers.chooseAnExplicitOption"));
   return value;
 }
 
@@ -30,7 +31,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
 
   handle(IPC_CHANNELS.backgroundFetchConfigure, async (_event, id, minutes) => {
     if (minutes !== null && typeof minutes !== "number")
-      throw invalidRequest(t("main.remoteHandlers.chooseAFetchInterval"));
+      throw invalidRequest(errorText("main.remoteHandlers.chooseAFetchInterval"));
     backgroundFetch.configure(requireId(id), minutes);
     return ok(undefined);
   });
@@ -50,7 +51,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
 
   handle(IPC_CHANNELS.pullSetPreference, async (_event, id, strategy) => {
     if (strategy !== null && !isPullStrategy(strategy))
-      throw invalidRequest(t("main.remoteHandlers.chooseAPullStrategy"));
+      throw invalidRequest(errorText("main.remoteHandlers.chooseAPullStrategy"));
     pull.setPreference(requireId(id), strategy);
     return ok(undefined);
   });
@@ -61,7 +62,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
     const strategy = value["strategy"];
 
     if (!isPullStrategy(strategy))
-      throw invalidRequest(t("main.remoteHandlers.chooseAPullStrategy"));
+      throw invalidRequest(errorText("main.remoteHandlers.chooseAPullStrategy"));
 
     const auth = credentials(value["credentials"]);
 
@@ -114,7 +115,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
         change = { kind: "remove", name };
         break;
       default:
-        throw invalidRequest(t("main.remoteHandlers.chooseARemoteConfigurationAction"));
+        throw invalidRequest(errorText("main.remoteHandlers.chooseARemoteConfigurationAction"));
     }
 
     await remotes.change(id, change);
@@ -162,12 +163,12 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
     const mode = input["mode"];
 
     if (mode !== "normal" && mode !== "lease" && mode !== "force" && mode !== "delete")
-      throw invalidRequest(t("main.remoteHandlers.chooseASupportedPushMode"));
+      throw invalidRequest(errorText("main.remoteHandlers.chooseASupportedPushMode"));
 
     const refKind = input["refKind"] ?? "branch";
 
     if (refKind !== "branch" && refKind !== "tag")
-      throw invalidRequest(t("main.remoteHandlers.chooseABranchOrTag"));
+      throw invalidRequest(errorText("main.remoteHandlers.chooseABranchOrTag"));
 
     const auth = credentials(input["credentials"]);
 

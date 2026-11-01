@@ -1,8 +1,9 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { randomUUID } from "node:crypto";
 import { lstat, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { GitError } from "@shared/errors";
 import type { GitService } from "../git-service";
 
 export async function withLocalConfiguration<T>(
@@ -25,7 +26,7 @@ export async function withLocalConfiguration<T>(
     throw new GitError({
       kind: "lock-contention",
       operation,
-      message: t(
+      message: errorText(
         "main.git.localConfiguration.anotherGitOperationHoldsTheConfigLockWaitAndTryAgain",
       ),
     });
@@ -40,7 +41,7 @@ export async function withLocalConfiguration<T>(
       throw new GitError({
         kind: "invalid-input",
         operation,
-        message: t(
+        message: errorText(
           "main.git.localConfiguration.updatingLocalGitConfigurationRequiresARegularConfigFile",
         ),
       });

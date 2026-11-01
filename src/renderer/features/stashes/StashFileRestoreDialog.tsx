@@ -1,8 +1,9 @@
-import { t, getLocale } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
 import type { StashArea, StashFilePreview } from "@shared/workflows/stashes";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, ErrorDialog, ReviewActions } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
 
 export function StashFileRestoreDialog({
   repositoryId,
@@ -33,9 +34,9 @@ export function StashFileRestoreDialog({
       const result = await window.eda.stashes.prepareFile(repositoryId, stashToken, area, path);
       if (generation !== request.current) return;
       if (result.ok) setPreview(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } catch (error) {
-      if (generation === request.current) setError(String(error));
+      if (generation === request.current) setError(errorMessage(error));
     } finally {
       if (generation === request.current) setBusy(false);
     }
@@ -66,11 +67,11 @@ export function StashFileRestoreDialog({
 
       if (result.ok) onRestored();
       else {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setPreview(null);
       }
     } catch (error) {
-      if (generation === request.current) setError(String(error));
+      if (generation === request.current) setError(errorMessage(error));
     } finally {
       if (generation === request.current) setBusy(false);
     }

@@ -1,8 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
 import type { MergeContinuation } from "@shared/workflows/workflow";
+import { useEffect, useState } from "react";
+import { Button, Dialog, ErrorDialog, ReviewActions, Textarea } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Button, Dialog, ErrorDialog, Textarea, ReviewActions } from "../../components/ui/index";
 
 export function MergeContinueDialog({
   repositoryId,
@@ -24,7 +25,7 @@ export function MergeContinueDialog({
       const result = await window.eda.workflows.prepareMerge(repositoryId);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
@@ -55,7 +56,7 @@ export function MergeContinueDialog({
       const result = await window.eda.workflows.continueMerge(repositoryId, review.id, message);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 

@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { type CommitDraft, emptySession } from "@shared/identity/profile-session";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -11,7 +12,10 @@ it("applies a chosen prefix to the draft while preserving scope, breaking marker
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("eda", {
     repository: {
-      previewCommit: vi.fn(async () => ({ ok: false, error: { message: "Unavailable" } })),
+      previewCommit: vi.fn(async () => ({
+        ok: false,
+        error: errorFixture({ message: "Unavailable" }),
+      })),
     },
   });
 
@@ -168,7 +172,10 @@ it.each(["repository", "session"])(
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("eda", {
       repository: {
-        previewCommit: vi.fn(async () => ({ ok: false, error: { message: "Unavailable" } })),
+        previewCommit: vi.fn(async () => ({
+          ok: false,
+          error: errorFixture({ message: "Unavailable" }),
+        })),
       },
     });
     const repository = useRepositoryStore.getState();

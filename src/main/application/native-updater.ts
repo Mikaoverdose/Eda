@@ -1,20 +1,23 @@
-import { t } from "@shared/i18n";
-import updater from "electron-updater";
-import type { AppUpdater, ProgressInfo } from "electron-updater";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import type { UpdateProgress, UpdateRelease } from "@shared/updates";
-import type { UpdateDriver } from "./update-service";
+import type { AppUpdater, ProgressInfo } from "electron-updater";
+import updater from "electron-updater";
 import { releaseFromManifest } from "./update-manifest";
+import type { UpdateDriver } from "./update-service";
 
 export class NativeUpdater implements UpdateDriver {
   private readonly updater: AppUpdater;
   private token: InstanceType<typeof updater.CancellationToken> | undefined;
   private installing = false;
 
-  constructor(
-    private readonly feedUrl: string,
-    installError: (error: unknown) => void,
-  ) {
-    const options = { provider: "generic" as const, url: feedUrl, channel: "latest" };
+  constructor(feedUrl: string, installError: (error: unknown) => void) {
+    const options = {
+      provider: "generic" as const,
+      url: feedUrl,
+      channel: "latest",
+      useMultipleRangeRequest: false,
+    };
     this.updater =
       process.platform === "win32"
         ? new updater.NsisUpdater(options)
@@ -27,16 +30,6 @@ export class NativeUpdater implements UpdateDriver {
     this.updater.allowDowngrade = false;
     this.updater.disableWebInstaller = true;
     this.updater.logger = null;
-    this.updater.netSession.webRequest.onBeforeRequest((details, callback) => {
-      const url = new URL(details.url);
-      callback({
-        cancel:
-          url.protocol !== "https:" ||
-          url.origin !== new URL(feedUrl).origin ||
-          !!url.username ||
-          !!url.password,
-      });
-    });
     this.updater.on("error", (error) => {
       if (this.installing) {
         this.installing = false;
@@ -47,10 +40,10 @@ export class NativeUpdater implements UpdateDriver {
 
   async check(): Promise<{ available: boolean; release: UpdateRelease }> {
     const result = await this.updater.checkForUpdates();
-    if (!result) throw new Error(t("main.nativeUpdater.theNativeUpdaterIsUnavailable"));
+    if (!result) throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
     return {
       available: result.isUpdateAvailable,
-      release: releaseFromManifest(result.updateInfo, this.feedUrl),
+      release: releaseFromManifest(result.updateInfo),
     };
   }
 

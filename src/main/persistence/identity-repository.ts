@@ -1,12 +1,13 @@
-import { t } from "@shared/i18n";
-import { createHash, randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import type { Identity, IdentityCreateOptions, IdentityDraft } from "@shared/identity/identity";
-import { appState, identities, type IdentityRow } from "./schema";
-import type { Database } from "./types";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import type { Identity, IdentityCreateOptions, IdentityDraft } from "@shared/identity/identity";
 import { builtInSetting } from "@shared/preferences/settings";
+import { eq } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { appState, identities, type IdentityRow } from "./schema";
 import { SettingsRepository } from "./settings-repository";
+import type { Database } from "./types";
 
 export class IdentityRepository {
   constructor(
@@ -139,8 +140,10 @@ export class IdentityRepository {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.saveProfile"),
-        message: t("main.persistence.identityRepository.aProfileWithThatNameAlreadyExists"),
-        suggestedAction: t("main.persistence.identityRepository.chooseADifferentProfileName"),
+        message: errorText("main.persistence.identityRepository.aProfileWithThatNameAlreadyExists"),
+        suggestedAction: errorText(
+          "main.persistence.identityRepository.chooseADifferentProfileName",
+        ),
       });
     }
   }

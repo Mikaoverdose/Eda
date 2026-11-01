@@ -1,19 +1,20 @@
-import { replayActionLabel } from "@shared/i18n/labels";
-import { t, getLocale } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
-import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
+import { replayActionLabel } from "@shared/i18n/labels";
 import type { ReplayAction, ReplayKind, ReplayReview } from "@shared/workflows/replay";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   Button,
-  Dialog,
-  Input,
-  Select,
   Checkbox,
+  Dialog,
   ErrorDialog,
+  Input,
   ReviewActions,
+  Select,
 } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
 
 interface ReplayDialogProps {
   repositoryId: string;
@@ -87,11 +88,11 @@ function ReplayDialogContent({
         setReview(result.value);
         setDirty(false);
       } else {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setDirty(true);
       }
     } catch (error) {
-      if (generation === request.current) setError(String(error));
+      if (generation === request.current) setError(errorMessage(error));
     } finally {
       if (generation === request.current) setBusy(false);
     }
@@ -124,12 +125,12 @@ function ReplayDialogContent({
         if (result.value.recoveryWarning) setRecoveryWarning(result.value.recoveryWarning);
         else onClose();
       } else {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setConfirmed(false);
         setDirty(true);
       }
     } catch (error) {
-      if (generation === request.current) setError(String(error));
+      if (generation === request.current) setError(errorMessage(error));
     } finally {
       if (generation === request.current) setBusy(false);
     }

@@ -1,12 +1,13 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { mkdtemp, writeFile, open, lstat, rm } from "node:fs/promises";
+import { isMergeTool, type MergeTool } from "@shared/integrations/merge-tool";
+import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { GitError } from "@shared/errors";
-import { isMergeTool, type MergeTool } from "@shared/integrations/merge-tool";
+import type { OperationManager } from "../operations/operation-manager";
 import { buildGitEnvironment } from "./execution/environment";
 import type { ProcessRunner } from "./execution/process-runner";
-import type { OperationManager } from "../operations/operation-manager";
 
 export class ExternalMergeTool {
   constructor(
@@ -18,7 +19,7 @@ export class ExternalMergeTool {
     config: MergeTool,
     versions: Record<"base" | "current" | "incoming" | "result", Buffer>,
   ): Promise<string> {
-    const fail = (message: string) =>
+    const fail = (message: ErrorText) =>
       new GitError({
         kind: "invalid-input",
         operation: t("operations.externalMergeTool"),
@@ -27,7 +28,9 @@ export class ExternalMergeTool {
 
     if (!isMergeTool(config) || !config.executable)
       throw fail(
-        t("main.git.externalMergeTool.configureAnExternalMergeToolInApplicationSettingsFirst"),
+        errorText(
+          "main.git.externalMergeTool.configureAnExternalMergeToolInApplicationSettingsFirst",
+        ),
       );
 
     const prefix = join(tmpdir(), "eda-merge-tool-");
@@ -74,22 +77,28 @@ export class ExternalMergeTool {
           onStderrLine: (line) => this.operations?.progress(line),
         })
         .catch(() => {
-          throw fail(t("main.git.externalMergeTool.couldNotStartTheExternalMergeToolCheck"));
+          throw fail(
+            errorText("main.git.externalMergeTool.couldNotStartTheExternalMergeToolCheck"),
+          );
         });
 
       if (result.cancelled)
         throw new GitError({
           kind: "cancelled",
           operation: t("operations.externalMergeTool"),
-          message: t("main.git.externalMergeTool.externalMergeCancelledRepositoryFilesAndTheIndex"),
+          message: errorText(
+            "main.git.externalMergeTool.externalMergeCancelledRepositoryFilesAndTheIndex",
+          ),
         });
 
       if (result.outputLimitExceeded)
-        throw fail(t("main.git.externalMergeTool.theExternalToolExceededItsDiagnosticOutputLimit"));
+        throw fail(
+          errorText("main.git.externalMergeTool.theExternalToolExceededItsDiagnosticOutputLimit"),
+        );
 
       if (result.exitCode !== 0)
         throw fail(
-          t("main.git.externalMergeTool.theExternalMergeToolExitedWithCodeRepository", {
+          errorText("main.git.externalMergeTool.theExternalMergeToolExitedWithCodeRepository", {
             exitCode: result.exitCode,
           }),
         );
@@ -97,7 +106,7 @@ export class ExternalMergeTool {
       const info = await lstat(paths.result);
 
       if (!info.isFile() || info.isSymbolicLink())
-        throw fail(t("main.git.externalMergeTool.theMergeToolMustSaveARegularResultFile"));
+        throw fail(errorText("main.git.externalMergeTool.theMergeToolMustSaveARegularResultFile"));
 
       const handle = await open(paths.result, "r");
       let bytes: Buffer;
@@ -106,19 +115,23 @@ export class ExternalMergeTool {
         const buffer = Buffer.alloc(4 * 1024 * 1024 + 1);
         const result = await handle.read(buffer, 0, buffer.length, 0);
         if (result.bytesRead > 4 * 1024 * 1024)
-          throw fail(t("main.git.externalMergeTool.theMergeResultExceedsThe4MiBEditorLimit"));
+          throw fail(
+            errorText("main.git.externalMergeTool.theMergeResultExceedsThe4MiBEditorLimit"),
+          );
         bytes = buffer.subarray(0, result.bytesRead);
       } finally {
         await handle.close();
       }
 
       if (bytes.includes(0))
-        throw fail(t("main.git.externalMergeTool.theMergeToolProducedBinaryContentUseWhole"));
+        throw fail(
+          errorText("main.git.externalMergeTool.theMergeToolProducedBinaryContentUseWhole"),
+        );
 
       try {
         return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
       } catch {
-        throw fail(t("main.git.externalMergeTool.theMergeToolMustSaveTheResultAsUtf8Text"));
+        throw fail(errorText("main.git.externalMergeTool.theMergeToolMustSaveTheResultAsUtf8Text"));
       }
     } finally {
       if (resolve(directory).startsWith(resolve(prefix)))

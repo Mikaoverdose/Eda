@@ -1,26 +1,27 @@
-import { GIT_FILE_MODE, isRegularFileMode } from "@shared/repository/git-file-mode";
-import { t } from "@shared/i18n";
-import { createHash, randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, open, readlink, rename, rm, unlink } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { GIT_FILE_MODE, isRegularFileMode } from "@shared/repository/git-file-mode";
 import type {
   ConflictPreview,
   ConflictVersion,
   ResolveConflictRequest,
 } from "@shared/workflows/workflow";
+import { createHash, randomUUID } from "node:crypto";
+import { chmod, lstat, mkdir, mkdtemp, open, readlink, rename, rm, unlink } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import type { ExternalMergeTool } from "../../git/external-merge-tool";
 import type { GitService } from "../../git/git-service";
-import { assertRepositoryPath } from "../../git/validation";
 import { readWorkflowState } from "../../git/operations/workflow-state";
+import { assertRepositoryPath } from "../../git/validation";
+import type { SettingsRepository } from "../../persistence/settings-repository";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
 import type { WorkflowService } from "./workflow-service";
-import type { ExternalMergeTool } from "../../git/external-merge-tool";
-import type { SettingsRepository } from "../../persistence/settings-repository";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const PREVIEW_BYTES = 512 * 1024;
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.resolveConflict"), message });
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
@@ -73,7 +74,7 @@ export class ConflictService {
       local.startsWith(`..${sep}`) ||
       local.split(sep).some((part) => part.toLowerCase() === ".git")
     )
-      throw invalid(t("main.conflictService.chooseAWorkingPathInsideThisRepository"));
+      throw invalid(errorText("main.conflictService.chooseAWorkingPathInsideThisRepository"));
 
     let parent = resolve(root);
 
@@ -86,7 +87,7 @@ export class ConflictService {
       });
 
       if (entry && (!entry.isDirectory() || entry.isSymbolicLink()))
-        throw invalid(t("main.conflictService.aParentPathIsALinkOrNon"));
+        throw invalid(errorText("main.conflictService.aParentPathIsALinkOrNon"));
     }
 
     return target;
@@ -106,7 +107,9 @@ export class ConflictService {
     } else if (info?.isDirectory()) kind = "directory";
     else if (info) {
       if (!info.isFile())
-        throw invalid(t("main.conflictService.thisConflictUsesASpecialFilesystemObjectResolve"));
+        throw invalid(
+          errorText("main.conflictService.thisConflictUsesASpecialFilesystemObjectResolve"),
+        );
 
       kind = "file";
 
@@ -138,7 +141,7 @@ export class ConflictService {
 
           if (total > info.size)
             throw invalid(
-              t("main.conflictService.theConflictFileChangedWhileReadingInspectItAgain"),
+              errorText("main.conflictService.theConflictFileChangedWhileReadingInspectItAgain"),
             );
 
           if (retained <= PREVIEW_BYTES) {
@@ -156,7 +159,9 @@ export class ConflictService {
           after.mtimeMs !== info.mtimeMs ||
           after.mode !== info.mode
         )
-          throw invalid(t("main.conflictService.theConflictFileChangedWhileReadingInspectItAgain"));
+          throw invalid(
+            errorText("main.conflictService.theConflictFileChangedWhileReadingInspectItAgain"),
+          );
 
         hasMarkers ||= /(?:^|\n)(?:<{7}|={7}|>{7}|\|{7})(?: |\r?$)/.test(
           `${total > tail.length ? "x" : ""}${tail}`,
@@ -187,7 +192,9 @@ export class ConflictService {
       const match = /^(\d{6}) ([a-f0-9]{40,64}) ([0-3])\t([\s\S]+)$/.exec(row);
       if (!match || match[4] !== path)
         throw invalid(
-          t("main.conflictService.gitReturnedUnexpectedConflictEntriesRefreshBeforeResolving"),
+          errorText(
+            "main.conflictService.gitReturnedUnexpectedConflictEntriesRefreshBeforeResolving",
+          ),
         );
       entries.push({ mode: match[1]!, oid: match[2]!, stage: Number(match[3]) });
     }
@@ -215,7 +222,9 @@ export class ConflictService {
 
     if (!index.entries.some((entry) => entry.stage > 0))
       throw invalid(
-        t("main.conflictService.thisPathNoLongerHasUnresolvedIndexEntriesRefreshTheConflictList"),
+        errorText(
+          "main.conflictService.thisPathNoLongerHasUnresolvedIndexEntriesRefreshTheConflictList",
+        ),
       );
 
     const version = async (stage: number): Promise<ConflictVersion | null> => {
@@ -236,7 +245,7 @@ export class ConflictService {
             );
 
       if (!Number.isSafeInteger(size) || size < 0)
-        throw invalid(t("main.conflictService.gitReturnedAnInvalidConflictSize"));
+        throw invalid(errorText("main.conflictService.gitReturnedAnInvalidConflictSize"));
 
       const bytes =
         entry.mode === GIT_FILE_MODE.submodule || size > PREVIEW_BYTES
@@ -293,7 +302,7 @@ export class ConflictService {
 
     if (!tool || !config?.executable)
       throw invalid(
-        t("main.conflictService.configureAnExternalMergeToolInApplicationSettingsFirst"),
+        errorText("main.conflictService.configureAnExternalMergeToolInApplicationSettingsFirst"),
       );
 
     if (
@@ -303,7 +312,9 @@ export class ConflictService {
       snapshot.root !== repository.path ||
       snapshot.profileId !== repository.identityId
     )
-      throw invalid(t("main.conflictService.inspectThisConflictAgainBeforeOpeningAnExternalTool"));
+      throw invalid(
+        errorText("main.conflictService.inspectThisConflictAgainBeforeOpeningAnExternalTool"),
+      );
 
     const { preview } = snapshot;
 
@@ -313,7 +324,9 @@ export class ConflictService {
         (version) => version && (!isRegularFileMode(version.mode) || version.text === null),
       )
     )
-      throw invalid(t("main.conflictService.externalMergeCurrentlySupportsUtf8TextConflictsUse"));
+      throw invalid(
+        errorText("main.conflictService.externalMergeCurrentlySupportsUtf8TextConflictsUse"),
+      );
 
     return this.writer.remoteOperation(
       repositoryId,
@@ -341,7 +354,7 @@ export class ConflictService {
 
         if (!(await unchanged()))
           throw invalid(
-            t(
+            errorText(
               "main.conflictService.theConflictChangedRecheckDiskStateBeforeOpeningTheExternalTool",
             ),
           );
@@ -369,7 +382,7 @@ export class ConflictService {
       snapshot.root !== repository.path ||
       snapshot.profileId !== repository.identityId
     )
-      throw invalid(t("main.conflictService.thisConflictPreviewExpiredOrBelongsToA"));
+      throw invalid(errorText("main.conflictService.thisConflictPreviewExpiredOrBelongsToA"));
 
     return this.writer.remoteOperation(
       request.repositoryId,
@@ -391,7 +404,9 @@ export class ConflictService {
           file.hash !== snapshot.fileHash ||
           workflow?.token !== preview.workflow?.token
         )
-          throw invalid(t("main.conflictService.theConflictOrWorkingFileChangedAfterInspection"));
+          throw invalid(
+            errorText("main.conflictService.theConflictOrWorkingFileChangedAfterInspection"),
+          );
 
         let bytes: Buffer | null = null;
         const selected =
@@ -416,11 +431,13 @@ export class ConflictService {
             )
           )
             throw invalid(
-              t("main.conflictService.useAWholeSideChoiceForSymlinkOrSubmoduleConflicts"),
+              errorText("main.conflictService.useAWholeSideChoiceForSymlinkOrSubmoduleConflicts"),
             );
 
           if (request.text === undefined || Buffer.byteLength(request.text) > MAX_BYTES)
-            throw invalid(t("main.conflictService.enterResolvedTextWithinThe4MiBEditorLimit"));
+            throw invalid(
+              errorText("main.conflictService.enterResolvedTextWithinThe4MiBEditorLimit"),
+            );
 
           bytes = Buffer.from(
             preview.newline === "crlf" ? request.text.replace(/\r?\n/g, "\r\n") : request.text,
@@ -435,7 +452,7 @@ export class ConflictService {
             : /^(?:<{7}|={7}|>{7}|\|{7})(?: |\r?$)/m.test(bytes?.toString("utf8") ?? ""))
         )
           throw invalid(
-            t("main.conflictService.removeConflictMarkersBeforeMarkingThisPathResolved"),
+            errorText("main.conflictService.removeConflictMarkersBeforeMarkingThisPathResolved"),
           );
 
         const submodule =
@@ -444,7 +461,9 @@ export class ConflictService {
 
         if (submodule && (selected?.mode === GIT_FILE_MODE.submodule || !selected)) {
           if (!request.stage || request.choice === "text" || request.choice === "worktree")
-            throw invalid(t("main.conflictService.chooseASubmoduleCommitOrDeletionAndMark"));
+            throw invalid(
+              errorText("main.conflictService.chooseASubmoduleCommitOrDeletionAndMark"),
+            );
 
           if (selected)
             await this.git.exec(
@@ -468,7 +487,7 @@ export class ConflictService {
         }
 
         if (file.kind === "directory")
-          throw invalid(t("main.conflictService.aDirectoryOccupiesThisConflictPathMoveIt"));
+          throw invalid(errorText("main.conflictService.aDirectoryOccupiesThisConflictPathMoveIt"));
 
         if (request.choice !== "worktree") {
           if (selected) {
@@ -491,7 +510,7 @@ export class ConflictService {
 
               if ((await this.working(target)).hash !== file.hash)
                 throw invalid(
-                  t(
+                  errorText(
                     "main.conflictService.theWorkingFileChangedWhilePreparingTheResolutionInspectItAgain",
                   ),
                 );
@@ -502,12 +521,12 @@ export class ConflictService {
                 throw new GitError({
                   kind: "invalid-input",
                   operation: t("operations.restoreSymlinkConflictSide"),
-                  message: t(
+                  message: errorText(
                     "main.conflictService.gitCouldNotInstallTheSelectedSymlinkTheConflictRemainsUnresolved",
                   ),
-                  suggestedAction: t("main.conflictService.inspectTheWorkingFileAndGitSSymlink", {
-                    value1: error instanceof Error ? error.message : "",
-                  }),
+                  suggestedAction: errorText(
+                    "main.conflictService.inspectTheWorkingFileAndGitSSymlink",
+                  ),
                 });
 
               throw error;
@@ -545,17 +564,14 @@ export class ConflictService {
         if (request.stage) {
           try {
             await this.git.stage(root, [preview.path]);
-          } catch (error) {
+          } catch {
             throw new GitError({
               kind: "invalid-input",
               operation: t("operations.markConflictResolved"),
-              message: t(
+              message: errorText(
                 "main.conflictService.theResolutionIsSavedButGitCouldNotStageItYourSavedFileWasRetained",
               ),
-              suggestedAction:
-                error instanceof Error
-                  ? error.message
-                  : t("main.conflictService.refreshAndStageThisPathFromChanges"),
+              suggestedAction: errorText("main.conflictService.refreshAndStageThisPathFromChanges"),
             });
           }
         }

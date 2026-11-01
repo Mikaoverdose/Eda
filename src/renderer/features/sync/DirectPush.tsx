@@ -1,13 +1,14 @@
-import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
-import { ArrowUp } from "lucide-react";
-import type { PushPreview, PushRequest, TransportCredentials } from "@shared/integrations/remotes";
 import type { GitErrorData } from "@shared/errors";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
+import type { PushPreview, PushRequest, TransportCredentials } from "@shared/integrations/remotes";
+import { ArrowUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Button, Dialog, Field, Input } from "../../components/ui/index";
+import { ACTION_FEEDBACK } from "../../motion";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Button, Dialog, Field, Input } from "../../components/ui/index";
 import { TransferProgress } from "./TransportFields";
-import { ACTION_FEEDBACK } from "../../motion";
 
 export function DirectPush({
   repositoryId,
@@ -48,7 +49,7 @@ export function DirectPush({
       useAppStore.getState().activeIdentity?.id === identityId;
     const fail = (failure: GitErrorData) => {
       if (!current()) return;
-      setError(failure.message);
+      setError(errorMessage(failure));
       setNeedsAuth(failure.kind === "auth-failed");
     };
 
@@ -142,7 +143,7 @@ export function DirectPush({
       );
       if (!current()) return;
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setNeedsAuth(result.error.kind === "auth-failed");
         return;
       }

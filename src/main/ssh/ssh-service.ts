@@ -1,9 +1,6 @@
-import { t } from "@shared/i18n";
-import { readFile, readdir, stat } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type {
   AgentStatus,
   ConnectionTestResult,
@@ -11,6 +8,10 @@ import type {
   SshKey,
   UnlockKeyRequest,
 } from "@shared/identity/ssh";
+import { existsSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, join } from "node:path";
 import { buildGitEnvironment, SSH_HOST_TRUST_OPTIONS } from "../git/execution/environment";
 import type { ProcessRunner } from "../git/execution/process-runner";
 import { ProcessSpawnError } from "../git/execution/process-runner";
@@ -68,8 +69,10 @@ export class SshService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.importSshKey"),
-        message: t("main.ssh.sshService.thereIsNoFileAt", { privateKeyPath: privateKeyPath }),
-        suggestedAction: t(
+        message: errorText("main.ssh.sshService.thereIsNoFileAt", {
+          privateKeyPath: privateKeyPath,
+        }),
+        suggestedAction: errorText(
           "main.ssh.sshService.chooseThePrivateKeyFileWhichIsTheOneWithoutThePubExtension",
         ),
       });
@@ -79,8 +82,8 @@ export class SshService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.importSshKey"),
-        message: t("main.ssh.sshService.thatIsAPublicKey"),
-        suggestedAction: t(
+        message: errorText("main.ssh.sshService.thatIsAPublicKey"),
+        suggestedAction: errorText(
           "main.ssh.sshService.chooseThePrivateKeyInsteadWhichHasTheSameNameWithoutPub",
         ),
       });
@@ -94,10 +97,10 @@ export class SshService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.importSshKey"),
-        message: t("main.ssh.sshService.edaCouldNotReadAsAnSshKey", {
+        message: errorText("main.ssh.sshService.edaCouldNotReadAsAnSshKey", {
           value1: basename(privateKeyPath),
         }),
-        suggestedAction: t(
+        suggestedAction: errorText(
           "main.ssh.sshService.checkThatItIsAnOpenSshPrivateKeyAndThatItsPubFileIsBesideIt",
         ),
       });
@@ -118,8 +121,8 @@ export class SshService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.generateSshKey"),
-        message: t("main.ssh.sshService.aKeyAlreadyExistsAt", { path: request.path }),
-        suggestedAction: t(
+        message: errorText("main.ssh.sshService.aKeyAlreadyExistsAt", { path: request.path }),
+        suggestedAction: errorText(
           "main.ssh.sshService.chooseADifferentNameEdaWillNotOverwriteAnExistingKey",
         ),
       });
@@ -137,8 +140,8 @@ export class SshService {
       throw new GitError({
         kind: "unknown",
         operation: t("operations.generateSshKey"),
-        message: t("main.ssh.sshService.sshKeygenCouldNotCreateTheKey"),
-        suggestedAction: t("main.ssh.sshService.checkThatTheFolderExistsAndIsWritable"),
+        message: errorText("main.ssh.sshService.sshKeygenCouldNotCreateTheKey"),
+        suggestedAction: errorText("main.ssh.sshService.checkThatTheFolderExistsAndIsWritable"),
         exitCode: result.exitCode,
         rawStderr: result.stderr,
       });
@@ -181,8 +184,8 @@ export class SshService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.unlockSshKey"),
-        message: agent.reason,
-        suggestedAction: t("main.ssh.sshService.checkTheSshAgentSelectionInTheGit"),
+        message: errorText("errors.operationBlocked", { reason: agent.reason }),
+        suggestedAction: errorText("main.ssh.sshService.checkTheSshAgentSelectionInTheGit"),
       });
     }
 
@@ -205,8 +208,8 @@ export class SshService {
         throw new GitError({
           kind: "auth-failed",
           operation: t("operations.unlockSshKey"),
-          message: t("main.ssh.sshService.thatPassphraseDidNotUnlockTheKey"),
-          suggestedAction: t("main.ssh.sshService.checkThePassphraseAndTryAgain"),
+          message: errorText("main.ssh.sshService.thatPassphraseDidNotUnlockTheKey"),
+          suggestedAction: errorText("main.ssh.sshService.checkThePassphraseAndTryAgain"),
           exitCode: result.exitCode,
         });
       }
@@ -398,8 +401,10 @@ export class SshService {
         throw new GitError({
           kind: "network-failed",
           operation,
-          message: t("main.ssh.sshService.didNotRespondAndWasStopped", { executable: executable }),
-          suggestedAction: t(
+          message: errorText("main.ssh.sshService.didNotRespondAndWasStopped", {
+            executable: executable,
+          }),
+          suggestedAction: errorText(
             "main.ssh.sshService.tryAgainIfItKeepsHappeningCheckYourSshAgentAndConfiguration",
           ),
         });
@@ -415,10 +420,13 @@ export class SshService {
         throw new GitError({
           kind: "git-not-found",
           operation,
-          message: t("main.ssh.sshService.edaCouldNotRun", { executable: executable }),
-          suggestedAction: t("main.ssh.sshService.checkThatOpenSshIsInstalledAndThatIsOnYourPath", {
-            executable: executable,
-          }),
+          message: errorText("main.ssh.sshService.edaCouldNotRun", { executable: executable }),
+          suggestedAction: errorText(
+            "main.ssh.sshService.checkThatOpenSshIsInstalledAndThatIsOnYourPath",
+            {
+              executable: executable,
+            },
+          ),
         });
       }
 

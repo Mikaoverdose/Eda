@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
@@ -109,7 +110,9 @@ it("recovers a pending prompt if it was emitted before the listener mounted", as
 
 it("retains the prompt and allows retry if the response fails", async () => {
   respond.mockResolvedValueOnce(
-    err({ kind: "unknown", operation: "fixture", message: "Could not send decision" }),
+    err(
+      errorFixture({ kind: "unknown", operation: "fixture", message: "Could not send decision" }),
+    ),
   );
   await open();
   await act(async () => button("Trust and continue").click());

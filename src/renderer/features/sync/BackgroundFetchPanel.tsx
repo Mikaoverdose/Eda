@@ -1,9 +1,10 @@
-import { t } from "@shared/i18n";
-import { formatDateTime } from "../../utils/format";
-import { useEffect, useRef, useState } from "react";
-import type { BackgroundFetchState } from "@shared/integrations/background-fetch";
 import type { Result } from "@shared/errors";
-import { Button, ErrorDialog, Disclosure } from "../../components/ui/index";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
+import type { BackgroundFetchState } from "@shared/integrations/background-fetch";
+import { useEffect, useRef, useState } from "react";
+import { Button, Disclosure, ErrorDialog } from "../../components/ui/index";
+import { formatDateTime } from "../../utils/format";
 
 const time = (value: number | null) =>
   value === null ? t("backgroundFetchPanel.never") : formatDateTime(value);
@@ -20,7 +21,7 @@ export function BackgroundFetchPanel({ repositoryId }: { repositoryId: string })
     const result = await window.eda.backgroundFetch.inspect(repositoryId);
     if (request !== generation.current) return;
     if (result.ok) setState(result.value);
-    else setError(result.error.message);
+    else setError(errorMessage(result.error));
   };
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export function BackgroundFetchPanel({ repositoryId }: { repositoryId: string })
 
     try {
       const result = await work();
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       saving.current = false;
       await load();
     } finally {

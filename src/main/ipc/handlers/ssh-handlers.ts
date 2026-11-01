@@ -1,26 +1,27 @@
-import { t } from "@shared/i18n";
-import { BrowserWindow, dialog } from "electron";
+import { errorText } from "@shared/error-codes";
 import { GitError, ok } from "@shared/errors";
+import { t } from "@shared/i18n";
 import { IPC_CHANNELS } from "@shared/ipc";
+import { BrowserWindow, dialog } from "electron";
 import type { Services } from "../../services";
-import { handle } from "../transport";
 import { showOpenDialog } from "../dialogs";
-import { optionalRecord, requireAbsolutePath, requireId, requireString } from "../validate";
 import { invalidRequest } from "../request-errors";
+import { handle } from "../transport";
+import { optionalRecord, requireAbsolutePath, requireId, requireString } from "../validate";
 
 export function registerSshHandlers(services: Services): void {
   handle(IPC_CHANNELS.sshPendingHostTrust, async (event) => {
     if (event.senderFrame !== event.sender.mainFrame)
-      throw invalidRequest(t("main.sshHandlers.sshHostTrustRequiresTheApplicationWindow"));
+      throw invalidRequest(errorText("main.sshHandlers.sshHostTrustRequiresTheApplicationWindow"));
     return ok(services.sshHostTrust.current(event.sender.id));
   });
 
   handle(IPC_CHANNELS.sshRespondHostTrust, async (event, rawId, rawTrust) => {
     if (event.senderFrame !== event.sender.mainFrame || typeof rawTrust !== "boolean")
-      throw invalidRequest(t("main.sshHandlers.invalidSshHostTrustResponse"));
+      throw invalidRequest(errorText("main.sshHandlers.invalidSshHostTrustResponse"));
     if (!services.sshHostTrust.respond(event.sender.id, requireId(rawId), rawTrust))
       throw invalidRequest(
-        t("main.sshHandlers.thisSshHostTrustRequestHasExpiredOrBelongsToAnotherWindow"),
+        errorText("main.sshHandlers.thisSshHostTrustRequestHasExpiredOrBelongsToAnotherWindow"),
       );
     return ok(undefined);
   });
@@ -56,8 +57,10 @@ export function registerSshHandlers(services: Services): void {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.unlockSshKey"),
-        message: t("main.sshHandlers.enterTheKeySPassphrase"),
-        suggestedAction: t("main.sshHandlers.thePassphraseIsTheOneYouSetWhenTheKeyWasCreated"),
+        message: errorText("main.sshHandlers.enterTheKeySPassphrase"),
+        suggestedAction: errorText(
+          "main.sshHandlers.thePassphraseIsTheOneYouSetWhenTheKeyWasCreated",
+        ),
       });
     }
 

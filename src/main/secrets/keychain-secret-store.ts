@@ -1,9 +1,10 @@
+import { ERROR_CODE, errorText } from "@shared/error-codes";
+import { AppError, errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { safeStorage } from "electron";
-import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { GitError } from "@shared/errors";
 import { existsSync } from "node:fs";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { SecretStore } from "./secret-store";
 import { secretKeys } from "./secret-store";
@@ -37,12 +38,12 @@ export class KeychainSecretStore implements SecretStore {
     try {
       const probe = safeStorage.encryptString("probe");
       if (safeStorage.decryptString(probe) !== "probe") {
-        throw new Error(t("main.secrets.keychainSecretStore.encryptionRoundTripFailed"));
+        throw new AppError(ERROR_CODE.ENCRYPTION_VERIFICATION_FAILED);
       }
     } catch (error) {
       return new UnavailableSecretStore(
         t("main.secrets.keychainSecretStore.theSystemKeychainDidNotRespond", {
-          value1: describe(error),
+          value1: errorMessage(error),
         }),
       );
     }
@@ -121,17 +122,17 @@ export class KeychainSecretStore implements SecretStore {
         Array.isArray(parsed) ||
         !Object.values(parsed).every((value) => typeof value === "string")
       )
-        throw new Error(t("main.secrets.keychainSecretStore.invalidVaultFormat"));
+        throw new AppError(ERROR_CODE.INVALID_VAULT_FORMAT);
 
       return parsed as Record<string, string>;
     } catch {
       throw new GitError({
         kind: "keychain-unavailable",
         operation: t("operations.readCredentialVault"),
-        message: t(
+        message: errorText(
           "main.secrets.keychainSecretStore.theCredentialVaultCouldNotBeReadItsOriginalDataWasPreserved",
         ),
-        suggestedAction: t(
+        suggestedAction: errorText(
           "main.secrets.keychainSecretStore.restoreAccessToTheVaultBeforeSavingCredentialsOrDeletingAProfile",
         ),
       });
@@ -172,8 +173,4 @@ export class UnavailableSecretStore implements SecretStore {
 
 export function vaultPathFor(userDataPath: string): string {
   return join(userDataPath, "secrets.vault");
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

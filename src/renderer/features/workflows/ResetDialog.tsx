@@ -1,18 +1,19 @@
-import { t, getLocale } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
+import type { ResetMode, ResetResult, ResetReview } from "@shared/workflows/reset";
 import { useEffect, useState } from "react";
-import type { ResetMode, ResetReview, ResetResult } from "@shared/workflows/reset";
-import { useRepositoryStore } from "../../stores/repository-store";
 import {
-  DefinitionList,
   Button,
-  Dialog,
-  Select,
   Checkbox,
+  DefinitionList,
+  Dialog,
+  Disclosure,
   ErrorDialog,
   ReviewActions,
-  Disclosure,
+  Select,
 } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
 
 export function ResetDialog({
   repositoryId,
@@ -38,7 +39,7 @@ export function ResetDialog({
     try {
       const response = await window.eda.reset.prepare(repositoryId, target, mode);
       if (response.ok) setReview(response.value);
-      else setError(response.error.message);
+      else setError(errorMessage(response.error));
     } finally {
       setBusy(false);
     }
@@ -61,7 +62,7 @@ export function ResetDialog({
 
       if (response.ok) setResult(response.value);
       else {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         setConfirmed(false);
       }
     } finally {

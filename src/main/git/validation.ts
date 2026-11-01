@@ -1,8 +1,9 @@
+import { errorText, type ErrorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { isAbsolute } from "node:path";
-import { GitError } from "@shared/errors";
 
-const invalid = (operation: string, message: string, suggestedAction: string) =>
+const invalid = (operation: string, message: ErrorText, suggestedAction: ErrorText) =>
   new GitError({ kind: "invalid-input", operation, message, suggestedAction });
 
 export function assertNotOptionLike(
@@ -13,11 +14,11 @@ export function assertNotOptionLike(
   if (value.startsWith("-")) {
     throw invalid(
       operation,
-      t("main.git.validation.theStartsWithADashSoGitWouldReadItAsAnOption", {
+      errorText("main.git.validation.theStartsWithADashSoGitWouldReadItAsAnOption", {
         label: label,
         value: value,
       }),
-      t("main.git.validation.renameTheSoItDoesNotBeginWith", { label: label }),
+      errorText("main.git.validation.renameTheSoItDoesNotBeginWith", { label: label }),
     );
   }
 }
@@ -41,8 +42,8 @@ export function assertValidRefName(ref: string, operation: string): void {
   if (!isValidRefName(ref)) {
     throw invalid(
       operation,
-      t("main.git.validation.isNotAValidGitReferenceName", { ref: ref }),
-      t("main.git.validation.referenceNamesCannotContainSpacesControlCharactersOr"),
+      errorText("main.git.validation.isNotAValidGitReferenceName", { ref: ref }),
+      errorText("main.git.validation.referenceNamesCannotContainSpacesControlCharactersOr"),
     );
   }
 
@@ -57,8 +58,8 @@ export function assertValidObjectId(value: string, operation: string): void {
   if (!isValidObjectId(value)) {
     throw invalid(
       operation,
-      t("main.git.validation.isNotAValidGitObjectId", { value: value }),
-      t("main.git.validation.objectIdsAreHexadecimalAndAtLeast4CharactersLong"),
+      errorText("main.git.validation.isNotAValidGitObjectId", { value: value }),
+      errorText("main.git.validation.objectIdsAreHexadecimalAndAtLeast4CharactersLong"),
     );
   }
 }
@@ -67,21 +68,22 @@ export function assertFullObjectId(value: string, operation: string): void {
   if (!/^[0-9a-f]{40,64}$/.test(value)) {
     throw invalid(
       operation,
-      t("main.git.validation.isNotAFullGitObjectId", { value: value }),
-      t("main.git.validation.refreshHistoryAndSelectTheCommitAgain"),
+      errorText("main.git.validation.isNotAFullGitObjectId", { value: value }),
+      errorText("main.git.validation.refreshHistoryAndSelectTheCommitAgain"),
     );
   }
 }
 
 export function assertAllowedRemoteUrl(value: string, operation: string): void {
-  const remoteError = (message: string) =>
-    invalid(operation, message, t("main.git.validation.checkTheRemoteUrlAndTryAgain"));
+  const remoteError = (message: ErrorText) =>
+    invalid(operation, message, errorText("main.git.validation.checkTheRemoteUrlAndTryAgain"));
 
   if (!value || value.length > 4096 || /[\x00-\x1f\x7f]/.test(value) || value.startsWith("-"))
-    throw remoteError(t("main.git.validation.enterAnHttpssshOrAbsoluteLocalRepositoryUrl"));
+    throw remoteError(errorText("main.git.validation.enterAnHttpssshOrAbsoluteLocalRepositoryUrl"));
 
   if (isAbsolute(value) && !value.includes("://")) return;
-  if (/\s/.test(value)) throw remoteError(t("main.git.validation.encodeSpacesInRemoteUrLs"));
+  if (/\s/.test(value))
+    throw remoteError(errorText("main.git.validation.encodeSpacesInRemoteUrLs"));
   if (/^[\w.-]+@[\w.-]+:[^:]+$/.test(value)) return;
 
   let url: URL;
@@ -89,7 +91,9 @@ export function assertAllowedRemoteUrl(value: string, operation: string): void {
   try {
     url = new URL(value);
   } catch {
-    throw remoteError(t("main.git.validation.useAnHttpsOrSshurlUserHostPathOrAnAbsoluteLocalPath"));
+    throw remoteError(
+      errorText("main.git.validation.useAnHttpsOrSshurlUserHostPathOrAnAbsoluteLocalPath"),
+    );
   }
 
   if (
@@ -99,7 +103,7 @@ export function assertAllowedRemoteUrl(value: string, operation: string): void {
     url.hash ||
     (url.protocol === "https:" && url.username)
   )
-    throw remoteError(t("main.git.validation.useHttpssshOrFileUrLsWithoutEmbedded"));
+    throw remoteError(errorText("main.git.validation.useHttpssshOrFileUrLsWithoutEmbedded"));
 }
 
 // OpenSSH has no safe end-of-options marker for destinations.
@@ -112,16 +116,16 @@ export function parseValidSshDestination(
   if (trimmed.length === 0) {
     throw invalid(
       operation,
-      t("main.git.validation.theHostIsEmpty"),
-      t("main.git.validation.enterAHostSuchAsGithubComOrGitGithubCom"),
+      errorText("main.git.validation.theHostIsEmpty"),
+      errorText("main.git.validation.enterAHostSuchAsGithubComOrGitGithubCom"),
     );
   }
 
   if (trimmed.length > 320) {
     throw invalid(
       operation,
-      t("main.git.validation.thatHostIsTooLong"),
-      t("main.git.validation.checkTheAddressAndTryAgain"),
+      errorText("main.git.validation.thatHostIsTooLong"),
+      errorText("main.git.validation.checkTheAddressAndTryAgain"),
     );
   }
 
@@ -134,8 +138,8 @@ export function parseValidSshDestination(
   if (!match) {
     throw invalid(
       operation,
-      t("main.git.validation.isNotAValidSshHost", { trimmed: trimmed }),
-      t("main.git.validation.useAHostLikeGithubComOrGitGithubComToIncludeAUsername"),
+      errorText("main.git.validation.isNotAValidSshHost", { trimmed: trimmed }),
+      errorText("main.git.validation.useAHostLikeGithubComOrGitGithubComToIncludeAUsername"),
     );
   }
 
@@ -144,8 +148,8 @@ export function parseValidSshDestination(
   if (port !== undefined && (Number(port) < 1 || Number(port) > 65535)) {
     throw invalid(
       operation,
-      t("main.git.validation.portIsOutOfRange", { port: port }),
-      t("main.git.validation.useAPortBetween1And65535"),
+      errorText("main.git.validation.portIsOutOfRange", { port: port }),
+      errorText("main.git.validation.useAPortBetween1And65535"),
     );
   }
 
@@ -163,24 +167,26 @@ export function assertPlainPath(path: string, operation: string): void {
   if (path.length === 0) {
     throw invalid(
       operation,
-      t("main.git.validation.theFilePathIsEmpty"),
-      t("main.git.validation.selectAFile"),
+      errorText("main.git.validation.theFilePathIsEmpty"),
+      errorText("main.git.validation.selectAFile"),
     );
   }
 
   if (path.includes("\0")) {
     throw invalid(
       operation,
-      t("main.git.validation.theFilePathContainsANullByte"),
-      t("main.git.validation.chooseADifferentFile"),
+      errorText("main.git.validation.theFilePathContainsANullByte"),
+      errorText("main.git.validation.chooseADifferentFile"),
     );
   }
 
   if (path.startsWith(":")) {
     throw invalid(
       operation,
-      t("main.git.validation.thePathStartsWithWhichGitReadsAsAPathspecExpression", { path: path }),
-      t("main.git.validation.renameTheFileSoItDoesNotBeginWith"),
+      errorText("main.git.validation.thePathStartsWithWhichGitReadsAsAPathspecExpression", {
+        path: path,
+      }),
+      errorText("main.git.validation.renameTheFileSoItDoesNotBeginWith"),
     );
   }
 }
@@ -191,16 +197,16 @@ export function assertRepositoryPath(path: string, operation: string): void {
   if (path.length > 4096 || path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)) {
     throw invalid(
       operation,
-      t("main.git.validation.theFilePathMustBeRelativeToTheRepository"),
-      t("main.git.validation.refreshTheFileListAndTryAgain"),
+      errorText("main.git.validation.theFilePathMustBeRelativeToTheRepository"),
+      errorText("main.git.validation.refreshTheFileListAndTryAgain"),
     );
   }
 
   if (path.split(/[\\/]/).some((part) => part === "..")) {
     throw invalid(
       operation,
-      t("main.git.validation.theFilePathLeavesTheRepository"),
-      t("main.git.validation.selectAFileInsideTheRepository"),
+      errorText("main.git.validation.theFilePathLeavesTheRepository"),
+      errorText("main.git.validation.selectAFileInsideTheRepository"),
     );
   }
 }

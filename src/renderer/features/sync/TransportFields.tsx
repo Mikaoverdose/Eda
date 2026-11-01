@@ -1,9 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
-import { ErrorDialog } from "../../components/ui/index";
-import { useEffect, useState } from "react";
 import type { TransportCredentials } from "@shared/integrations/remotes";
 import type { OperationRecord } from "@shared/operations";
-import { Button, Input, Disclosure, CodeBlock } from "../../components/ui/index";
+import { useEffect, useState } from "react";
+import { Button, CodeBlock, Disclosure, ErrorDialog, Input } from "../../components/ui/index";
 
 export function TransportFields({
   value,
@@ -94,7 +94,7 @@ export function TransferProgress({
           size="sm"
           onClick={() =>
             void window.eda.operations.cancel(record.id).then((result) => {
-              if (!result.ok) setError(result.error.message);
+              if (!result.ok) setError(errorMessage(result.error));
             })
           }
         >

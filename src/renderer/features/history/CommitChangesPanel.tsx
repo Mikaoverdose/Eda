@@ -1,12 +1,12 @@
-import { stateLabel } from "@shared/i18n/labels";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
+import { stateLabel } from "@shared/i18n/labels";
 import type { CommitInspection, FileDiff } from "@shared/repository/repository-read";
-import { useRepositoryStore } from "../../stores/repository-store";
-import { VirtualRows } from "../../components/ui/display/VirtualRows";
-import { CommitDetails } from "../diff/CommitDetails";
+import { useEffect, useState } from "react";
 import { PanelControls } from "../../components/layout/PanelControls";
 import { usePanel } from "../../components/layout/hooks/usePanel";
+import { VirtualRows } from "../../components/ui/display/VirtualRows";
+import { LoadingContent } from "../../components/ui/feedback/Skeleton";
 import {
   ButtonBase,
   ErrorDialog,
@@ -14,7 +14,8 @@ import {
   StateMessage,
   TextButton,
 } from "../../components/ui/index";
-import { LoadingContent } from "../../components/ui/feedback/Skeleton";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { CommitDetails } from "../diff/CommitDetails";
 
 const statusLabels: Record<FileDiff["status"], string> = {
   added: "A",
@@ -64,7 +65,9 @@ export function CommitChangesPanel() {
       void window.eda.repository.inspectCommit(repositoryId, oid).then((result) => {
         if (!alive) return;
         setDetails(
-          result.ok ? { oid, inspection: result.value } : { oid, error: result.error.message },
+          result.ok
+            ? { oid, inspection: result.value }
+            : { oid, error: errorMessage(result.error) },
         );
       });
     }
@@ -140,7 +143,7 @@ export function CommitChangesPanel() {
             </TextButton>
           }
         >
-          {error.message}
+          {errorMessage(error)}
         </ErrorDialog>
       ) : files.length === 0 ? (
         <StateMessage

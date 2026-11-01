@@ -1,8 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
 import type { InitRepositoryOptions } from "@shared/repository/repository";
+import { useState } from "react";
+import { Button, Checkbox, Dialog, ErrorDialog, Input, Select } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
-import { Button, Dialog, Input, Checkbox, Select, ErrorDialog } from "../../components/ui/index";
 
 export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
   const [path, setPath] = useState("");
@@ -25,7 +26,7 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
       const result = await window.eda.repository.init(path, options);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
@@ -65,7 +66,7 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
             onClick={() =>
               void window.eda.repository.chooseFolder().then((result) => {
                 if (result.ok && result.value) setPath(result.value);
-                else if (!result.ok) setError(result.error.message);
+                else if (!result.ok) setError(errorMessage(result.error));
               })
             }
           >

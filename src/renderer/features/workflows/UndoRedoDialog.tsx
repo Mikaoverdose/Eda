@@ -1,11 +1,12 @@
-import { stateLabel } from "@shared/i18n/labels";
-import { t } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
-import { useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { stateLabel } from "@shared/i18n/labels";
 import type { HistoryReversal } from "@shared/workflows/history-recovery";
+import { ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AsyncButton, Button, Checkbox, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Button, AsyncButton, Dialog, Checkbox, ErrorDialog } from "../../components/ui/index";
 
 export function UndoRedoDialog({
   repositoryId,
@@ -29,7 +30,7 @@ export function UndoRedoDialog({
     try {
       const response = await window.eda.historyRecovery.reversals(repositoryId);
       if (response.ok) setItems(response.value);
-      else setError(response.error.message);
+      else setError(errorMessage(response.error));
       return response.ok;
     } finally {
       setBusy(false);
@@ -58,7 +59,7 @@ export function UndoRedoDialog({
         await useRepositoryStore.getState().syncFromDisk();
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         return;
       }
 
@@ -84,7 +85,7 @@ export function UndoRedoDialog({
       const response = await window.eda.historyRecovery.dismissUnstarted(repositoryId, item.id);
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         return;
       }
 
@@ -110,7 +111,7 @@ export function UndoRedoDialog({
       );
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         return;
       }
 
@@ -137,7 +138,7 @@ export function UndoRedoDialog({
         await useRepositoryStore.getState().syncFromDisk();
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         return;
       }
 
@@ -163,7 +164,7 @@ export function UndoRedoDialog({
       );
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         return;
       }
 
@@ -190,7 +191,7 @@ export function UndoRedoDialog({
         await useRepositoryStore.getState().syncFromDisk();
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         return;
       }
 
@@ -224,7 +225,7 @@ export function UndoRedoDialog({
         await useRepositoryStore.getState().syncFromDisk();
 
       if (!response.ok) {
-        setError(response.error.message);
+        setError(errorMessage(response.error));
         setConfirmed(false);
         return;
       }

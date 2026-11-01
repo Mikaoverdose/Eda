@@ -1,4 +1,5 @@
-import { t } from "@shared/i18n";
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 
 function copyWithSelection(value: string): void {
   const focused = document.activeElement;
@@ -15,7 +16,7 @@ function copyWithSelection(value: string): void {
   try {
     input.focus({ preventScroll: true });
     input.select();
-    if (!document.execCommand("copy")) throw new Error(t("copyButton.clipboardCopyFailed"));
+    if (!document.execCommand("copy")) throw new AppError(ERROR_CODE.CLIPBOARD_COPY_FAILED);
   } finally {
     input.remove();
     if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
@@ -32,16 +33,17 @@ export async function copyText(value: string): Promise<void> {
     if (typeof nativeCopy === "function" && !unavailableHandlers.has(nativeCopy)) {
       try {
         const result = await nativeCopy(value);
-        if (!result.ok) throw new Error(t("copyButton.clipboardCopyFailed"));
+        if (!result.ok) throw new AppError(ERROR_CODE.CLIPBOARD_COPY_FAILED);
         return;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        // Older main processes may not have this handler. Electron only gives us a message.
+        const message = error instanceof Error ? error.message : "";
         if (!message.includes("No handler registered for 'app:copy-text'")) throw error;
         unavailableHandlers.add(nativeCopy);
       }
     }
     copyWithSelection(value);
   } catch {
-    throw new Error(t("copyButton.clipboardCopyFailed"));
+    throw new AppError(ERROR_CODE.CLIPBOARD_COPY_FAILED);
   }
 }

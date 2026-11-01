@@ -1,6 +1,7 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
 import type { SshHostTrustRequest } from "@shared/identity/ssh";
+import { useEffect, useRef, useState } from "react";
 import { Button, DefinitionList, Dialog } from "../../components/ui/index";
 
 export function SshHostTrustDialog() {
@@ -39,7 +40,7 @@ export function SshHostTrustDialog() {
     try {
       const result = await window.eda.ssh.respondHostTrust(request.id, trust);
       if (result.ok) setRequest((current) => (current?.id === request.id ? null : current));
-      else setFeedback({ id: request.id, message: result.error.message });
+      else setFeedback({ id: request.id, message: errorMessage(result.error) });
     } catch {
       setFeedback({
         id: request.id,

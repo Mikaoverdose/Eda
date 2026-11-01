@@ -1,13 +1,14 @@
-import { GIT_FILE_MODE } from "@shared/repository/git-file-mode";
-import { t } from "@shared/i18n";
-import { createHash, randomUUID } from "node:crypto";
-import { lstat, readFile, writeFile, unlink, chmod, mkdir } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
-import type { DiscardPreview, RecoverySummary } from "@shared/workflows/recovery";
+import { t } from "@shared/i18n";
+import { GIT_FILE_MODE } from "@shared/repository/git-file-mode";
 import type { PartialStageRequest } from "@shared/repository/partial-stage";
-import { partialPatch } from "../../git/operations/partial-patch";
+import type { DiscardPreview, RecoverySummary } from "@shared/workflows/recovery";
+import { createHash, randomUUID } from "node:crypto";
+import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type { GitService } from "../../git/git-service";
+import { partialPatch } from "../../git/operations/partial-patch";
 import { assertRepositoryPath } from "../../git/validation";
 import type {
   ContentRecoveryRecord,
@@ -15,7 +16,7 @@ import type {
   SavedFile,
 } from "../../persistence/content-recovery-repository";
 
-const invalid = (message: string) =>
+const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.recoverLocalChanges"), message });
 const hash = (data: Buffer, mode: number) =>
   createHash("sha256")
@@ -36,7 +37,7 @@ export class DiscardService {
   ) {
     if (paths.length > 256 || new Set(paths).size !== paths.length)
       throw invalid(
-        t("main.discardService.recoverySupportsAtMost256AffectedPathsNoFilesWereChanged"),
+        errorText("main.discardService.recoverySupportsAtMost256AffectedPathsNoFilesWereChanged"),
       );
 
     const files: SavedFile[] = [];
@@ -67,7 +68,9 @@ export class DiscardService {
           (entry[1] === GIT_FILE_MODE.submodule && options.working !== false)
         )
           throw invalid(
-            t("main.discardService.thisPathRequiresSubmoduleOrDirectoryRecoveryNoFilesWereChanged"),
+            errorText(
+              "main.discardService.thisPathRequiresSubmoduleOrDirectoryRecoveryNoFilesWereChanged",
+            ),
           );
 
         const content =
@@ -89,7 +92,9 @@ export class DiscardService {
       }
 
       if (bytes > MAX_BYTES)
-        throw invalid(t("main.discardService.theRecoveryCopyExceeds32MiBNoFilesWereChanged"));
+        throw invalid(
+          errorText("main.discardService.theRecoveryCopyExceeds32MiBNoFilesWereChanged"),
+        );
     }
 
     const record: ContentRecoveryRecord = {
@@ -120,7 +125,9 @@ export class DiscardService {
     paths: string[],
   ): Promise<ContentRecoveryRecord> {
     if (!paths.length || paths.length > 256 || new Set(paths).size !== paths.length)
-      throw invalid(t("main.discardService.recoverySupportsBetween1And256DistinctAffectedPaths"));
+      throw invalid(
+        errorText("main.discardService.recoverySupportsBetween1And256DistinctAffectedPaths"),
+      );
 
     const readTree = async (oid: string) => {
       const result = await this.git.exec(
@@ -137,7 +144,9 @@ export class DiscardService {
       for (const row of result.stdout.split("\0").filter(Boolean)) {
         const match = /^(\d{6}) (\w+) ([a-f0-9]{40,64})\t([\s\S]+)$/.exec(row);
         if (!match || match[2] !== "blob")
-          throw invalid(t("main.discardService.thisRewriteAffectsASymlinkSubmoduleOrAnother"));
+          throw invalid(
+            errorText("main.discardService.thisRewriteAffectsASymlinkSubmoduleOrAnother"),
+          );
         entries.set(match[4]!, { mode: match[1]!, oid: match[3]! });
       }
 
@@ -164,7 +173,7 @@ export class DiscardService {
         bytes += content.stdoutBytes.length;
 
         if (bytes > MAX_BYTES)
-          throw invalid(t("main.discardService.theRewriteAffectsMoreThan32MiBOf"));
+          throw invalid(errorText("main.discardService.theRewriteAffectsMoreThan32MiBOf"));
 
         const mode = process.platform === "win32" ? 0o666 : Number.parseInt(from.mode.slice(-3), 8);
 
@@ -182,12 +191,14 @@ export class DiscardService {
       if (to) {
         const current = await this.capture(root, path, true);
         if (current.hash === "missing")
-          throw invalid(t("main.discardService.theWorkingFileDoesNotMatchTheCompleted"));
+          throw invalid(errorText("main.discardService.theWorkingFileDoesNotMatchTheCompleted"));
         after[path] = current.hash;
       } else {
         const current = await this.capture(root, path, true);
         if (current.hash !== "missing")
-          throw invalid(t("main.discardService.theCompletedRewriteLeftAnUnexpectedTrackedPath"));
+          throw invalid(
+            errorText("main.discardService.theCompletedRewriteLeftAnUnexpectedTrackedPath"),
+          );
         after[path] = "missing";
       }
     }
@@ -215,13 +226,13 @@ export class DiscardService {
   async saveOperation(record: ContentRecoveryRecord, index: string): Promise<void> {
     if ((await this.index(record.root, record.paths)) !== index)
       throw invalid(
-        t("main.discardService.theIndexChangedAfterReviewingThisOperationReviewItAgain"),
+        errorText("main.discardService.theIndexChangedAfterReviewingThisOperationReviewItAgain"),
       );
 
     for (const file of record.files)
       if ((await this.capture(record.root, file.path, true)).hash !== file.hash)
         throw invalid(
-          t("main.discardService.aFileChangedAfterReviewingThisOperationReviewItAgain"),
+          errorText("main.discardService.aFileChangedAfterReviewingThisOperationReviewItAgain"),
         );
 
     this.store.prune(record.profileId, record.repositoryId);
@@ -235,7 +246,9 @@ export class DiscardService {
       pending.reduce((sum, item) => sum + item.bytes, 0) + record.bytes > 256 * 1024 * 1024
     )
       throw invalid(
-        t("main.discardService.recoveryStorageIsFullInspectExistingSnapshotsBeforeContinuing"),
+        errorText(
+          "main.discardService.recoveryStorageIsFullInspectExistingSnapshotsBeforeContinuing",
+        ),
       );
 
     this.store.save(record);
@@ -252,11 +265,15 @@ export class DiscardService {
     for (const path of paths) {
       const saved = record.files.find((file) => file.path === path);
       if (!saved)
-        throw invalid(t("main.discardService.theRecoveryCopyDoesNotCoverARestoredUntrackedPath"));
+        throw invalid(
+          errorText("main.discardService.theRecoveryCopyDoesNotCoverARestoredUntrackedPath"),
+        );
       const current = await this.capture(record.root, path, false);
       if (current.hash !== saved.hash && current.content !== null)
         throw invalid(
-          t("main.discardService.aRestoredFileChangedDuringAbortItsNewerContentsWereRetained"),
+          errorText(
+            "main.discardService.aRestoredFileChangedDuringAbortItsNewerContentsWereRetained",
+          ),
         );
       if (current.content !== null) await unlink(await this.safePath(record.root, path));
     }
@@ -283,7 +300,7 @@ export class DiscardService {
       local.startsWith(`..${sep}`) ||
       local.split(sep).some((part) => part.toLowerCase() === ".git")
     )
-      throw invalid(t("main.discardService.selectAWorkingFileInsideThisRepository"));
+      throw invalid(errorText("main.discardService.selectAWorkingFileInsideThisRepository"));
 
     let current = resolve(root);
 
@@ -296,7 +313,7 @@ export class DiscardService {
       });
 
       if (stat?.isSymbolicLink())
-        throw invalid(t("main.discardService.useExternalToolsForSymlinkChangesEdaWill"));
+        throw invalid(errorText("main.discardService.useExternalToolsForSymlinkChangesEdaWill"));
     }
 
     return target;
@@ -312,13 +329,13 @@ export class DiscardService {
     if (!stat) return { path, content: null, mode: 0, hash: "missing", tracked };
 
     if (!stat.isFile() || stat.size > MAX_BYTES)
-      throw invalid(t("main.discardService.recoverySupportsRegularFilesUpTo32MiB"));
+      throw invalid(errorText("main.discardService.recoverySupportsRegularFilesUpTo32MiB"));
 
     const content = await readFile(target);
 
     if (content.length > MAX_BYTES)
       throw invalid(
-        t("main.discardService.theFileGrewBeyondTheRecoveryLimitNoChangesWereDiscarded"),
+        errorText("main.discardService.theFileGrewBeyondTheRecoveryLimitNoChangesWereDiscarded"),
       );
 
     return {
@@ -345,7 +362,7 @@ export class DiscardService {
     paths: string[],
   ): Promise<DiscardPreview> {
     if (!paths.length || paths.length > 256 || new Set(paths).size !== paths.length)
-      throw invalid(t("main.discardService.selectBetween1And256DistinctFiles"));
+      throw invalid(errorText("main.discardService.selectBetween1And256DistinctFiles"));
 
     const status = await this.git.status(root);
     const files: SavedFile[] = [];
@@ -360,7 +377,9 @@ export class DiscardService {
         change.submodule !== "N..." ||
         (change.worktree === "." && change.kind !== "untracked")
       )
-        throw invalid(t("main.discardService.refreshTheChangesChooseUnstagedRegularFilesWithout"));
+        throw invalid(
+          errorText("main.discardService.refreshTheChangesChooseUnstagedRegularFilesWithout"),
+        );
 
       const file = await this.capture(root, path, change.kind !== "untracked");
 
@@ -369,7 +388,7 @@ export class DiscardService {
 
       if (bytes > MAX_BYTES)
         throw invalid(
-          t("main.discardService.theSelectionExceedsThe32MiBRecoveryLimitSelectFewerFiles"),
+          errorText("main.discardService.theSelectionExceedsThe32MiBRecoveryLimitSelectFewerFiles"),
         );
     }
 
@@ -415,7 +434,7 @@ export class DiscardService {
   ): Promise<DiscardPreview> {
     if (request.area !== "unstaged")
       throw invalid(
-        t("main.discardService.unstageChangesBeforeDiscardingSelectedWorkingFileContent"),
+        errorText("main.discardService.unstageChangesBeforeDiscardingSelectedWorkingFileContent"),
       );
 
     const preview = await this.preview(root, profileId, request.repositoryId, [request.path]);
@@ -443,7 +462,7 @@ export class DiscardService {
     try {
       new TextDecoder("utf-8", { fatal: true }).decode(source.stdoutBytes);
     } catch {
-      throw invalid(t("main.discardService.partialDiscardRequiresUtf8TextUseAWhole"));
+      throw invalid(errorText("main.discardService.partialDiscardRequiresUtf8TextUseAWhole"));
     }
 
     const { patch } = partialPatch(source.stdout, request.path, { ...request, area: "staged" });
@@ -469,7 +488,9 @@ export class DiscardService {
       preview.record.root !== root
     )
       throw invalid(
-        t("main.discardService.theDiscardPreviewExpiredOrBelongsToAnotherContextPreviewAgain"),
+        errorText(
+          "main.discardService.theDiscardPreviewExpiredOrBelongsToAnotherContextPreviewAgain",
+        ),
       );
 
     this.previews.delete(token);
@@ -477,11 +498,13 @@ export class DiscardService {
     const { record } = preview;
 
     if ((await this.index(root, record.paths)) !== preview.index)
-      throw invalid(t("main.discardService.theIndexChangedPreviewTheDiscardAgain"));
+      throw invalid(errorText("main.discardService.theIndexChangedPreviewTheDiscardAgain"));
 
     for (const file of record.files)
       if ((await this.capture(root, file.path, file.tracked)).hash !== file.hash)
-        throw invalid(t("main.discardService.aSelectedFileChangedAfterThePreviewPreviewAgain"));
+        throw invalid(
+          errorText("main.discardService.aSelectedFileChangedAfterThePreviewPreviewAgain"),
+        );
 
     this.store.prune(profileId, repositoryId);
 
@@ -494,7 +517,7 @@ export class DiscardService {
       pending.reduce((sum, record) => sum + record.bytes, 0) + record.bytes > 256 * 1024 * 1024
     )
       throw invalid(
-        t("main.discardService.interruptedSnapshotsReachedTheRecoveryStorageLimitExport"),
+        errorText("main.discardService.interruptedSnapshotsReachedTheRecoveryStorageLimitExport"),
       );
 
     this.store.save(record);
@@ -519,7 +542,7 @@ export class DiscardService {
           const target = await this.safePath(root, file.path);
           if ((await this.capture(root, file.path, false)).hash !== file.hash)
             throw invalid(
-              t(
+              errorText(
                 "main.discardService.anUntrackedFileChangedDuringDiscardItsNewerContentsWerePreserved",
               ),
             );
@@ -563,7 +586,8 @@ export class DiscardService {
 
     if (stage !== undefined) {
       const entry = record?.savedIndex?.find((item) => item.path === path && item.stage === stage);
-      if (!entry) throw invalid(t("main.discardService.thisSavedIndexVersionIsUnavailable"));
+      if (!entry)
+        throw invalid(errorText("main.discardService.thisSavedIndexVersionIsUnavailable"));
       return Buffer.from(entry.content, "base64");
     }
 
@@ -571,7 +595,7 @@ export class DiscardService {
 
     if (!file || file.content === null)
       throw invalid(
-        t("main.discardService.thisSnapshotRecordsAnAbsentFileOrTheSavedFileIsUnavailable"),
+        errorText("main.discardService.thisSnapshotRecordsAnAbsentFileOrTheSavedFileIsUnavailable"),
       );
 
     return Buffer.from(file.content, "base64");
@@ -579,7 +603,7 @@ export class DiscardService {
 
   forget(profileId: string, repositoryId: string, id: string): void {
     if (!this.store.get(profileId, repositoryId, id))
-      throw invalid(t("main.discardService.thisSnapshotIsNoLongerAvailable"));
+      throw invalid(errorText("main.discardService.thisSnapshotIsNoLongerAvailable"));
     this.store.remove(profileId, repositoryId, id);
   }
 
@@ -587,10 +611,14 @@ export class DiscardService {
     const record = this.store.get(profileId, repositoryId, id);
 
     if (record?.indexOnly)
-      throw invalid(t("main.discardService.thisSnapshotPreservesIndexVersionsOnlyExportThe"));
+      throw invalid(
+        errorText("main.discardService.thisSnapshotPreservesIndexVersionsOnlyExportThe"),
+      );
 
     if (!record || record.root !== root || record.state !== "completed" || !record.after)
-      throw invalid(t("main.discardService.thisSnapshotCannotBeRestoredAutomaticallyInspectIts"));
+      throw invalid(
+        errorText("main.discardService.thisSnapshotCannotBeRestoredAutomaticallyInspectIts"),
+      );
 
     await this.restoreOperationFiles(record, record.after);
     this.store.save({ ...record, state: "restored" });
@@ -605,7 +633,9 @@ export class DiscardService {
       const current = await this.capture(record.root, file.path, file.tracked);
       if (current.hash !== expected[file.path] && !(allowRestored && current.hash === file.hash))
         throw invalid(
-          t("main.discardService.aFileChangedSinceTheOperationRestoreIsBlockedToProtectNewerWork"),
+          errorText(
+            "main.discardService.aFileChangedSinceTheOperationRestoreIsBlockedToProtectNewerWork",
+          ),
         );
     }
   }
@@ -619,7 +649,7 @@ export class DiscardService {
       if (current.hash === file.hash) continue;
       if (current.hash !== expected[file.path])
         throw invalid(
-          t("main.discardService.aFileChangedDuringRecoveryItsNewerContentWasPreserved"),
+          errorText("main.discardService.aFileChangedDuringRecoveryItsNewerContentWasPreserved"),
         );
 
       const target = await this.safePath(record.root, file.path);

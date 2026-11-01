@@ -1,8 +1,10 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { RepositorySummary } from "@shared/repository/repository";
 import { useEffect } from "react";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
-import type { RepositorySummary } from "@shared/repository/repository";
 
 export async function showOpenedRepository(
   repository: RepositorySummary,
@@ -85,13 +87,13 @@ export function useRepositoryNavigation(profileId: string | undefined, showWorks
 
               if (!oid)
                 useAppStore.setState({
-                  error: {
+                  error: new GitError({
                     kind: "invalid-input",
                     operation: t("operations.openRepositoryLink"),
-                    message: t(
+                    message: errorText(
                       "useRepositoryNavigation.theRequestedReferenceWasNotFoundTheRepository",
                     ),
-                  },
+                  }).toData(),
                 });
             }
 

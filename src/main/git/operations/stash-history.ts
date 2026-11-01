@@ -1,6 +1,7 @@
-import { MAX_STASH_ENTRIES } from "@shared/workflows/stashes";
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { MAX_STASH_ENTRIES } from "@shared/workflows/stashes";
 import type { GitService } from "../git-service";
 import { assertFullObjectId } from "../validation";
 
@@ -20,7 +21,7 @@ export async function readStashHistory(git: GitService, root: string) {
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.readStashGraph"),
-      message: t("main.git.stashHistory.gitReturnedAnUnreadableStashList"),
+      message: errorText("main.git.stashHistory.gitReturnedAnUnreadableStashList"),
     });
 
   const label = (oid: string, text: string) => labels.set(oid, [...(labels.get(oid) ?? []), text]);
@@ -34,7 +35,7 @@ export async function readStashHistory(git: GitService, root: string) {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.readStashGraph"),
-        message: t("main.git.stashHistory.gitReturnedAnUnsupportedStashStructure"),
+        message: errorText("main.git.stashHistory.gitReturnedAnUnsupportedStashStructure"),
       });
 
     for (const object of [oid, ...parents])

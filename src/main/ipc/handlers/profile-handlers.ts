@@ -1,12 +1,13 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError, ok } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { commitConfigKeys } from "@shared/identity/profile-session";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { broadcast, handle } from "../transport";
-import { captureProfile } from "../profile-context";
-import { commitConfigKeys } from "@shared/identity/profile-session";
-import { invalidRequest, missingIdentity } from "../request-errors";
 import { parseDraft, parsePartialDraft } from "../identity-draft";
+import { captureProfile } from "../profile-context";
+import { invalidRequest, missingIdentity } from "../request-errors";
+import { broadcast, handle } from "../transport";
 import {
   optionalRecord,
   optionalString,
@@ -69,7 +70,7 @@ export function registerProfileHandlers(services: Services): void {
     const sync = options["syncGlobalGitConfig"];
 
     if (sync !== undefined && typeof sync !== "boolean")
-      throw invalidRequest(t("main.profileHandlers.invalidGitSynchronizationPreference"));
+      throw invalidRequest(errorText("main.profileHandlers.invalidGitSynchronizationPreference"));
 
     return ok(
       await identity.serialize(async () =>
@@ -94,7 +95,7 @@ export function registerProfileHandlers(services: Services): void {
 
     for (const key of ["preferences", "repositories", "tabs"])
       if (typeof input[key] !== "boolean")
-        throw invalidRequest(t("main.profileHandlers.invalidDuplicateOptions"));
+        throw invalidRequest(errorText("main.profileHandlers.invalidDuplicateOptions"));
 
     return ok(
       await services.profiles.duplicate(requireId(rawId), {
@@ -155,11 +156,11 @@ export function registerProfileHandlers(services: Services): void {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.configureSigning"),
-        message: t("main.profileHandlers.chooseASigningKey"),
+        message: errorText("main.profileHandlers.chooseASigningKey"),
         suggestedAction:
           format === "ssh"
-            ? t("main.profileHandlers.chooseThePublicPubKeyFile")
-            : t("main.profileHandlers.selectAnAvailableGpgSigningKey"),
+            ? errorText("main.profileHandlers.chooseThePublicPubKeyFile")
+            : errorText("main.profileHandlers.selectAnAvailableGpgSigningKey"),
       });
     }
 

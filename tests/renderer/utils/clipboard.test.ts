@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { copyText } from "@renderer/utils/clipboard";
 import { err, ok } from "@shared/errors";
 
@@ -17,7 +18,10 @@ it("copies exact text natively without browser clipboard permission", async () =
 });
 
 it.each([
-  () => Promise.resolve(err({ kind: "unknown", operation: "copy", message: "Native failure" })),
+  () =>
+    Promise.resolve(
+      err(errorFixture({ kind: "unknown", operation: "copy", message: "Native failure" })),
+    ),
   () => Promise.reject(new Error("Write permission denied")),
 ])("reports a friendly failure and allows a native retry", async (failure) => {
   const nativeCopy = vi.fn().mockImplementationOnce(failure).mockResolvedValue(ok(undefined));

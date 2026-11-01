@@ -1,12 +1,13 @@
+import { errorText } from "@shared/error-codes";
+import { ok } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { SessionContext } from "@shared/identity/profile-session";
+import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import { app, BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
-import type { SessionContext } from "@shared/identity/profile-session";
-import { ok } from "@shared/errors";
-import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { handle } from "../transport";
 import { invalidRequest } from "../request-errors";
+import { handle } from "../transport";
 import { optionalInteger, requireId, requireRecord, requireString } from "../validate";
 
 export function registerSessionHandlers(services: Services): void {
@@ -42,7 +43,7 @@ export function registerSessionHandlers(services: Services): void {
       closing.get(event.sender.id) !==
       requireString(rawNonce, t("fields.closeAcknowledgement"), 128)
     )
-      throw invalidRequest(t("main.sessionHandlers.invalidCloseAcknowledgement"));
+      throw invalidRequest(errorText("main.sessionHandlers.invalidCloseAcknowledgement"));
     await identity.serialize(async () => undefined);
     closing.delete(event.sender.id);
     BrowserWindow.fromWebContents(event.sender)?.destroy();
@@ -61,7 +62,7 @@ export function registerSessionHandlers(services: Services): void {
     );
 
     if (generation === undefined)
-      throw invalidRequest(t("main.sessionHandlers.missingSessionGeneration"));
+      throw invalidRequest(errorText("main.sessionHandlers.missingSessionGeneration"));
 
     return {
       profileId: requireId(input["profileId"]),

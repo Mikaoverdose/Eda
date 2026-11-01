@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { errorMessage } from "@shared/errors";
 import {
   emptyView,
   type CommitDraft,
@@ -6,6 +6,7 @@ import {
   type SessionChange,
   type SessionSnapshot,
 } from "@shared/identity/profile-session";
+import { create } from "zustand";
 
 function sharedLayout(
   view: RepositoryView,
@@ -58,7 +59,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       if (!current()) return false;
       if (!result.ok) {
-        set({ error: result.error.message });
+        set({ error: errorMessage(result.error) });
         return false;
       }
 
@@ -66,7 +67,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       return true;
     } catch (error) {
-      if (current()) set({ error: String(error) });
+      if (current()) set({ error: errorMessage(error) });
       return false;
     }
   },
@@ -146,7 +147,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           const result = await window.eda.sessions.change(item.context, item.change);
 
           if (!result.ok) {
-            set({ error: result.error.message });
+            set({ error: errorMessage(result.error) });
             return false;
           }
 
@@ -155,7 +156,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
         return true;
       } catch (error) {
-        set({ error: String(error) });
+        set({ error: errorMessage(error) });
         return false;
       } finally {
         set({ saving: false });
@@ -176,7 +177,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const result = await window.eda.sessions.reset(context);
 
     if (!result.ok) {
-      set({ error: result.error.message });
+      set({ error: errorMessage(result.error) });
       return false;
     }
 

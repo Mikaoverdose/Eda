@@ -1,10 +1,11 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
+import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { requireId, requireRecord, requireString } from "../validate";
 import { invalidRequest } from "../request-errors";
 import { broadcast, handle } from "../transport";
+import { requireId, requireRecord, requireString } from "../validate";
 
 export function registerConflictHandlers({ conflicts }: Services) {
   handle(IPC_CHANNELS.conflictExternal, async (_event, rawId, token) => {
@@ -32,15 +33,17 @@ export function registerConflictHandlers({ conflicts }: Services) {
       choice !== "delete" &&
       choice !== "worktree"
     )
-      throw invalidRequest(t("main.conflictHandlers.chooseHowToResolveThisConflict"));
+      throw invalidRequest(errorText("main.conflictHandlers.chooseHowToResolveThisConflict"));
 
     if (typeof value["stage"] !== "boolean")
-      throw invalidRequest(t("main.conflictHandlers.chooseWhetherToMarkTheConflictResolved"));
+      throw invalidRequest(
+        errorText("main.conflictHandlers.chooseWhetherToMarkTheConflictResolved"),
+      );
 
     const output = value["text"];
 
     if (output !== undefined && (typeof output !== "string" || output.length > 4 * 1024 * 1024))
-      throw invalidRequest(t("main.conflictHandlers.theResolvedTextExceedsTheEditorLimit"));
+      throw invalidRequest(errorText("main.conflictHandlers.theResolvedTextExceedsTheEditorLimit"));
 
     try {
       await conflicts.resolve({

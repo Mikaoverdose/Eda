@@ -1,17 +1,18 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { useAppStore } from "../../stores/app-store";
-import { useSessionStore } from "../../stores/session-store";
-import { RemoveRepositoryButton } from "../repositories/RemoveRepositoryButton";
+import { useEffect, useState } from "react";
 import {
   ActionList,
   Button,
-  Dialog,
-  Select,
   Checkbox,
+  Dialog,
   ErrorDialog,
+  Select,
 } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { useSessionStore } from "../../stores/session-store";
+import { RemoveRepositoryButton } from "../repositories/RemoveRepositoryButton";
 
 export function ProfileRepositoriesSettings() {
   const active = useAppStore((state) => state.activeIdentity);
@@ -120,14 +121,14 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
       const result = await window.eda.repository.assignProfile(repository.id, targetId, move);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
       await useAppStore.getState().refreshRepositories();
       setOpen(false);
     } catch (failure) {
-      setError(String(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }

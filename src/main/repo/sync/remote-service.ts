@@ -1,7 +1,8 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
-import { lstat, mkdir } from "node:fs/promises";
-import { basename, isAbsolute, join } from "node:path";
+import type { Identity } from "@shared/identity/identity";
+import { isGitHubHttps } from "@shared/integrations/github";
 import type {
   CloneRequest,
   FetchRequest,
@@ -10,10 +11,9 @@ import type {
   RemoteChange,
   RemoteState,
 } from "@shared/integrations/remotes";
-import type { Identity } from "@shared/identity/identity";
-import { GitError } from "@shared/errors";
-import { isGitHubHttps } from "@shared/integrations/github";
-import type { GitHubAuth } from "../../providers/github-auth";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir } from "node:fs/promises";
+import { basename, isAbsolute, join } from "node:path";
 import type { GitService } from "../../git/git-service";
 import {
   GitRemotes,
@@ -23,12 +23,13 @@ import {
   transportOptions,
 } from "../../git/operations/remotes";
 import { assertValidRefName } from "../../git/validation";
-import type { RepositoryManager } from "../lifecycle/repository-manager";
-import type { RepositoryWriter } from "../working-tree/repository-writer";
 import type { IdentityManager } from "../../identity/identity-manager";
-import type { IdentityRepository } from "../../persistence/identity-repository";
 import type { OperationManager } from "../../operations/operation-manager";
 import type { FetchHistoryRepository } from "../../persistence/fetch-history-repository";
+import type { IdentityRepository } from "../../persistence/identity-repository";
+import type { GitHubAuth } from "../../providers/github-auth";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import type { RepositoryWriter } from "../working-tree/repository-writer";
 
 interface PreparedPush {
   preview: PushPreview;
@@ -136,14 +137,16 @@ export class RemoteService {
     refspec?: string,
   ): Promise<string> {
     if (request.remote === null && request.credentials)
-      throw remoteError(t("main.remoteService.fetchOneRemoteWhenSupplyingHttpsCredentials"));
+      throw remoteError(
+        errorText("main.remoteService.fetchOneRemoteWhenSupplyingHttpsCredentials"),
+      );
 
     const names =
       request.remote === null
         ? (await this.remotes.list(path)).map((remote) => remote.name)
         : [request.remote];
 
-    if (!names.length) throw remoteError(t("main.remoteService.addARemoteBeforeFetching"));
+    if (!names.length) throw remoteError(errorText("main.remoteService.addARemoteBeforeFetching"));
 
     const completed: string[] = [];
 
@@ -199,13 +202,15 @@ export class RemoteService {
                 kind: accessDenied ? "github-access-required" : "github-auth-required",
                 operation: error.operation,
                 message: accessDenied
-                  ? t("main.remoteService.gitHubDeniedRepositoryAccessEnableEdaFor")
-                  : t("main.remoteService.gitHubRejectedThisLoginSignInWithGitHubAgainThenRetry"),
+                  ? errorText("main.remoteService.gitHubDeniedRepositoryAccessEnableEdaFor")
+                  : errorText(
+                      "main.remoteService.gitHubRejectedThisLoginSignInWithGitHubAgainThenRetry",
+                    ),
                 suggestedAction: accessDenied
-                  ? t(
+                  ? errorText(
                       "main.remoteService.openSettingsProfileIntegrationsEnableAccessOrManageAccess",
                     )
-                  : t(
+                  : errorText(
                       "main.remoteService.reconnectGitHubInTheIntegrationsSectionOfProfileSettings",
                     ),
               })
@@ -216,7 +221,7 @@ export class RemoteService {
           name,
           url,
           Date.now(),
-          failure instanceof Error ? failure.message : t("main.remoteService.fetchFailed"),
+          errorMessage(failure, errorText("main.remoteService.fetchFailed")),
         );
 
         throw failure;
@@ -234,7 +239,9 @@ export class RemoteService {
 
     if (request.mode !== "delete") assertValidRefName(request.branch, t("operations.pushSource"));
     if (request.setUpstream && (request.mode === "delete" || request.refKind === "tag"))
-      throw remoteError(t("main.remoteService.upstreamTrackingIsOnlyAvailableWhenPushingABranch"));
+      throw remoteError(
+        errorText("main.remoteService.upstreamTrackingIsOnlyAvailableWhenPushingABranch"),
+      );
 
     assertValidRefName(request.destination, t("operations.pushDestination"));
 
@@ -268,10 +275,10 @@ export class RemoteService {
         const remoteOid = match?.[0] ?? null;
 
         if (remoteOid !== null && !/^[a-f0-9]{40,64}$/.test(remoteOid))
-          throw remoteError(t("main.remoteService.theRemoteReturnedAnInvalidObjectId"));
+          throw remoteError(errorText("main.remoteService.theRemoteReturnedAnInvalidObjectId"));
         if (request.mode === "delete" && remoteOid === null)
           throw remoteError(
-            t("main.remoteService.thatRemoteRefNoLongerExistsRefreshBeforeDeleting"),
+            errorText("main.remoteService.thatRemoteRefNoLongerExistsRefreshBeforeDeleting"),
           );
 
         const preview: PushPreview = {
@@ -320,7 +327,7 @@ export class RemoteService {
       prepared.identity.id !== repository.identityId ||
       prepared.path !== repository.path
     )
-      throw remoteError(t("main.remoteService.thePushPreviewExpiredOrItsProfileChanged"));
+      throw remoteError(errorText("main.remoteService.thePushPreviewExpiredOrItsProfileChanged"));
 
     return this.writer.remoteOperation(
       id,
@@ -339,7 +346,9 @@ export class RemoteService {
 
         if (url !== preview.url || localOid !== preview.localOid)
           throw remoteError(
-            t("main.remoteService.theBranchOrDestinationChangedAfterPreviewReviewANewPushPreview"),
+            errorText(
+              "main.remoteService.theBranchOrDestinationChangedAfterPreviewReviewANewPushPreview",
+            ),
           );
 
         const result = await this.git.exec(
@@ -384,7 +393,7 @@ export class RemoteService {
     const captured = this.identity.getActive();
 
     if (!captured || captured.id !== request.profileId)
-      throw remoteError(t("main.remoteService.theProfileChangedReopenCloneAndTryAgain"));
+      throw remoteError(errorText("main.remoteService.theProfileChangedReopenCloneAndTryAgain"));
 
     remoteUrl(request.url);
 
@@ -398,7 +407,9 @@ export class RemoteService {
       /[. ]$/.test(request.name) ||
       /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(request.name)
     )
-      throw remoteError(t("main.remoteService.chooseAnAbsoluteParentFolderAndAValidNewFolderName"));
+      throw remoteError(
+        errorText("main.remoteService.chooseAnAbsoluteParentFolderAndAValidNewFolderName"),
+      );
 
     const path = join(request.parent, request.name);
 
@@ -408,18 +419,18 @@ export class RemoteService {
       () =>
         this.identity.serialize(async () => {
           if (!this.identities.findById(captured.id))
-            throw remoteError(t("main.remoteService.theOriginatingProfileNoLongerExists"));
+            throw remoteError(errorText("main.remoteService.theOriginatingProfileNoLongerExists"));
 
           this.operations.started(t("main.remoteService.preparingCloneDestination"));
 
           if (!(await lstat(request.parent)).isDirectory())
-            throw remoteError(t("main.remoteService.theCloneParentMustBeADirectory"));
+            throw remoteError(errorText("main.remoteService.theCloneParentMustBeADirectory"));
 
           try {
             await mkdir(path);
           } catch {
             throw remoteError(
-              t(
+              errorText(
                 "main.remoteService.theDestinationAlreadyExistsOrCannotBeCreatedChooseANewFolderName",
               ),
             );

@@ -4,9 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import type { ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { electronStderr } from "./scripts/electron-stderr.ts";
 import { prepareGit } from "./scripts/prepare-git.ts";
-import { readBuildInfo } from "./scripts/version.ts";
+import { electronStderr, readBuildInfo, prepareComponentInventory } from "./scripts/build.ts";
 
 const resolve = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -17,9 +16,9 @@ function devElectronEnv(): Record<string, string> {
   };
 }
 
-export default defineConfig(async ({ command }) => {
+export default defineConfig(async () => {
+  await Promise.all([prepareGit(), prepareComponentInventory()]);
   const buildInfo = readBuildInfo();
-  if (command === "serve") await prepareGit();
   return {
     root: resolve("./src/renderer"),
     server: { host: "127.0.0.1" },

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { electronStderr } from "../../scripts/electron-stderr.ts";
+import { electronStderr } from "../../scripts/build.ts";
 
 const warning =
   "[1258204:1030/181540.633900:ERROR:components/viz/service/display/display.cc:271] Frame latency is negative: -0.027 ms\n";

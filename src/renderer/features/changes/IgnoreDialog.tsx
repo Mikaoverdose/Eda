@@ -1,15 +1,16 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
 import type { IgnoreInspection, IgnoreKind } from "@shared/repository/ignore";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { useEffect, useState } from "react";
 import {
   Button,
-  Dialog,
-  Select,
   Checkbox,
-  ErrorDialog,
   CodeBlock,
+  Dialog,
+  ErrorDialog,
+  Select,
 } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
 
 export function IgnoreDialog({
   repositoryId,
@@ -34,7 +35,7 @@ export function IgnoreDialog({
     void window.eda.repository.inspectIgnore(repositoryId, path, kind).then((result) => {
       if (!alive) return;
       if (result.ok) setInspection(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     });
 
     return () => {
@@ -52,7 +53,7 @@ export function IgnoreDialog({
         : await window.eda.repository.addIgnore(repositoryId, path, kind);
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 

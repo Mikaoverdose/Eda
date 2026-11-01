@@ -1,10 +1,11 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError, ok } from "@shared/errors";
+import { t } from "@shared/i18n";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { handle } from "../transport";
 import { captureProfile } from "../profile-context";
 import { missingIdentity } from "../request-errors";
+import { handle } from "../transport";
 import { optionalRecord } from "../validate";
 
 export function registerCredentialHandlers(services: Services): void {
@@ -52,8 +53,10 @@ function requirePassphrase(value: unknown): string {
     throw new GitError({
       kind: "invalid-input",
       operation: t("operations.unlockSshKey"),
-      message: t("main.credentialHandlers.enterTheKeySPassphrase"),
-      suggestedAction: t("main.credentialHandlers.thePassphraseIsTheOneYouSetWhenTheKeyWasCreated"),
+      message: errorText("main.credentialHandlers.enterTheKeySPassphrase"),
+      suggestedAction: errorText(
+        "main.credentialHandlers.thePassphraseIsTheOneYouSetWhenTheKeyWasCreated",
+      ),
     });
   }
 

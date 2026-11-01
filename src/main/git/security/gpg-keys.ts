@@ -1,9 +1,10 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { GpgSigningKey } from "@shared/identity/signing";
 import { buildGitEnvironment } from "../execution/environment";
-import type { GitService } from "../git-service";
 import { ProcessSpawnError, type ProcessRunner } from "../execution/process-runner";
+import type { GitService } from "../git-service";
 
 export class GpgKeyService {
   constructor(
@@ -43,11 +44,11 @@ export class GpgKeyService {
           kind: result.outputLimitExceeded ? "output-too-large" : "unknown",
           operation,
           message: result.cancelled
-            ? t("main.git.gpgKeys.gpgTookTooLongToListSigningKeys")
+            ? errorText("main.git.gpgKeys.gpgTookTooLongToListSigningKeys")
             : result.outputLimitExceeded
-              ? t("main.git.gpgKeys.theGpgKeyListIsTooLargeToLoad")
-              : t("main.git.gpgKeys.gpgCouldNotReadYourSigningKeys"),
-          suggestedAction: t(
+              ? errorText("main.git.gpgKeys.theGpgKeyListIsTooLargeToLoad")
+              : errorText("main.git.gpgKeys.gpgCouldNotReadYourSigningKeys"),
+          suggestedAction: errorText(
             "main.git.gpgKeys.checkYourGnuPgInstallationAndKeyringThenRefreshTheKeys",
           ),
         });
@@ -59,8 +60,8 @@ export class GpgKeyService {
         throw new GitError({
           kind: "git-not-found",
           operation,
-          message: t("main.git.gpgKeys.gpgIsUnavailable"),
-          suggestedAction: t("main.git.gpgKeys.installGnuPgOnYourPathOrSet"),
+          message: errorText("main.git.gpgKeys.gpgIsUnavailable"),
+          suggestedAction: errorText("main.git.gpgKeys.installGnuPgOnYourPathOrSet"),
         });
       }
 

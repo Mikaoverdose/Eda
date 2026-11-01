@@ -1,19 +1,19 @@
-import { t, setLocale } from "@shared/i18n";
-import { configureGraphics } from "./application/graphics";
-import { app, BrowserWindow, dialog, Menu, shell, session } from "electron";
-import { join, dirname } from "node:path";
-import { mkdirSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { registerIpcHandlers } from "./ipc/register";
-import { createServices } from "./services";
-import { registerWindowRecovery } from "./application/window-recovery";
-import { GitError } from "@shared/errors";
 import { redactDiagnostic } from "@shared/diagnostics";
+import { errorMessage, GitError } from "@shared/errors";
+import { setLocale, t } from "@shared/i18n";
+import { app, BrowserWindow, dialog, Menu, session, shell } from "electron";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { configureGraphics } from "./application/graphics";
+import { registerWindowRecovery } from "./application/window-recovery";
+import { registerIpcHandlers } from "./ipc/register";
 import {
   navigationFromArguments,
   parseRepositoryLink,
   type RepositoryNavigationQueue,
 } from "./repo/lifecycle/navigation";
+import { createServices } from "./services";
 
 let navigation: RepositoryNavigationQueue | undefined;
 const pendingLinks: string[] = [];
@@ -201,7 +201,7 @@ async function start(): Promise<void> {
     const action = error instanceof GitError ? error.suggestedAction : undefined;
     dialog.showErrorBox(
       t("main.index.edaCouldNotStart"),
-      [message, action].filter(Boolean).join("\n\n"),
+      [errorMessage(error), action].filter(Boolean).join("\n\n"),
     );
     app.exit(1);
   }

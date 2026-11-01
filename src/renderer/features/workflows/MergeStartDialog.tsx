@@ -1,9 +1,10 @@
-import { t } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
-import { useEffect, useState } from "react";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { MergeMode, MergeStartPreview } from "@shared/workflows/workflow";
+import { useEffect, useState } from "react";
+import { Dialog, ErrorDialog, ReviewActions, Select } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Dialog, Select, ErrorDialog, ReviewActions } from "../../components/ui/index";
 
 export function MergeStartDialog({
   repositoryId,
@@ -26,7 +27,7 @@ export function MergeStartDialog({
     try {
       const result = await window.eda.workflows.prepareStart(repositoryId, source, mode);
       if (result.ok) setPreview(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } finally {
       setBusy(false);
     }
@@ -48,7 +49,7 @@ export function MergeStartDialog({
       await useRepositoryStore.getState().syncFromDisk();
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         setPreview(null);
         return;
       }

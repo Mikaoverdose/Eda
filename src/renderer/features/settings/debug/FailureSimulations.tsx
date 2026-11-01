@@ -1,10 +1,12 @@
+import { ERROR_CODE } from "@shared/error-codes";
+import { AppError, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ActionList } from "../../../components/ui/display/ActionList";
 import { useState } from "react";
 import { Button } from "../../../components/ui/actions/Button";
+import { ActionList } from "../../../components/ui/display/ActionList";
+import { NoticeBanner } from "../../../components/ui/feedback/NoticeBanner";
 import { Dialog } from "../../../components/ui/overlays/Dialog";
 import { ErrorDialog } from "../../../components/ui/overlays/ErrorDialog";
-import { NoticeBanner } from "../../../components/ui/feedback/NoticeBanner";
 
 export function FailureSimulations() {
   const [renderError, setRenderError] = useState(false);
@@ -13,8 +15,7 @@ export function FailureSimulations() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (renderError)
-    throw new Error(t("settings.failureSimulations.edaDebugSimulationReactRenderError"));
+  if (renderError) throw new AppError(ERROR_CODE.DEBUG_RENDER_FAILURE);
 
   async function debug(action: "open-dev-tools" | "ipc-error" | "renderer-crash") {
     setBusy(true);
@@ -23,7 +24,7 @@ export function FailureSimulations() {
 
     try {
       const result = await window.eda.app.debug(action);
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else if (action === "open-dev-tools")
         setStatus(
           t("settings.failureSimulations.developerToolsOpenedSelectConsoleToInspectErrors"),
@@ -51,7 +52,7 @@ export function FailureSimulations() {
         setError(null);
         setStatus(t("settings.failureSimulations.runtimeErrorTriggeredCheckTheDeveloperConsole"));
         window.setTimeout(() => {
-          throw new Error(t("settings.failureSimulations.edaDebugSimulationUncaughtRuntimeError"));
+          throw new AppError(ERROR_CODE.DEBUG_RUNTIME_FAILURE);
         }, 0);
       },
     },
@@ -64,9 +65,7 @@ export function FailureSimulations() {
         setStatus(
           t("settings.failureSimulations.unhandledRejectionTriggeredCheckTheDeveloperConsole"),
         );
-        void Promise.reject(
-          new Error(t("settings.failureSimulations.edaDebugSimulationUnhandledPromiseRejection")),
-        );
+        void Promise.reject(new AppError(ERROR_CODE.DEBUG_UNHANDLED_REJECTION));
       },
     },
     {

@@ -1,17 +1,18 @@
+import { ERROR_CODE, errorText } from "@shared/error-codes";
+import { AppError, ok } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { graphicsStatus } from "../../application/graphics";
-import { detectMergeTools } from "../../application/detect-merge-tools";
-import { detectEditors } from "../../application/detect-editors";
-import { ok } from "@shared/errors";
-import { BrowserWindow, clipboard, dialog } from "electron";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
-import type { Services } from "../../services";
-import { handle, broadcast, exclusivelyReset } from "../transport";
-import { invalidRequest } from "../request-errors";
-import { requireId, requireString } from "../validate";
-import { showOpenDialog } from "../dialogs";
-import { NodeProcessRunner } from "../../git/execution/node-process-runner";
+import { BrowserWindow, clipboard, dialog } from "electron";
+import { detectEditors } from "../../application/detect-editors";
+import { detectMergeTools } from "../../application/detect-merge-tools";
+import { graphicsStatus } from "../../application/graphics";
 import { buildGitEnvironment } from "../../git/execution/environment";
+import { NodeProcessRunner } from "../../git/execution/node-process-runner";
+import type { Services } from "../../services";
+import { showOpenDialog } from "../dialogs";
+import { invalidRequest } from "../request-errors";
+import { broadcast, exclusivelyReset, handle } from "../transport";
+import { requireId, requireString } from "../validate";
 
 export function registerApplicationHandlers(services: Services): void {
   handle(IPC_CHANNELS.appCopyText, async (_event, value) => {
@@ -20,7 +21,7 @@ export function registerApplicationHandlers(services: Services): void {
   });
   handle(IPC_CHANNELS.avatarGet, async (_event, email) => {
     if (typeof email !== "string" || email.length > 320)
-      throw invalidRequest(t("main.applicationHandlers.invalidAvatarEmail"));
+      throw invalidRequest(errorText("main.applicationHandlers.invalidAvatarEmail"));
     return ok(await services.avatars.get(email));
   });
 
@@ -33,14 +34,15 @@ export function registerApplicationHandlers(services: Services): void {
       action !== "renderer-crash" &&
       action !== "reset-data"
     )
-      throw invalidRequest(t("main.applicationHandlers.unknownDebugAction"));
+      throw invalidRequest(errorText("main.applicationHandlers.unknownDebugAction"));
 
     const window = BrowserWindow.fromWebContents(event.sender);
 
     if (!window || window.isDestroyed() || event.senderFrame !== event.sender.mainFrame)
-      throw invalidRequest(t("main.applicationHandlers.debugActionsRequireTheApplicationWindow"));
-    if (action === "ipc-error")
-      throw new Error(t("main.applicationHandlers.edaDebugSimulationUnexpectedIpcError"));
+      throw invalidRequest(
+        errorText("main.applicationHandlers.debugActionsRequireTheApplicationWindow"),
+      );
+    if (action === "ipc-error") throw new AppError(ERROR_CODE.DEBUG_IPC_FAILURE);
     if (action === "open-dev-tools") event.sender.openDevTools({ mode: "detach" });
 
     if (action === "reset-data") {
@@ -127,7 +129,7 @@ export function registerApplicationHandlers(services: Services): void {
 
     if (!editor)
       throw invalidRequest(
-        t("main.applicationHandlers.chooseAnEditorExecutableInApplicationSettingsFirst"),
+        errorText("main.applicationHandlers.chooseAnEditorExecutableInApplicationSettingsFirst"),
       );
 
     try {
@@ -138,7 +140,9 @@ export function registerApplicationHandlers(services: Services): void {
         buildGitEnvironment(),
       );
     } catch {
-      throw invalidRequest(t("main.applicationHandlers.theConfiguredEditorCouldNotStartChooseIts"));
+      throw invalidRequest(
+        errorText("main.applicationHandlers.theConfiguredEditorCouldNotStartChooseIts"),
+      );
     }
 
     return ok(undefined);
@@ -153,12 +157,12 @@ export function registerApplicationHandlers(services: Services): void {
       typeof action !== "string" ||
       !["state", "minimize", "toggle-maximize", "close"].includes(action)
     )
-      throw invalidRequest(t("main.applicationHandlers.unknownWindowAction"));
+      throw invalidRequest(errorText("main.applicationHandlers.unknownWindowAction"));
 
     const window = BrowserWindow.fromWebContents(event.sender);
 
     if (!window || window.isDestroyed())
-      throw invalidRequest(t("main.applicationHandlers.theWindowIsNoLongerAvailable"));
+      throw invalidRequest(errorText("main.applicationHandlers.theWindowIsNoLongerAvailable"));
     if (action === "minimize") window.minimize();
 
     if (action === "toggle-maximize") {

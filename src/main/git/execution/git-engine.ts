@@ -1,6 +1,7 @@
-import type { GitEngineInfo, GitEngineSource } from "@shared/integrations/git-engine";
+import { ERROR_CODE, ERROR_MESSAGE_KEYS, errorText } from "@shared/error-codes";
+import { AppError, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { GitError } from "@shared/errors";
+import type { GitEngineInfo, GitEngineSource } from "@shared/integrations/git-engine";
 import { buildGitEnvironment } from "./environment";
 import { type ProcessRunner, ProcessSpawnError } from "./process-runner";
 
@@ -51,8 +52,8 @@ export async function resolveGitEngine(
   throw new GitError({
     kind: "git-not-found",
     operation: t("operations.locateGit"),
-    message: t("main.git.gitEngine.edaCouldNotFindAWorkingGitInstallation"),
-    suggestedAction: t("main.git.gitEngine.theBundledGitInstallationMayBeMissingOr"),
+    message: errorText("main.git.gitEngine.edaCouldNotFindAWorkingGitInstallation"),
+    suggestedAction: errorText("main.git.gitEngine.theBundledGitInstallationMayBeMissingOr"),
     rawStderr: failures.join("\n"),
   });
 }
@@ -109,14 +110,18 @@ async function probeVersion(
   });
 
   if (result.exitCode !== 0) {
-    throw new Error(t("main.git.gitEngine.exited", { exitCode: result.exitCode }));
+    throw new AppError(
+      errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.GIT_PROCESS_FAILED], { exitCode: result.exitCode }),
+    );
   }
 
   const stdout = result.stdout.toString("utf8").trim();
   const match = /git version (\d+)\.(\d+)(?:\.(\d+))?/.exec(stdout);
 
   if (!match) {
-    throw new Error(t("main.git.gitEngine.unrecognizedOutput", { stdout: stdout.slice(0, 80) }));
+    throw new AppError(
+      errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.INVALID_GIT_OUTPUT], { stdout: stdout.slice(0, 80) }),
+    );
   }
 
   const versionParts = {
@@ -126,11 +131,12 @@ async function probeVersion(
   };
 
   if (isOlderThanMinimum(versionParts)) {
-    throw new Error(
-      t("main.git.gitEngine.versionIsOlderThanTheRequired", {
+    throw new AppError(
+      errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.GIT_VERSION_UNSUPPORTED], {
         major: versionParts.major,
         minor: versionParts.minor,
-      }) + `${MINIMUM_VERSION.major}.${MINIMUM_VERSION.minor}`,
+        minimumVersion: `${MINIMUM_VERSION.major}.${MINIMUM_VERSION.minor}`,
+      }),
     );
   }
 

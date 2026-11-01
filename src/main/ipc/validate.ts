@@ -1,7 +1,8 @@
-import { t } from "@shared/i18n";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 
-function reject(message: string, suggestedAction: string): never {
+function reject(message: ErrorText, suggestedAction: ErrorText): never {
   throw new GitError({
     kind: "invalid-input",
     operation: t("operations.validateRequest"),
@@ -13,8 +14,8 @@ function reject(message: string, suggestedAction: string): never {
 export function requireString(value: unknown, field: string, maxLength = 4096): string {
   if (typeof value !== "string") {
     reject(
-      t("main.validate.mustBeText", { field: field }),
-      t("main.validate.thisIsABugInEdaPleaseReportIt"),
+      errorText("main.validate.mustBeText", { field: field }),
+      errorText("main.validate.thisIsABugInEdaPleaseReportIt"),
     );
   }
 
@@ -22,22 +23,22 @@ export function requireString(value: unknown, field: string, maxLength = 4096): 
 
   if (text.length === 0) {
     reject(
-      t("main.validate.isRequired", { field: field }),
-      t("main.validate.enterAValueFor", { field: field }),
+      errorText("main.validate.isRequired", { field: field }),
+      errorText("main.validate.enterAValueFor", { field: field }),
     );
   }
 
   if (text.length > maxLength) {
     reject(
-      t("main.validate.isTooLong", { field: field }),
-      t("main.validate.useCharactersOrFewer", { maxLength: maxLength }),
+      errorText("main.validate.isTooLong", { field: field }),
+      errorText("main.validate.useCharactersOrFewer", { maxLength: maxLength }),
     );
   }
 
   if (text.includes("\0")) {
     reject(
-      t("main.validate.containsANullByte", { field: field }),
-      t("main.validate.removeTheInvalidCharacter"),
+      errorText("main.validate.containsANullByte", { field: field }),
+      errorText("main.validate.removeTheInvalidCharacter"),
     );
   }
 
@@ -48,8 +49,8 @@ export function requireId(value: unknown, field = "id"): string {
   const text = requireString(value, field, 64);
   if (!/^[0-9a-f-]{36}$/i.test(text)) {
     reject(
-      t("main.validate.isNotAValidIdentifier", { field: field }),
-      t("main.validate.thisIsABugInEdaPleaseReportIt"),
+      errorText("main.validate.isNotAValidIdentifier", { field: field }),
+      errorText("main.validate.thisIsABugInEdaPleaseReportIt"),
     );
   }
   return text;
@@ -60,8 +61,8 @@ export function requireAbsolutePath(value: unknown, field = "path"): string {
   const isAbsolute = text.startsWith("/") || /^[A-Za-z]:[\\/]/.test(text);
   if (!isAbsolute) {
     reject(
-      t("main.validate.mustBeAFullPath", { field: field }),
-      t("main.validate.chooseAFolderUsingTheFolderPicker"),
+      errorText("main.validate.mustBeAFullPath", { field: field }),
+      errorText("main.validate.chooseAFolderUsingTheFolderPicker"),
     );
   }
   return text;
@@ -71,8 +72,8 @@ export function requireEmail(value: unknown, field = "email"): string {
   const text = requireString(value, field, 320);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
     reject(
-      t("main.validate.thatDoesNotLookLikeAnEmailAddress"),
-      t("main.validate.enterAnAddressLikeYouExampleCom"),
+      errorText("main.validate.thatDoesNotLookLikeAnEmailAddress"),
+      errorText("main.validate.enterAnAddressLikeYouExampleCom"),
     );
   }
   return text;
@@ -81,8 +82,8 @@ export function requireEmail(value: unknown, field = "email"): string {
 export function requireHue(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     reject(
-      t("main.validate.theIdentityColorIsInvalid"),
-      t("main.validate.pickAColorForThisIdentity"),
+      errorText("main.validate.theIdentityColorIsInvalid"),
+      errorText("main.validate.pickAColorForThisIdentity"),
     );
   }
   return ((value % 360) + 360) % 360;
@@ -100,8 +101,8 @@ export function optionalString(
 export function requireStringArray(value: unknown, field: string, maxItems = 100): string[] {
   if (!Array.isArray(value)) {
     reject(
-      t("main.validate.mustBeAList", { field: field }),
-      t("main.validate.thisIsABugInEdaPleaseReportIt"),
+      errorText("main.validate.mustBeAList", { field: field }),
+      errorText("main.validate.thisIsABugInEdaPleaseReportIt"),
     );
   }
 
@@ -109,8 +110,8 @@ export function requireStringArray(value: unknown, field: string, maxItems = 100
 
   if (items.length > maxItems) {
     reject(
-      t("main.validate.hasTooManyEntries", { field: field }),
-      t("main.validate.useOrFewer", { maxItems: maxItems }),
+      errorText("main.validate.hasTooManyEntries", { field: field }),
+      errorText("main.validate.useOrFewer", { maxItems: maxItems }),
     );
   }
 
@@ -127,8 +128,8 @@ export function optionalInteger(
 
   if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
     reject(
-      t("main.validate.isOutsideTheSupportedRange", { field: field }),
-      t("main.validate.useAWholeNumberFromTo", { minimum: minimum, maximum: maximum }),
+      errorText("main.validate.isOutsideTheSupportedRange", { field: field }),
+      errorText("main.validate.useAWholeNumberFromTo", { minimum: minimum, maximum: maximum }),
     );
   }
 
@@ -142,8 +143,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) {
     reject(
-      t("main.validate.isInvalid", { label: label }),
-      t("main.validate.refreshTheRepositoryAndTryAgain"),
+      errorText("main.validate.isInvalid", { label: label }),
+      errorText("main.validate.refreshTheRepositoryAndTryAgain"),
     );
   }
   return value;

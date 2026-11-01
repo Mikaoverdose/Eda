@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { err, ok } from "@shared/errors";
 import type { EdaApi } from "@shared/ipc";
 import {
@@ -64,7 +65,8 @@ it("rejects late preference responses from a previously visible profile", async 
 it("does not display a failed preference mutation as saved", async () => {
   install(
     async (key, context) => ok(resolved(key, context)),
-    async () => err({ kind: "invalid-input", operation: "test", message: "Cannot save" }),
+    async () =>
+      err(errorFixture({ kind: "invalid-input", operation: "test", message: "Cannot save" })),
   );
   await usePreferencesStore.getState().load({ profileId: "home" });
 

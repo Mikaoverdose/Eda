@@ -1,12 +1,13 @@
-import { LanguageSettings } from "./LanguageSettings";
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { GraphicsSettings } from "./GraphicsSettings";
-import { useScopedSetting } from "../hooks/useScopedSetting";
-import { usePreferencesStore } from "../../../stores/preferences-store";
-import { useEffect, useId, useState } from "react";
 import type { DetectedEditor } from "@shared/integrations/editor";
+import { useEffect, useId, useState } from "react";
 import { ErrorDialog, Select } from "../../../components/ui/index";
+import { usePreferencesStore } from "../../../stores/preferences-store";
 import { MergeToolSettings } from "../git/MergeToolSettings";
+import { useScopedSetting } from "../hooks/useScopedSetting";
+import { GraphicsSettings } from "./GraphicsSettings";
+import { LanguageSettings } from "./LanguageSettings";
 
 export function ApplicationPreferences({
   owner = "application",
@@ -30,7 +31,7 @@ export function ApplicationPreferences({
       .then((result) => {
         if (cancelled) return;
         if (result.ok) setEditors(result.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       })
       .catch(() => {
         if (!cancelled)
@@ -58,7 +59,7 @@ export function ApplicationPreferences({
         await editor.set("");
       } else if (value === "manual") {
         const result = await window.eda.app.chooseEditor();
-        if (!result.ok) setError(result.error.message);
+        if (!result.ok) setError(errorMessage(result.error));
         else if (result.value) await editor.set(result.value);
       } else {
         await editor.set(value);

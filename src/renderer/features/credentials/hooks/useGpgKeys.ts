@@ -1,6 +1,7 @@
+import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { GpgSigningKey } from "@shared/identity/signing";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function useGpgKeys(profileId: string, enabled: boolean) {
   const [keys, setKeys] = useState<GpgSigningKey[]>([]);
@@ -23,7 +24,7 @@ export function useGpgKeys(profileId: string, enabled: boolean) {
         return true;
       }
 
-      setError([result.error.message, result.error.suggestedAction].filter(Boolean).join(" "));
+      setError([errorMessage(result.error), errorAction(result.error)].filter(Boolean).join(" "));
 
       return false;
     } catch {

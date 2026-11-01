@@ -1,15 +1,16 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
 import type { Identity } from "@shared/identity/identity";
-import { useAppStore } from "../../stores/app-store";
-import { IdentityDialog } from "./IdentityDialog";
-import { Button, ErrorDialog } from "../../components/ui/index";
-import { useSessionStore } from "../../stores/session-store";
 import type { ProfileDeletePreview } from "@shared/identity/profile-session";
-import { Plus, Check } from "lucide-react";
-import { DuplicateProfile } from "./DuplicateProfile";
-import { DeleteProfile } from "./DeleteProfile";
+import { Check, Plus } from "lucide-react";
+import { useState } from "react";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
+import { Button, ErrorDialog } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { useSessionStore } from "../../stores/session-store";
+import { DeleteProfile } from "./DeleteProfile";
+import { DuplicateProfile } from "./DuplicateProfile";
+import { IdentityDialog } from "./IdentityDialog";
 
 export function ProfilesSettings() {
   const profiles = useAppStore((state) => state.identities);
@@ -25,7 +26,7 @@ export function ProfilesSettings() {
     if (result.ok) {
       setError(null);
       setDeleting(result.value);
-    } else setError(result.error.message);
+    } else setError(errorMessage(result.error));
   };
 
   return (

@@ -1,5 +1,6 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
 import {
   builtInSetting,
   type ResolvedSetting,
@@ -7,6 +8,7 @@ import {
   type SettingScope,
   type SettingValues,
 } from "@shared/preferences/settings";
+import { useEffect, useState } from "react";
 import { useAppStore } from "../../../stores/app-store";
 import { usePreferencesStore } from "../../../stores/preferences-store";
 
@@ -57,11 +59,11 @@ export function useScopedSetting<K extends SettingKey>(
       .catch(() => {
         if (!cancelled)
           usePreferencesStore.setState({
-            error: {
+            error: new GitError({
               kind: "unknown",
               operation: t("operations.readPreferences"),
-              message: t("settings.useScopedSetting.couldNotReadApplicationPreferences"),
-            },
+              message: errorText("settings.useScopedSetting.couldNotReadApplicationPreferences"),
+            }).toData(),
           });
       })
       .finally(() => {

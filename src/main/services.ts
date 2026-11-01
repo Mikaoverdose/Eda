@@ -1,66 +1,66 @@
-import { t, setLocale } from "@shared/i18n";
-import { rm } from "node:fs/promises";
-import { accessSync, constants, statSync } from "node:fs";
-import { UpdateService } from "./application/update-service";
-import { NativeUpdater } from "./application/native-updater";
-import { beginUpdateInstall } from "./ipc/transport";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
-import { clearDatabase } from "./application/reset-data";
-import { AvatarCache } from "./avatars/avatar-cache";
-import { GitHubAuth } from "./providers/github-auth";
-import { GitHubAccountRepository } from "./persistence/github-account-repository";
-
-declare const __EDA_GITHUB_CLIENT_ID__: string;
-declare const __EDA_GITHUB_APP_SLUG__: string;
-import { BackgroundFetchService } from "./repo/sync/background-fetch-service";
-import { broadcast } from "./ipc/transport";
+import { setLocale, t } from "@shared/i18n";
 import { IPC_EVENTS } from "@shared/ipc";
-import { FetchHistoryRepository } from "./persistence/fetch-history-repository";
-import { PullService } from "./repo/sync/pull-service";
 import { app, net, powerMonitor } from "electron";
+import { accessSync, constants, statSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Database } from "./persistence/types";
-import { GitService } from "./git/git-service";
-import { NodeProcessRunner } from "./git/execution/node-process-runner";
-import { SshHostTrustRunner } from "./git/security/ssh-host-trust";
+import { NativeUpdater } from "./application/native-updater";
+import { clearDatabase } from "./application/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
-import { resolveGitEngine, type GitEngine } from "./git/execution/git-engine";
+import { UpdateService } from "./application/update-service";
+import { AvatarCache } from "./avatars/avatar-cache";
+import { CredentialService } from "./credentials/credential-service";
 import {
   bundledGitBinary,
   bundledGitEnvironment,
   bundledGitLocation,
 } from "./git/execution/bundled-git";
-import { openDatabase } from "./persistence/database";
-import { IdentityRepository } from "./persistence/identity-repository";
-import { IdentityManager } from "./identity/identity-manager";
-import { RepositoryManager } from "./repo/lifecycle/repository-manager";
-import { RepositoryWriter } from "./repo/working-tree/repository-writer";
-import { ConflictService } from "./repo/workflows/conflict-service";
+import { resolveGitEngine, type GitEngine } from "./git/execution/git-engine";
+import { NodeProcessRunner } from "./git/execution/node-process-runner";
 import { ExternalMergeTool } from "./git/external-merge-tool";
-import { WorkflowService } from "./repo/workflows/workflow-service";
+import { GitService } from "./git/git-service";
+import { GpgKeyService } from "./git/security/gpg-keys";
+import { SshAgent } from "./git/security/ssh-agent";
+import { SshHostTrustRunner } from "./git/security/ssh-host-trust";
+import { IdentityManager } from "./identity/identity-manager";
+import { ProfileService } from "./identity/profile-service";
+import { ProfileSessions } from "./identity/profile-sessions";
+import { beginUpdateInstall, broadcast } from "./ipc/transport";
+import { OperationManager } from "./operations/operation-manager";
+import { ContentRecoveryRepository } from "./persistence/content-recovery-repository";
+import { openDatabase } from "./persistence/database";
+import { FetchHistoryRepository } from "./persistence/fetch-history-repository";
+import { GitHubAccountRepository } from "./persistence/github-account-repository";
+import { IdentityRepository } from "./persistence/identity-repository";
+import { OperationRepository } from "./persistence/operation-repository";
+import { ProfileSessionRepository } from "./persistence/profile-session-repository";
+import { SettingsRepository } from "./persistence/settings-repository";
+import type { Database } from "./persistence/types";
+import { WorkflowJournal } from "./persistence/workflow-journal";
+import { GitHubAuth } from "./providers/github-auth";
+import { HistoryRecoveryService } from "./repo/history/history-recovery-service";
+import { HistoryReversalService } from "./repo/history/history-reversal-service";
+import { RepositoryNavigationQueue } from "./repo/lifecycle/navigation";
+import { RepositoryManager } from "./repo/lifecycle/repository-manager";
+import { BackgroundFetchService } from "./repo/sync/background-fetch-service";
+import { PullService } from "./repo/sync/pull-service";
+import { RemoteService } from "./repo/sync/remote-service";
+import { ConflictService } from "./repo/workflows/conflict-service";
 import { RebaseService } from "./repo/workflows/rebase-service";
 import { ReplayService } from "./repo/workflows/replay-service";
 import { ResetService } from "./repo/workflows/reset-service";
-import { HistoryReversalService } from "./repo/history/history-reversal-service";
-import { HistoryRecoveryService } from "./repo/history/history-recovery-service";
 import { StashService } from "./repo/workflows/stash-service";
-import { WorkflowJournal } from "./persistence/workflow-journal";
-import { RemoteService } from "./repo/sync/remote-service";
+import { WorkflowService } from "./repo/workflows/workflow-service";
+import { RepositoryWriter } from "./repo/working-tree/repository-writer";
 import { KeychainSecretStore, vaultPathFor } from "./secrets/keychain-secret-store";
 import type { SecretStore } from "./secrets/secret-store";
 import { SshService } from "./ssh/ssh-service";
-import { SshAgent } from "./git/security/ssh-agent";
-import { GpgKeyService } from "./git/security/gpg-keys";
-import { CredentialService } from "./credentials/credential-service";
-import { SettingsRepository } from "./persistence/settings-repository";
-import { ProfileSessionRepository } from "./persistence/profile-session-repository";
-import { ProfileSessions } from "./identity/profile-sessions";
-import { ProfileService } from "./identity/profile-service";
-import { OperationRepository } from "./persistence/operation-repository";
-import { OperationManager } from "./operations/operation-manager";
-import { ContentRecoveryRepository } from "./persistence/content-recovery-repository";
-import { RepositoryNavigationQueue } from "./repo/lifecycle/navigation";
+
+declare const __EDA_GITHUB_CLIENT_ID__: string;
+declare const __EDA_GITHUB_APP_SLUG__: string;
 
 export interface Services {
   updates: UpdateService;
@@ -249,7 +249,9 @@ export async function createServices(): Promise<Services> {
             throw new GitError({
               kind: "invalid-input",
               operation: t("operations.installUpdate"),
-              message: t("main.services.finishRunningGitOperationsBeforeInstallingAnUpdate"),
+              message: errorText(
+                "main.services.finishRunningGitOperationsBeforeInstallingAnUpdate",
+              ),
             });
           await identity.serialize(async () => undefined);
           return rollback;

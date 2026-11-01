@@ -1,8 +1,8 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { formatDateTime } from "../../utils/format";
-import { useState } from "react";
-import { Download, RotateCw } from "lucide-react";
 import { UPDATE_DOWNLOAD_PAGE, type UpdateState } from "@shared/updates";
+import { Download, RotateCw } from "lucide-react";
+import { useState } from "react";
 import {
   AsyncButton,
   Button,
@@ -12,6 +12,7 @@ import {
   NoticeBanner,
 } from "../../components/ui/index";
 import { useSessionStore } from "../../stores/session-store";
+import { formatDateTime } from "../../utils/format";
 import { useScopedSetting } from "../settings/hooks/useScopedSetting";
 import { useUpdates } from "./hooks/useUpdates";
 
@@ -148,7 +149,7 @@ export function UpdatesSettings() {
       }
       const result = await window.eda.updates[action]();
       if (!result.ok) {
-        setActionError(result.error.message);
+        setActionError(errorMessage(result.error));
         return false;
       }
       return !result.value.error;

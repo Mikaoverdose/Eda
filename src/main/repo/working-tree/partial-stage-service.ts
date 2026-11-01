@@ -1,10 +1,11 @@
-import { t } from "@shared/i18n";
-import { createHash, randomUUID } from "node:crypto";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
-import type { PartialStageRequest, PartialStagePreview } from "@shared/repository/partial-stage";
+import { t } from "@shared/i18n";
+import type { PartialStagePreview, PartialStageRequest } from "@shared/repository/partial-stage";
+import { createHash, randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
-import { assertRepositoryPath } from "../../git/validation";
 import { partialPatch } from "../../git/operations/partial-patch";
+import { assertRepositoryPath } from "../../git/validation";
 
 export class PartialStageService {
   private readonly previews = new Map<
@@ -32,7 +33,7 @@ export class PartialStageService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.partialStaging"),
-        message: t(
+        message: errorText(
           "main.partialStageService.refreshTheFileRenamesAndConflictsRequireWholeFileActions",
         ),
       });
@@ -69,7 +70,7 @@ export class PartialStageService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.partialStaging"),
-        message: t("main.partialStageService.partialStagingRequiresUtf8TextUseWholeFile"),
+        message: errorText("main.partialStageService.partialStagingRequiresUtf8TextUseWholeFile"),
       });
     }
 
@@ -134,7 +135,7 @@ export class PartialStageService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.partialStaging"),
-        message: t("main.partialStageService.thisPreviewExpiredOrBelongsToAnotherContext"),
+        message: errorText("main.partialStageService.thisPreviewExpiredOrBelongsToAnotherContext"),
       });
 
     this.previews.delete(token);
@@ -145,7 +146,7 @@ export class PartialStageService {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.partialStaging"),
-        message: t(
+        message: errorText(
           "main.partialStageService.theFileOrIndexChangedAfterThePreviewRefreshAndPreviewAgain",
         ),
       });

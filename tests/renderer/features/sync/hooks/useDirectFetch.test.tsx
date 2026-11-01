@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
@@ -79,7 +80,9 @@ it("fetches all remotes sequentially", async () => {
 });
 it("requests credentials only after an HTTPS auth failure and pins the retry", async () => {
   fetchRemote.mockResolvedValueOnce(
-    err({ kind: "auth-failed", operation: "fetch", message: "Authentication failed." }),
+    err(
+      errorFixture({ kind: "auth-failed", operation: "fetch", message: "Authentication failed." }),
+    ),
   );
   await act(async () => api.fetch());
   expect(api.authentication).toBe("team");
@@ -110,7 +113,7 @@ it("prevents duplicate transfers", async () => {
 });
 it("stops Fetch all on failure without fetching later remotes", async () => {
   fetchRemote.mockResolvedValueOnce(
-    err({ kind: "unknown", operation: "fetch", message: "Network unavailable." }),
+    err(errorFixture({ kind: "unknown", operation: "fetch", message: "Network unavailable." })),
   );
   await act(async () => api.fetch(null));
   expect(fetchRemote).toHaveBeenCalledOnce();

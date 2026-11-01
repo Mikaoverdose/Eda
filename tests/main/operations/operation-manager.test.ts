@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GitError } from "@shared/errors";
 import { openInMemoryDatabase } from "@main/persistence/database";
@@ -122,13 +123,15 @@ describe("operation journal", () => {
         owner,
         "Stage",
         async () => {
-          throw new GitError({
-            kind: "lock-contention",
-            operation: "stage",
-            message: "Index locked",
-            rawStderr: "password=hidden",
-            exitCode: 128,
-          });
+          throw new GitError(
+            errorFixture({
+              kind: "lock-contention",
+              operation: "stage",
+              message: "Index locked",
+              rawStderr: "password=hidden",
+              exitCode: 128,
+            }),
+          );
         },
         async () => {
           retried += 1;

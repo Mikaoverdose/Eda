@@ -1,15 +1,17 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
 import {
   builtInSetting,
   type ResolvedSetting,
   type SettingScope,
 } from "@shared/preferences/settings";
+import { useEffect, useState } from "react";
+import { Button, Checkbox, NoticeBanner } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { previewAppearance, usePreferencesStore } from "../../stores/preferences-store";
-import { Button, Checkbox, NoticeBanner } from "../../components/ui/index";
-import { CommitPrefixSettings } from "./git/CommitPrefixSettings";
 import { ThemePreferences } from "./appearance/ThemePreferences";
+import { CommitPrefixSettings } from "./git/CommitPrefixSettings";
 
 interface ScopedPreferencesProps {
   owner: "application" | "profile";
@@ -67,11 +69,11 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
       .catch(() => {
         if (!cancelled)
           usePreferencesStore.setState({
-            error: {
+            error: new GitError({
               kind: "unknown",
               operation: t("operations.readPreferences"),
-              message: t("settings.scopedPreferences.couldNotReadApplicationPreferences"),
-            },
+              message: errorText("settings.scopedPreferences.couldNotReadApplicationPreferences"),
+            }).toData(),
           });
       });
 

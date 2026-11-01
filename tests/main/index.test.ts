@@ -1,3 +1,4 @@
+import { errorFixture } from "../helpers/error";
 import { afterEach, expect, it, vi } from "vitest";
 import { GitError } from "@shared/errors";
 
@@ -29,12 +30,14 @@ vi.mock("electron", () => ({
 afterEach(() => vi.restoreAllMocks());
 
 it("reports a missing Git installation visibly and exits instead of remaining windowless", async () => {
-  const failure = new GitError({
-    kind: "git-not-found",
-    operation: "locate Git",
-    message: "Eda could not find a working Git installation.",
-    suggestedAction: "Install Git and restart Eda.",
-  });
+  const failure = new GitError(
+    errorFixture({
+      kind: "git-not-found",
+      operation: "locate Git",
+      message: "Eda could not find a working Git installation.",
+      suggestedAction: "Install Git and restart Eda.",
+    }),
+  );
 
   startup.createServices.mockRejectedValueOnce(failure);
 

@@ -1,8 +1,9 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { useEffect, useState } from "react";
-import { Dialog, Input, ErrorDialog, TextButton } from "../../components/ui/index";
-import { IgnoreDialog } from "./IgnoreDialog";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
+import { Dialog, ErrorDialog, Input, TextButton } from "../../components/ui/index";
+import { IgnoreDialog } from "./IgnoreDialog";
 
 export function IgnoredFilesDialog({
   repositoryId,
@@ -27,7 +28,7 @@ export function IgnoredFilesDialog({
       if (result.ok) {
         setPaths(result.value.paths);
         setTruncated(result.value.truncated);
-      } else setError(result.error.message);
+      } else setError(errorMessage(result.error));
     });
 
     return () => {

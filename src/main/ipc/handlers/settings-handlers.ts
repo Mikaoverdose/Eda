@@ -1,14 +1,15 @@
+import { errorText } from "@shared/error-codes";
+import { ok } from "@shared/errors";
+import { t } from "@shared/i18n";
+import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import {
   MAX_BACKGROUND_IMAGE_LENGTH,
   requireSettingKey,
   type SettingScope,
   type SettingsContext,
 } from "@shared/preferences/settings";
-import { t } from "@shared/i18n";
+import { BrowserWindow, app, dialog, nativeImage } from "electron";
 import { open } from "node:fs/promises";
-import { app, dialog, nativeImage, BrowserWindow } from "electron";
-import { ok } from "@shared/errors";
-import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
 import { broadcast, handle } from "../transport";
 
@@ -26,7 +27,7 @@ export function registerSettingsHandlers(services: Services): void {
 
     if (profileId && profileId !== identity.getActive()?.id)
       throw invalidRequest(
-        t("main.settingsHandlers.theActiveProfileChangedRefreshPreferencesAndTryAgain"),
+        errorText("main.settingsHandlers.theActiveProfileChangedRefreshPreferencesAndTryAgain"),
       );
 
     const repositoryId =
@@ -45,12 +46,12 @@ export function registerSettingsHandlers(services: Services): void {
     const owner = context(input);
 
     if (!owner.profileId)
-      throw invalidRequest(t("main.settingsHandlers.aProfileIsRequiredForThisScope"));
+      throw invalidRequest(errorText("main.settingsHandlers.aProfileIsRequiredForThisScope"));
     if (input["kind"] === "profile") return { kind: "profile", profileId: owner.profileId };
     if (input["kind"] === "repository" && owner.repositoryId)
       return { kind: "repository", profileId: owner.profileId, repositoryId: owner.repositoryId };
 
-    throw invalidRequest(t("main.settingsHandlers.unknownSettingScope"));
+    throw invalidRequest(errorText("main.settingsHandlers.unknownSettingScope"));
   };
 
   const previewing = new Map<Electron.WebContents, () => void>();
@@ -83,7 +84,7 @@ export function registerSettingsHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.settingsPreviewGlobalAppearance, async (event, enabled) => {
     if (typeof enabled !== "boolean")
-      throw invalidRequest(t("main.settingsHandlers.previewStateMustBeABoolean"));
+      throw invalidRequest(errorText("main.settingsHandlers.previewStateMustBeABoolean"));
 
     const contents = event.sender;
 
@@ -115,7 +116,8 @@ export function registerSettingsHandlers(services: Services): void {
   handle(IPC_CHANNELS.settingsChooseBackgroundImage, async (event) => {
     const parent = BrowserWindow.fromWebContents(event.sender);
 
-    if (!parent) throw invalidRequest(t("main.settingsHandlers.theSettingsWindowIsUnavailable"));
+    if (!parent)
+      throw invalidRequest(errorText("main.settingsHandlers.theSettingsWindowIsUnavailable"));
 
     const result = await dialog.showOpenDialog(parent, {
       properties: ["openFile"],
@@ -138,7 +140,7 @@ export function registerSettingsHandlers(services: Services): void {
       const metadata = await file.stat();
 
       if (!metadata.isFile() || metadata.size > limit)
-        throw invalidRequest(t("main.settingsHandlers.chooseAnImageFileSmallerThan12Mb"));
+        throw invalidRequest(errorText("main.settingsHandlers.chooseAnImageFileSmallerThan12Mb"));
 
       const buffer = Buffer.alloc(limit + 1);
       let length = 0;
@@ -150,7 +152,7 @@ export function registerSettingsHandlers(services: Services): void {
       }
 
       if (length > limit)
-        throw invalidRequest(t("main.settingsHandlers.chooseAnImageSmallerThan12Mb"));
+        throw invalidRequest(errorText("main.settingsHandlers.chooseAnImageSmallerThan12Mb"));
 
       bytes = buffer.subarray(0, length);
     } finally {
@@ -161,7 +163,7 @@ export function registerSettingsHandlers(services: Services): void {
 
     if (image.isEmpty())
       throw invalidRequest(
-        t("main.settingsHandlers.thisImageCouldNotBeOpenedChooseApngjpegOrWebPImage"),
+        errorText("main.settingsHandlers.thisImageCouldNotBeOpenedChooseApngjpegOrWebPImage"),
       );
 
     const size = image.getSize();
@@ -172,7 +174,9 @@ export function registerSettingsHandlers(services: Services): void {
     const data = "data:image/jpeg;base64," + image.toJPEG(75).toString("base64");
 
     if (data.length > MAX_BACKGROUND_IMAGE_LENGTH)
-      throw invalidRequest(t("main.settingsHandlers.thisImageIsTooDetailedChooseASmallerImage"));
+      throw invalidRequest(
+        errorText("main.settingsHandlers.thisImageIsTooDetailedChooseASmallerImage"),
+      );
 
     return ok(data);
   });

@@ -1,9 +1,10 @@
-import { t } from "@shared/i18n";
 import { Localized } from "@renderer/i18n/Localized";
-import { useState } from "react";
+import { errorAction, errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { StashBranchPreview } from "@shared/workflows/stashes";
+import { useState } from "react";
+import { Dialog, ErrorDialog, Input, ReviewActions } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Dialog, Input, ErrorDialog, ReviewActions } from "../../components/ui/index";
 
 export function StashBranchDialog({
   repositoryId,
@@ -28,7 +29,7 @@ export function StashBranchDialog({
     try {
       const result = await window.eda.stashes.prepareBranch(repositoryId, stashToken, name);
       if (result.ok) setPreview(result.value);
-      else setError(result.error.message);
+      else setError(errorMessage(result.error));
     } finally {
       setBusy(false);
     }
@@ -47,7 +48,7 @@ export function StashBranchDialog({
 
       if (result.ok) onCreated(preview.name, result.value.applied);
       else {
-        setError(`${result.error.message} ${result.error.suggestedAction ?? ""}`);
+        setError(`${errorMessage(result.error)} ${errorAction(result.error) ?? ""}`);
         setPreview(null);
       }
     } finally {

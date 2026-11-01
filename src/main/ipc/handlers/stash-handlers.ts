@@ -1,10 +1,11 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
+import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
-import { requireId, requireString, requireRecord } from "../validate";
 import { invalidRequest } from "../request-errors";
 import { broadcast, handle } from "../transport";
+import { requireId, requireRecord, requireString } from "../validate";
 
 export function registerStashHandlers({ stashes }: Services) {
   handle(IPC_CHANNELS.stashesRename, async (_event, rawId, rawToken, name) => {
@@ -39,7 +40,7 @@ export function registerStashHandlers({ stashes }: Services) {
 
   handle(IPC_CHANNELS.stashesPrepareFile, async (_event, rawId, rawToken, area, path) => {
     if (area !== "tracked" && area !== "staged" && area !== "untracked")
-      throw invalidRequest(t("main.stashHandlers.chooseAVersionFromTheStash"));
+      throw invalidRequest(errorText("main.stashHandlers.chooseAVersionFromTheStash"));
 
     return ok(
       await stashes.prepareFile(
@@ -67,7 +68,7 @@ export function registerStashHandlers({ stashes }: Services) {
     const token = requireId(rawToken);
 
     if (typeof pop !== "boolean" || typeof restoreIndex !== "boolean")
-      throw invalidRequest(t("main.stashHandlers.chooseStashApplicationOptions"));
+      throw invalidRequest(errorText("main.stashHandlers.chooseStashApplicationOptions"));
 
     try {
       return ok(await stashes.apply(id, token, pop, restoreIndex));
@@ -92,7 +93,7 @@ export function registerStashHandlers({ stashes }: Services) {
     const id = requireId(rawId);
 
     if (contents !== "tracked" && contents !== "untracked" && contents !== "all")
-      throw invalidRequest(t("main.stashHandlers.chooseWhichFilesToStash"));
+      throw invalidRequest(errorText("main.stashHandlers.chooseWhichFilesToStash"));
 
     const name = requireString(message, t("fields.stashName"));
     const options =
@@ -102,7 +103,7 @@ export function registerStashHandlers({ stashes }: Services) {
 
     for (const key of ["stagedOnly", "keepIndex"]) {
       if (options[key] !== undefined && typeof options[key] !== "boolean")
-        throw invalidRequest(t("main.stashHandlers.chooseValidStashOptions"));
+        throw invalidRequest(errorText("main.stashHandlers.chooseValidStashOptions"));
     }
 
     const paths = options["paths"];
@@ -113,7 +114,7 @@ export function registerStashHandlers({ stashes }: Services) {
         paths.length > 256 ||
         paths.some((path) => typeof path !== "string"))
     )
-      throw invalidRequest(t("main.stashHandlers.chooseUpTo256StashPaths"));
+      throw invalidRequest(errorText("main.stashHandlers.chooseUpTo256StashPaths"));
 
     try {
       await stashes.create(id, name, contents, {

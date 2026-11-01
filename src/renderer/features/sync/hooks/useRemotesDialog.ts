@@ -1,5 +1,6 @@
+import type { Result } from "@shared/errors";
+import { errorAction, errorMessage } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
-import { useEffect, useRef, useState } from "react";
 import type {
   PushPreview,
   PushRequest,
@@ -7,7 +8,7 @@ import type {
   RemoteState,
   TransportCredentials,
 } from "@shared/integrations/remotes";
-import type { Result } from "@shared/errors";
+import { useEffect, useRef, useState } from "react";
 import { useRepositoryStore } from "../../../stores/repository-store";
 import type { RejectedPush } from "../RejectedPushNotice";
 
@@ -46,7 +47,7 @@ export function useRemotesDialog(
     if (revision !== loadRevision.current) return;
 
     if (!result.ok) {
-      setError(result.error.message);
+      setError(errorMessage(result.error));
       return;
     }
 
@@ -99,7 +100,7 @@ export function useRemotesDialog(
       if (context !== contextRevision.current) return;
 
       if (!result.ok) {
-        setError(`${result.error.message} ${result.error.suggestedAction ?? ""}`);
+        setError(`${errorMessage(result.error)} ${errorAction(result.error) ?? ""}`);
         if (tab === "push" && result.error.kind === "non-fast-forward")
           setRejectedPush({ branch, remote, destination, refKind });
       } else {

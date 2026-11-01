@@ -1,8 +1,9 @@
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { randomUUID } from "node:crypto";
 import { copyFile, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { GitError } from "@shared/errors";
 import type { GitService } from "../git-service";
 
 /** Git can stash staged changes outside the requested paths. */
@@ -28,7 +29,7 @@ export async function createScopedStash(
     throw new GitError({
       kind: "lock-contention",
       operation: t("operations.createSelectedStash"),
-      message: t(
+      message: errorText(
         "main.git.scopedStash.anotherGitOperationHoldsTheIndexLockWaitForItToFinishAndRetry",
       ),
     });
@@ -97,15 +98,14 @@ export async function createScopedStash(
         await lock.close();
         await rename(lockPath, indexPath);
         ownsLock = false;
-      } catch (error) {
+      } catch {
         throw new GitError({
           kind: "unknown",
           operation: t("operations.finishSelectedStash"),
-          message: t("main.git.scopedStash.theStashWasSavedButEdaCouldNot"),
-          suggestedAction:
-            error instanceof Error
-              ? error.message
-              : t("main.git.scopedStash.checkRepositoryPermissionsAndAvailableDiskSpace"),
+          message: errorText("main.git.scopedStash.theStashWasSavedButEdaCouldNot"),
+          suggestedAction: errorText(
+            "main.git.scopedStash.checkRepositoryPermissionsAndAvailableDiskSpace",
+          ),
         });
       }
     }

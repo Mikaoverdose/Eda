@@ -1,32 +1,33 @@
-import { t, type MessageKey } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
-import { basename } from "node:path";
+import { t, type MessageKey } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
+import { commitConfigKeys, type CommitConfigGroup } from "@shared/identity/profile-session";
+import type { IgnoreKind } from "@shared/repository/ignore";
+import type { PartialStagePreview, PartialStageRequest } from "@shared/repository/partial-stage";
 import type {
   BranchSummary,
-  CommitResult,
   CommitPreview,
+  CommitResult,
   TagSummary,
 } from "@shared/repository/repository-write";
+import { basename } from "node:path";
+import { withLocalConfiguration } from "../../git/configuration/local-configuration";
 import type { GitService } from "../../git/git-service";
 import type { IdentityManager } from "../../identity/identity-manager";
-import type { IdentityRepository } from "../../persistence/identity-repository";
-import type { RepositoryManager } from "../lifecycle/repository-manager";
-import { WriteQueue } from "./write-queue";
 import type { OperationManager } from "../../operations/operation-manager";
-import { PartialStageService } from "./partial-stage-service";
-import type { PartialStageRequest, PartialStagePreview } from "@shared/repository/partial-stage";
-import { IgnoreService } from "./ignore-service";
-import type { IgnoreKind } from "@shared/repository/ignore";
-import { DiscardService } from "./discard-service";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
-import { repositoryCapabilities } from "../lifecycle/repository-capabilities";
-import { repositoryCommonDirectory } from "../lifecycle/repository-location";
+import type { IdentityRepository } from "../../persistence/identity-repository";
+import type { WorkflowJournal } from "../../persistence/workflow-journal";
 import { CommitHistory } from "../history/commit-history";
 import { RefHistory } from "../history/ref-history";
-import type { WorkflowJournal } from "../../persistence/workflow-journal";
-import { commitConfigKeys, type CommitConfigGroup } from "@shared/identity/profile-session";
-import { withLocalConfiguration } from "../../git/configuration/local-configuration";
+import { repositoryCapabilities } from "../lifecycle/repository-capabilities";
+import { repositoryCommonDirectory } from "../lifecycle/repository-location";
+import type { RepositoryManager } from "../lifecycle/repository-manager";
+import { DiscardService } from "./discard-service";
+import { IgnoreService } from "./ignore-service";
+import { PartialStageService } from "./partial-stage-service";
+import { WriteQueue } from "./write-queue";
 
 export class RepositoryWriter {
   remoteOperation<T>(
@@ -71,7 +72,7 @@ export class RepositoryWriter {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.discardChanges"),
-        message: t("main.repositoryWriter.recoveryStorageIsUnavailableNoFilesWereChanged"),
+        message: errorText("main.repositoryWriter.recoveryStorageIsUnavailableNoFilesWereChanged"),
       });
 
     return this.discard;
@@ -495,7 +496,7 @@ export class RepositoryWriter {
           throw new GitError({
             kind: "invalid-input",
             operation: t("operations.writeRepository"),
-            message: t(
+            message: errorText(
               "main.repositoryWriter.theOriginatingProfileWasDeletedBeforeThisOperationCouldStart",
             ),
           });
@@ -511,7 +512,9 @@ export class RepositoryWriter {
             throw new GitError({
               kind: "invalid-input",
               operation: kind,
-              message: capabilities.reason ?? t("main.repositoryWriter.thisRepositoryIsReadOnly"),
+              message: errorText("errors.operationBlocked", {
+                reason: capabilities.reason ?? t("main.repositoryWriter.thisRepositoryIsReadOnly"),
+              }),
             });
 
           return work(path);
@@ -531,7 +534,7 @@ export class RepositoryWriter {
                   throw new GitError({
                     kind: "invalid-input",
                     operation: t("operations.retryOperation"),
-                    message: t(
+                    message: errorText(
                       "main.repositoryWriter.theOriginalRepositoryContextChangedReopenItBeforeRetrying",
                     ),
                   });
@@ -587,8 +590,8 @@ export class RepositoryWriter {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.commit"),
-        message: t("main.repositoryWriter.thereIsNoActiveIdentity"),
-        suggestedAction: t("main.repositoryWriter.selectAnIdentityBeforeCommitting"),
+        message: errorText("main.repositoryWriter.thereIsNoActiveIdentity"),
+        suggestedAction: errorText("main.repositoryWriter.selectAnIdentityBeforeCommitting"),
       });
     }
 

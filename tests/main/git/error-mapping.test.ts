@@ -74,10 +74,11 @@ describe("mapGitError", () => {
     }
   });
 
-  it("falls back to a cleaned first line for unrecognized output", () => {
+  it("uses a localized fallback and keeps unrecognized output in diagnostics", () => {
     const error = map("fatal: something entirely new went wrong");
     expect(error.kind).toBe("unknown");
-    expect(error.message).toBe("Something entirely new went wrong");
+    expect(error.message).toBe("The push operation failed.");
+    expect(error.rawStderr).toContain("something entirely new went wrong");
   });
 
   it("redacts credentials in unrecognized Git output before keeping or displaying diagnostics", () => {
@@ -86,17 +87,19 @@ describe("mapGitError", () => {
     );
 
     expect(error.kind).toBe("unknown");
-    expect(error.message).toContain("example.com/repo");
+    expect(error.message).toBe("The push operation failed.");
+    expect(error.rawStderr).toContain("example.com/repo");
     expect(error.message).not.toContain("private");
     expect(error.rawStderr).not.toContain("private");
     expect(JSON.stringify(error.toData())).not.toContain("private");
   });
 
-  it("skips hint and warning lines when falling back", () => {
+  it("does not show warning, hint or fatal output as authored error text", () => {
     const error = map(
       "Cloning into a folder...\nwarning: ignore me\nhint: me too\nfatal: the real problem",
     );
-    expect(error.message).toBe("The real problem");
+    expect(error.message).toBe("The push operation failed.");
+    expect(error.rawStderr).toContain("the real problem");
   });
 
   it("names the repository path in a not-a-repository error", () => {

@@ -1,22 +1,23 @@
-import { t } from "@shared/i18n";
-import { useShellStore } from "../../stores/shell-store";
 import { Localized } from "@renderer/i18n/Localized";
-import { ButtonBase } from "../../components/ui/actions/ButtonBase";
-import { useAppStore } from "../../stores/app-store";
-import { useState } from "react";
+import { errorMessage } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
+import { ArrowUpRight, FolderOpen, Pencil, SquareArrowOutUpRight, Star } from "lucide-react";
+import { useState } from "react";
+import { ButtonBase } from "../../components/ui/actions/ButtonBase";
 import {
   Button,
   Dialog,
+  ErrorDialog,
+  FolderIcon,
   IconButton,
   Input,
   SearchField,
-  FolderIcon,
-  ErrorDialog,
 } from "../../components/ui/index";
-import { ArrowUpRight, Star, Pencil, FolderOpen, SquareArrowOutUpRight } from "lucide-react";
-import { InitRepositoryDialog } from "./InitRepositoryDialog";
+import { useAppStore } from "../../stores/app-store";
+import { useShellStore } from "../../stores/shell-store";
 import { CloneRepositoryDialog } from "./CloneRepositoryDialog";
+import { InitRepositoryDialog } from "./InitRepositoryDialog";
 
 export function RepositoryHome() {
   const repositories = useAppStore((state) => state.repositories);
@@ -39,7 +40,7 @@ export function RepositoryHome() {
 
     try {
       const result = await window.eda.repository.updateMetadata(repository.id, { name, favourite });
-      if (!result.ok) setError(result.error.message);
+      if (!result.ok) setError(errorMessage(result.error));
       else {
         setEditing(null);
         await useAppStore.getState().refreshRepositories();
@@ -141,7 +142,7 @@ export function RepositoryHome() {
                   title={t("repositoryHome.openFolder")}
                   onClick={() =>
                     void window.eda.repository.reveal(repository.id).then((result) => {
-                      if (!result.ok) setError(result.error.message);
+                      if (!result.ok) setError(errorMessage(result.error));
                     })
                   }
                   icon={<FolderOpen size={15} />}
@@ -152,7 +153,7 @@ export function RepositoryHome() {
                   title={t("repositoryHome.openInConfiguredEditor")}
                   onClick={() =>
                     void window.eda.repository.openEditor(repository.id).then((result) => {
-                      if (!result.ok) setError(result.error.message);
+                      if (!result.ok) setError(errorMessage(result.error));
                     })
                   }
                   icon={<SquareArrowOutUpRight size={15} />}

@@ -1,8 +1,9 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { SessionContext, SessionSnapshot } from "@shared/identity/profile-session";
-import type { IdentityManager } from "./identity-manager";
 import type { ProfileSessionRepository } from "../persistence/profile-session-repository";
+import type { IdentityManager } from "./identity-manager";
 
 export class ProfileSessions {
   private generation = 0;
@@ -24,7 +25,7 @@ export class ProfileSessions {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.openSession"),
-        message: t("main.identity.profileSessions.waitForTheProfileTransitionToFinish"),
+        message: errorText("main.identity.profileSessions.waitForTheProfileTransitionToFinish"),
       });
 
     const profile = this.identity.getActive();
@@ -79,7 +80,7 @@ export class ProfileSessions {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.switchProfile"),
-        message: t("main.identity.profileSessions.aProfileTransitionIsAlreadyInProgress"),
+        message: errorText("main.identity.profileSessions.aProfileTransitionIsAlreadyInProgress"),
       });
 
     this.transitioning.add(callerId);
@@ -106,7 +107,7 @@ export class ProfileSessions {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.saveProfileSession"),
-        message: t(
+        message: errorText(
           "main.identity.profileSessions.thisSessionIsStaleReloadTheCurrentProfileBeforeSaving",
         ),
       });

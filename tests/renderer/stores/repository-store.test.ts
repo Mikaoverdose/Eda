@@ -1,3 +1,4 @@
+import { errorFixture } from "../../helpers/error";
 import type { EdaApi } from "@shared/ipc";
 import type { HistoryCommit, UnifiedDiff } from "@shared/repository/repository-read";
 import type { Result } from "@shared/errors";
@@ -73,7 +74,13 @@ describe("repository read store", () => {
     Object.defineProperty(window, "eda", {
       configurable: true,
       value: api(async () =>
-        err({ kind: "repository-corrupt", operation: "history", message: "Missing object" }),
+        err(
+          errorFixture({
+            kind: "repository-corrupt",
+            operation: "history",
+            message: "Missing object",
+          }),
+        ),
       ),
     });
     await useRepositoryStore.getState().open("repo", "identity", true);
@@ -177,7 +184,13 @@ describe("repository read store", () => {
     requests[1]!.finish(ok(preview("new.ts", "renamed content")));
     await renamed;
     requests[0]!.finish(
-      err({ kind: "repository-corrupt", operation: "commit diff", message: "stale failure" }),
+      err(
+        errorFixture({
+          kind: "repository-corrupt",
+          operation: "commit diff",
+          message: "stale failure",
+        }),
+      ),
     );
     await late;
     expect(useRepositoryStore.getState()).toMatchObject({
@@ -288,12 +301,14 @@ describe("repository read store", () => {
       value: api(async ({ offset = 0 }) =>
         offset === 0
           ? ok({ commits: [makeCommit(0)], nextOffset: HISTORY_PAGE_SIZE })
-          : err({
-              kind: "unknown",
-              operation: "read history",
-              message: "paging blew up",
-              suggestedAction: "retry",
-            }),
+          : err(
+              errorFixture({
+                kind: "unknown",
+                operation: "read history",
+                message: "paging blew up",
+                suggestedAction: "retry",
+              }),
+            ),
       ),
     });
     await useRepositoryStore.getState().open("repo", "identity", true);
@@ -357,12 +372,12 @@ describe("repository read store", () => {
   });
 
   it("surfaces a failed write without refreshing", async () => {
-    const failure = {
+    const failure = errorFixture({
       kind: "identity-mismatch" as const,
       operation: "commit",
       message: "wrong identity",
       suggestedAction: "fix it",
-    };
+    });
 
     Object.defineProperty(window, "eda", {
       configurable: true,

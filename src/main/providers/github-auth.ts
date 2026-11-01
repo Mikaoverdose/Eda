@@ -1,15 +1,16 @@
-import { t } from "@shared/i18n";
-import { randomUUID } from "node:crypto";
+import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import {
   isGitHubHttps,
+  type GitHubAccountProfile,
+  type GitHubRepositoryAccess,
   type GitHubSignIn,
   type GitHubSignInResult,
   type GitHubStatus,
-  type GitHubAccountProfile,
-  type GitHubRepositoryAccess,
 } from "@shared/integrations/github";
 import type { TransportCredentials } from "@shared/integrations/remotes";
+import { randomUUID } from "node:crypto";
 import type {
   GitHubAccountRepository,
   SavedGitHubAccount,
@@ -21,7 +22,7 @@ const DEVICE_URL = "https://github.com/login/device/code";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
 export const GITHUB_VERIFICATION_URL = "https://github.com/login/device";
 const fail = (
-  message: string,
+  message: ErrorText,
   kind:
     | "invalid-input"
     | "network-failed"
@@ -115,7 +116,7 @@ export class GitHubAuth {
         String(user["id"]) !== account.accountId ||
         !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(text(user["login"]) ?? "")
       )
-        throw fail(t("main.providers.githubAuth.gitHubReturnedADifferentAccountProfile"));
+        throw fail(errorText("main.providers.githubAuth.gitHubReturnedADifferentAccountProfile"));
       const field = (key: string, limit: number) =>
         typeof user[key] === "string"
           ? user[key]
@@ -141,10 +142,10 @@ export class GitHubAuth {
   profileUrl(profileId: string): string {
     const account = this.accounts.find(profileId);
     if (!account || this.authorized.has(profileId))
-      throw fail(t("main.providers.githubAuth.connectAGitHubAccountFirst"));
+      throw fail(errorText("main.providers.githubAuth.connectAGitHubAccountFirst"));
     const login = this.profiles.get(account.accountId)?.value.login ?? account.login;
     if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(login))
-      throw fail(t("main.providers.githubAuth.theGitHubAccountProfileIsInvalid"));
+      throw fail(errorText("main.providers.githubAuth.theGitHubAccountProfileIsInvalid"));
     return `https://github.com/${login}`;
   }
 
@@ -152,11 +153,14 @@ export class GitHubAuth {
     const account = this.accounts.find(profileId);
     const authorized = this.authorized.get(profileId);
     if (!account && !authorized)
-      throw fail(t("main.providers.githubAuth.signInWithGitHubFirst"), "github-auth-required");
+      throw fail(
+        errorText("main.providers.githubAuth.signInWithGitHubFirst"),
+        "github-auth-required",
+      );
     if (authorized?.tokens.expiresAt !== undefined && authorized.tokens.expiresAt <= this.now()) {
       this.authorized.delete(profileId);
       throw fail(
-        t("main.providers.githubAuth.yourGitHubLoginExpiredSignInAgain"),
+        errorText("main.providers.githubAuth.yourGitHubLoginExpiredSignInAgain"),
         "github-auth-required",
       );
     }
@@ -188,7 +192,7 @@ export class GitHubAuth {
       }
       if (!valid())
         throw fail(
-          t("main.providers.githubAuth.theGitHubAccountChangedCheckAccessAgain"),
+          errorText("main.providers.githubAuth.theGitHubAccountChangedCheckAccessAgain"),
           "github-auth-required",
         );
       const installations = response["installations"];
@@ -199,10 +203,14 @@ export class GitHubAuth {
         !Number.isSafeInteger(total) ||
         (total as number) < installations.length
       )
-        throw fail(t("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"));
+        throw fail(
+          errorText("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"),
+        );
       for (const value of installations) {
         if (!value || typeof value !== "object")
-          throw fail(t("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"));
+          throw fail(
+            errorText("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"),
+          );
         const installation = value as Record<string, unknown>;
         const owner = installation["account"] as Record<string, unknown> | null;
         const permissions = installation["permissions"] as Record<string, unknown> | null;
@@ -223,25 +231,29 @@ export class GitHubAuth {
       }
       if (installations.length !== 10)
         throw fail(
-          t(
+          errorText(
             "main.providers.githubAuth.gitHubReturnedIncompleteRepositoryAccessDetailsCheckAccessAgain",
           ),
         );
     }
     throw fail(
-      t("main.providers.githubAuth.thereAreTooManyGitHubInstallationsToVerifyManageAccessOnGitHub"),
+      errorText(
+        "main.providers.githubAuth.thereAreTooManyGitHubInstallationsToVerifyManageAccessOnGitHub",
+      ),
     );
   }
 
   async begin(profileId: string): Promise<GitHubSignIn> {
     this.requireStorage();
     if (!this.status(profileId).configured)
-      throw fail(t("main.providers.githubAuth.gitHubSignInIsNotConfiguredIn"));
+      throw fail(errorText("main.providers.githubAuth.gitHubSignInIsNotConfiguredIn"));
     this.cancelProfile(profileId);
     for (const [id, pending] of this.pending)
       if (pending.signIn.expiresAt <= this.now()) this.cancel(pending.profileId, id);
     if (this.pending.size >= 16)
-      throw fail(t("main.providers.githubAuth.tooManyGitHubSignInsArePendingCancelOneAndTryAgain"));
+      throw fail(
+        errorText("main.providers.githubAuth.tooManyGitHubSignInsArePendingCancelOneAndTryAgain"),
+      );
     const response = await this.request(DEVICE_URL, {
       client_id: this.clientId,
       scope: "offline_access",
@@ -260,7 +272,9 @@ export class GitHubAuth {
       interval > 900 ||
       response["verification_uri"] !== GITHUB_VERIFICATION_URL
     )
-      throw fail(t("main.providers.githubAuth.gitHubReturnedAnInvalidDeviceAuthorizationResponse"));
+      throw fail(
+        errorText("main.providers.githubAuth.gitHubReturnedAnInvalidDeviceAuthorizationResponse"),
+      );
     const signIn = {
       id: randomUUID(),
       userCode: userCode!,
@@ -314,7 +328,7 @@ export class GitHubAuth {
         (user["id"] as number) <= 0 ||
         !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(text(user["login"]) ?? "")
       )
-        throw fail(t("main.providers.githubAuth.gitHubReturnedAnInvalidAccountIdentity"));
+        throw fail(errorText("main.providers.githubAuth.gitHubReturnedAnInvalidAccountIdentity"));
       this.requirePending(profileId, id);
       this.cancel(profileId, id);
       this.authorized.set(profileId, {
@@ -338,12 +352,14 @@ export class GitHubAuth {
   installationUrl(state?: string, accountId?: string): string {
     if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(this.appSlug))
       throw fail(
-        t("main.providers.githubAuth.theGitHubAppInstallationLinkIsNotConfiguredInThisBuild"),
+        errorText(
+          "main.providers.githubAuth.theGitHubAppInstallationLinkIsNotConfiguredInThisBuild",
+        ),
       );
     const url = new URL(`https://github.com/apps/${this.appSlug}/installations/new`);
     if (accountId) {
       if (!/^[1-9][0-9]{0,15}$/.test(accountId))
-        throw fail(t("main.providers.githubAuth.theGitHubAccountIdentityIsInvalid"));
+        throw fail(errorText("main.providers.githubAuth.theGitHubAccountIdentityIsInvalid"));
       url.pathname += "/permissions";
       url.searchParams.set("target_id", accountId);
       url.searchParams.set("target_type", "User");
@@ -358,7 +374,10 @@ export class GitHubAuth {
       status.pendingAccountId ??
       (status.account?.state === "connected" ? status.account.id : undefined);
     if (!accountId)
-      throw fail(t("main.providers.githubAuth.signInWithGitHubFirst"), "github-auth-required");
+      throw fail(
+        errorText("main.providers.githubAuth.signInWithGitHubFirst"),
+        "github-auth-required",
+      );
     const url = this.installationUrl(undefined, accountId);
     try {
       return this.installationUrl(await this.installationCallback.begin(profileId), accountId);
@@ -415,7 +434,7 @@ export class GitHubAuth {
     if (!isGitHubHttps(url)) return undefined;
     if (this.authorized.has(profileId))
       throw fail(
-        t("main.providers.githubAuth.finishConnectingGitHubInProfileSettingsThenRetry"),
+        errorText("main.providers.githubAuth.finishConnectingGitHubInProfileSettingsThenRetry"),
         "github-auth-required",
       );
     const account = this.accounts.find(profileId);
@@ -445,7 +464,7 @@ export class GitHubAuth {
     try {
       if (this.authorized.get(profileId) !== candidate)
         throw fail(
-          t("main.providers.githubAuth.theGitHubConnectionWasCancelledSignInAgain"),
+          errorText("main.providers.githubAuth.theGitHubConnectionWasCancelledSignInAgain"),
           "github-auth-required",
         );
       this.accounts.save({ profileId, accountId, login, credentialRef, state: "connected" });
@@ -463,7 +482,7 @@ export class GitHubAuth {
     this.requireStorage();
     if (account.state !== "connected")
       throw fail(
-        t("main.providers.githubAuth.reconnectGitHubInTheIntegrationsSectionOf"),
+        errorText("main.providers.githubAuth.reconnectGitHubInTheIntegrationsSectionOf"),
         "github-auth-required",
       );
     let tokens = await this.readTokens(account);
@@ -509,7 +528,7 @@ export class GitHubAuth {
     const current = this.accounts.find(account.profileId);
     if (current?.credentialRef !== account.credentialRef)
       throw fail(
-        t("main.providers.githubAuth.theGitHubAccountChangedRetryThePull"),
+        errorText("main.providers.githubAuth.theGitHubAccountChangedRetryThePull"),
         "github-auth-required",
       );
     await this.secrets.set(account.credentialRef, JSON.stringify(refreshed));
@@ -520,7 +539,7 @@ export class GitHubAuth {
     if (this.accounts.find(account.profileId)?.credentialRef === account.credentialRef)
       this.accounts.save({ ...account, state: "expired" });
     throw fail(
-      t("main.providers.githubAuth.yourGitHubLoginExpiredReconnectGitHubThenRetryThePull"),
+      errorText("main.providers.githubAuth.yourGitHubLoginExpiredReconnectGitHubThenRetryThePull"),
       "github-auth-required",
     );
   }
@@ -564,7 +583,7 @@ export class GitHubAuth {
       (response["refresh_token"] !== undefined && !refreshToken) ||
       (response["refresh_token_expires_in"] !== undefined && !refreshExpires)
     )
-      throw fail(t("main.providers.githubAuth.gitHubReturnedAnInvalidAccessTokenResponse"));
+      throw fail(errorText("main.providers.githubAuth.gitHubReturnedAnInvalidAccessTokenResponse"));
     return {
       clientId,
       accessToken,
@@ -578,11 +597,15 @@ export class GitHubAuth {
     const pending = this.pending.get(id);
     if (!pending || pending.profileId !== profileId)
       throw fail(
-        t("main.providers.githubAuth.thisGitHubSignInWasCancelledOrBelongsToAnotherProfile"),
+        errorText(
+          "main.providers.githubAuth.thisGitHubSignInWasCancelledOrBelongsToAnotherProfile",
+        ),
       );
     if (pending.signIn.expiresAt <= this.now()) {
       this.cancel(profileId, id);
-      throw fail(t("main.providers.githubAuth.theGitHubVerificationCodeExpiredStartSignInAgain"));
+      throw fail(
+        errorText("main.providers.githubAuth.theGitHubVerificationCodeExpiredStartSignInAgain"),
+      );
     }
     return pending;
   }
@@ -590,29 +613,32 @@ export class GitHubAuth {
   private requireStorage(): void {
     if (!this.secrets.available)
       throw fail(
-        t("main.providers.githubAuth.secureCredentialStorageIsUnavailableUnlockYourOs"),
+        errorText("main.providers.githubAuth.secureCredentialStorageIsUnavailableUnlockYourOs"),
         "keychain-unavailable",
       );
   }
 
   private oauthError(code: unknown): GitError {
-    const messages: Record<string, string> = {
-      access_denied: t("main.providers.githubAuth.gitHubSignInWasDeclinedStartAgainWhenYouReReady"),
-      expired_token: t(
+    const messages: Record<string, ErrorText> = {
+      access_denied: errorText(
+        "main.providers.githubAuth.gitHubSignInWasDeclinedStartAgainWhenYouReReady",
+      ),
+      expired_token: errorText(
         "main.providers.githubAuth.theGitHubVerificationCodeExpiredStartSignInAgain",
       ),
-      token_expired: t(
+      token_expired: errorText(
         "main.providers.githubAuth.theGitHubVerificationCodeExpiredStartSignInAgain",
       ),
-      device_flow_disabled: t(
+      device_flow_disabled: errorText(
         "main.providers.githubAuth.enableDeviceFlowInEdaSGitHubAppSettingsThenTryAgain",
       ),
-      incorrect_client_credentials: t(
+      incorrect_client_credentials: errorText(
         "main.providers.githubAuth.edaSGitHubAppClientIdIsInvalidCheckTheAppRegistrationAndRebuild",
       ),
     };
     return fail(
-      messages[String(code)] ?? t("main.providers.githubAuth.gitHubCouldNotCompleteSignInStart"),
+      messages[String(code)] ??
+        errorText("main.providers.githubAuth.gitHubCouldNotCompleteSignInStart"),
     );
   }
 
@@ -646,8 +672,8 @@ export class GitHubAuth {
         await response.body?.cancel();
         throw fail(
           response.status === 401
-            ? t("main.providers.githubAuth.gitHubRejectedThisLoginSignInAgain")
-            : t("main.providers.githubAuth.gitHubCouldNotCompleteTheRequestCheck"),
+            ? errorText("main.providers.githubAuth.gitHubRejectedThisLoginSignInAgain")
+            : errorText("main.providers.githubAuth.gitHubCouldNotCompleteTheRequestCheck"),
           response.status === 401 ? "github-auth-required" : "network-failed",
         );
       }
@@ -660,7 +686,9 @@ export class GitHubAuth {
           if (done) break;
           length += value.byteLength;
           if (length > 64 * 1024)
-            throw fail(t("main.providers.githubAuth.gitHubSResponseExceededTheSupportedSize"));
+            throw fail(
+              errorText("main.providers.githubAuth.gitHubSResponseExceededTheSupportedSize"),
+            );
           chunks.push(value);
         }
       } finally {
@@ -668,12 +696,14 @@ export class GitHubAuth {
       }
       const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (!value || typeof value !== "object" || Array.isArray(value))
-        throw fail(t("main.providers.githubAuth.gitHubReturnedAnInvalidResponse"));
+        throw fail(errorText("main.providers.githubAuth.gitHubReturnedAnInvalidResponse"));
       return value as Record<string, unknown>;
     } catch (error) {
       if (error instanceof GitError) throw error;
       throw fail(
-        t("main.providers.githubAuth.couldNotReachGitHubCheckYourConnectionAndTrySigningInAgain"),
+        errorText(
+          "main.providers.githubAuth.couldNotReachGitHubCheckYourConnectionAndTrySigningInAgain",
+        ),
         "network-failed",
       );
     }

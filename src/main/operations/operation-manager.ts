@@ -1,9 +1,10 @@
+import { redactDiagnostic } from "@shared/diagnostics";
+import { errorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
+import type { OperationRecord } from "@shared/operations";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
-import { GitError } from "@shared/errors";
-import { redactDiagnostic } from "@shared/diagnostics";
-import type { OperationRecord } from "@shared/operations";
 import type { OperationRepository } from "../persistence/operation-repository";
 
 interface RunningOperation {
@@ -32,7 +33,9 @@ export class OperationManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.resetAppData"),
-        message: t("main.operations.operationManager.finishRunningGitOperationsBeforeResettingEda"),
+        message: errorText(
+          "main.operations.operationManager.finishRunningGitOperationsBeforeResettingEda",
+        ),
       });
     this.retries.clear();
   }
@@ -92,7 +95,9 @@ export class OperationManager {
       throw new GitError({
         kind: "cancelled",
         operation: context.record.kind,
-        message: t("main.operations.operationManager.operationCancelledBeforeTheNextGitCommand"),
+        message: errorText(
+          "main.operations.operationManager.operationCancelledBeforeTheNextGitCommand",
+        ),
       });
 
     context.record.state = "running";
@@ -136,10 +141,10 @@ export class OperationManager {
       return result;
     } catch (error) {
       record.state = context.controller.signal.aborted ? "interrupted" : "failed";
-      record.message =
-        error instanceof GitError
-          ? error.message
-          : t("main.operations.operationManager.theOperationFailedUnexpectedly");
+      record.message = errorMessage(
+        error,
+        errorText("main.operations.operationManager.theOperationFailedUnexpectedly"),
+      );
       record.recovery =
         record.state === "interrupted"
           ? t(
@@ -181,7 +186,9 @@ export class OperationManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.cancelOperation"),
-        message: t("main.operations.operationManager.thatOperationIsNoLongerRunningInThisProfile"),
+        message: errorText(
+          "main.operations.operationManager.thatOperationIsNoLongerRunningInThisProfile",
+        ),
       });
 
     context.controller.abort();
@@ -197,7 +204,9 @@ export class OperationManager {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.retryOperation"),
-        message: t("main.operations.operationManager.reopenTheRepositoryAndRepeatTheActionAfter"),
+        message: errorText(
+          "main.operations.operationManager.reopenTheRepositoryAndRepeatTheActionAfter",
+        ),
       });
 
     this.retries.delete(id);

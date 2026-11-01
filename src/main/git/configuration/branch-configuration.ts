@@ -1,5 +1,6 @@
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
+import { t } from "@shared/i18n";
 import type { GitService } from "../git-service";
 import { withLocalConfiguration } from "./local-configuration";
 
@@ -68,7 +69,7 @@ export async function withBranchConfigurations<T>(
           throw new GitError({
             kind: "invalid-input",
             operation: t("operations.restoreBranchConfiguration"),
-            message: t(
+            message: errorText(
               "main.git.branchConfiguration.branchConfigurationChangedSinceThisActionReviewThe",
             ),
           });

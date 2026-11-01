@@ -1,3 +1,4 @@
+import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CopyButton } from "@renderer/components/ui/actions/CopyButton";
@@ -59,7 +60,7 @@ it("briefly confirms an automatic copy without keeping the check permanently", a
 
 it("shows an X on clipboard failure, then resets and permits retry", async () => {
   writeText.mockResolvedValueOnce(
-    err({ kind: "unknown", operation: "copy", message: "Clipboard unavailable" }),
+    err(errorFixture({ kind: "unknown", operation: "copy", message: "Clipboard unavailable" })),
   );
   await act(async () => root.render(<CopyButton value="code" />));
   await copy();

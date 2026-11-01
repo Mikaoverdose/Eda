@@ -1,10 +1,11 @@
-import { t, getLocale } from "@shared/i18n";
-import { useEffect, useState } from "react";
-import type { FileDiff, UnifiedDiff } from "@shared/repository/repository-read";
+import { errorMessage } from "@shared/errors";
+import { getLocale, t } from "@shared/i18n";
 import type { ImagePreview, ImagePreviewVersion } from "@shared/repository/image-preview";
-import { useRepositoryStore } from "../../stores/repository-store";
-import { ErrorDialog, SegmentedControl, StateMessage, TextButton } from "../../components/ui/index";
+import type { FileDiff, UnifiedDiff } from "@shared/repository/repository-read";
+import { useEffect, useState } from "react";
 import { LoadingContent } from "../../components/ui/feedback/Skeleton";
+import { ErrorDialog, SegmentedControl, StateMessage, TextButton } from "../../components/ui/index";
+import { useRepositoryStore } from "../../stores/repository-store";
 
 export function ImageDiff({ file, revision }: { file: FileDiff; revision: UnifiedDiff }) {
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
@@ -44,7 +45,7 @@ export function ImageDiff({ file, revision }: { file: FileDiff; revision: Unifie
       .then((result) => {
         if (!alive) return;
         setResult(
-          result.ok ? { owner, value: result.value } : { owner, error: result.error.message },
+          result.ok ? { owner, value: result.value } : { owner, error: errorMessage(result.error) },
         );
       });
 

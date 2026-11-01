@@ -1,13 +1,20 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ErrorDialog } from "../../components/ui/index";
+import { useEffect, useRef, useState } from "react";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
   repositoryCommandReason,
 } from "../../commands/repository-commands";
-import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Checkbox,
+  CheckboxControl,
+  Dialog,
+  ErrorDialog,
+  Input,
+} from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Button, Dialog, Input, Checkbox, CheckboxControl } from "../../components/ui/index";
 
 type Item = { name: string; kind: "branch" | "tag"; unavailable?: string };
 
@@ -102,7 +109,9 @@ export function ManageReferencesDialog({
           ...rows,
           {
             key: `${item.kind}:${item.name}`,
-            message: result.ok ? t("manageReferencesDialog.deletedLocally") : result.error.message,
+            message: result.ok
+              ? t("manageReferencesDialog.deletedLocally")
+              : errorMessage(result.error),
           },
         ]);
 

@@ -1,9 +1,9 @@
+import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
-import { KeyRound } from "lucide-react";
 import type { Identity } from "@shared/identity/identity";
 import type { SshKey } from "@shared/identity/ssh";
-import { useAppStore } from "../../stores/app-store";
+import { KeyRound } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   ActionIndicator,
   Button,
@@ -12,6 +12,7 @@ import {
   NoticeBanner,
   Select,
 } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
 import { ConnectionCard } from "../connections/ConnectionCard";
 
 export function SshSetupCard({ identity }: { identity: Identity }) {
@@ -28,7 +29,7 @@ export function SshSetupCard({ identity }: { identity: Identity }) {
       .then((result) => {
         if (!active) return;
         if (result.ok) setKeys(result.value);
-        else setError(result.error.message);
+        else setError(errorMessage(result.error));
       })
       .catch(() => {
         if (active) setError(t("onboarding.sshSetupCard.couldNotLoadSshKeysTryAgain"));
@@ -43,7 +44,7 @@ export function SshSetupCard({ identity }: { identity: Identity }) {
 
   const assign = async (path: string | null) => {
     const result = await window.eda.identity.assignSshKey(path, identity.id);
-    if (!result.ok) throw new Error(result.error.message);
+    if (!result.ok) throw new GitError(result.error);
     await refreshIdentities();
   };
 
@@ -55,7 +56,7 @@ export function SshSetupCard({ identity }: { identity: Identity }) {
     } catch (error) {
       setError(
         error instanceof Error
-          ? error.message
+          ? errorMessage(error)
           : t("onboarding.sshSetupCard.couldNotSetUpTheSshKeyTryAgain"),
       );
     } finally {
@@ -68,7 +69,7 @@ export function SshSetupCard({ identity }: { identity: Identity }) {
       const chosen = await (generate
         ? window.eda.ssh.chooseKeyDestination()
         : window.eda.ssh.choosePrivateKey());
-      if (!chosen.ok) throw new Error(chosen.error.message);
+      if (!chosen.ok) throw new GitError(chosen.error);
       if (!chosen.value) return;
       const result = await (generate
         ? window.eda.ssh.generateKey({
@@ -77,7 +78,7 @@ export function SshSetupCard({ identity }: { identity: Identity }) {
             comment: identity.gitEmail,
           })
         : window.eda.ssh.importKey(chosen.value));
-      if (!result.ok) throw new Error(result.error.message);
+      if (!result.ok) throw new GitError(result.error);
       const key = result.value;
       setKeys((current) => [...current.filter((item) => item.path !== key.path), key]);
       await assign(key.path);

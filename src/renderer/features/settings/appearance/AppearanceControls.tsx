@@ -1,12 +1,14 @@
-import { UI_ZOOM_PRESETS, type SettingScope } from "@shared/preferences/settings";
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { UI_ZOOM_PRESETS, type SettingScope } from "@shared/preferences/settings";
+import { useEffect, useId, useState } from "react";
 import { afterViewTransition } from "../../../components/layout/hooks/useViewTransition";
 import { BackgroundSettings } from "./BackgroundSettings";
-import { useEffect, useId, useState } from "react";
 
+import { Checkbox, Select } from "../../../components/ui/index";
 import { useAppStore } from "../../../stores/app-store";
 import { previewMotion, usePreferencesStore } from "../../../stores/preferences-store";
-import { Checkbox, Select } from "../../../components/ui/index";
 
 export function AppearanceControls({
   owner = "application",
@@ -63,11 +65,11 @@ export function AppearanceControls({
         })
         .catch(() => {
           usePreferencesStore.setState({
-            error: {
+            error: new GitError({
               kind: "unknown",
               operation: t("operations.previewAppearance"),
-              message: t("settings.appearanceControls.appearancePreviewCouldNotBeUpdated"),
-            },
+              message: errorText("settings.appearanceControls.appearancePreviewCouldNotBeUpdated"),
+            }).toData(),
           });
         });
     };

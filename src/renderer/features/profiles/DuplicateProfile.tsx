@@ -1,9 +1,10 @@
+import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useState } from "react";
 import type { Identity } from "@shared/identity/identity";
+import { useState } from "react";
+import { Button, Checkbox, Dialog, ErrorDialog, Field, Input } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionStore } from "../../stores/session-store";
-import { Button, Dialog, Field, Input, Checkbox, ErrorDialog } from "../../components/ui/index";
 
 export function DuplicateProfile({ profile, onClose }: { profile: Identity; onClose: () => void }) {
   const [name, setName] = useState(t("profiles.duplicateProfile.copy", { name: profile.name }));
@@ -26,14 +27,14 @@ export function DuplicateProfile({ profile, onClose }: { profile: Identity; onCl
       });
 
       if (!result.ok) {
-        setError(result.error.message);
+        setError(errorMessage(result.error));
         return;
       }
 
       await useAppStore.getState().refreshIdentities();
       onClose();
     } catch (error) {
-      setError(String(error));
+      setError(errorMessage(error));
     } finally {
       setBusy(false);
     }

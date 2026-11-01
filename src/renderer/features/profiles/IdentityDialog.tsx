@@ -1,11 +1,12 @@
+import { errorText } from "@shared/error-codes";
+import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ErrorDialog } from "../../components/ui/index";
-import { ButtonBase } from "../../components/ui/actions/ButtonBase";
-import { useState } from "react";
-import { useAppStore } from "../../stores/app-store";
-import { Button, Dialog, Field, Input, Textarea } from "../../components/ui/index";
-import { builtInSetting } from "@shared/preferences/settings";
 import type { Identity } from "@shared/identity/identity";
+import { builtInSetting } from "@shared/preferences/settings";
+import { useState } from "react";
+import { ButtonBase } from "../../components/ui/actions/ButtonBase";
+import { Button, Dialog, ErrorDialog, Field, Input, Textarea } from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
 
 export function IdentityDialog({
   onClose,
@@ -52,9 +53,13 @@ export function IdentityDialog({
           });
 
       if (saved) onClose();
-    } catch (error) {
+    } catch {
       useAppStore.setState({
-        error: { kind: "unknown", operation: t("operations.saveProfile"), message: String(error) },
+        error: new GitError({
+          kind: "unknown",
+          operation: t("operations.saveProfile"),
+          message: errorText("errors.unexpected"),
+        }).toData(),
       });
     } finally {
       setSaving(false);
@@ -156,7 +161,7 @@ export function IdentityDialog({
           )}
         </Field>
 
-        {error && <ErrorDialog>{error.message}</ErrorDialog>}
+        {error && <ErrorDialog>{errorMessage(error)}</ErrorDialog>}
 
         <ButtonBase type="submit" hidden aria-hidden="true" tabIndex={-1} />
       </form>

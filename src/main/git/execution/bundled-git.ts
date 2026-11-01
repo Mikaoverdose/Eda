@@ -1,4 +1,5 @@
-import { t } from "@shared/i18n";
+import { ERROR_CODE, ERROR_MESSAGE_KEYS, errorText } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
 import { join } from "node:path";
 
 export function bundledGitLocation(
@@ -12,8 +13,11 @@ export function bundledGitLocation(
     platform as "win32" | "darwin" | "linux"
   ];
   if (!os || !["x64", "arm64"].includes(arch))
-    throw new Error(
-      t("main.git.bundledGit.unsupportedGitBundle", { platform: platform, arch: arch }),
+    throw new AppError(
+      errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.UNSUPPORTED_GIT_BUNDLE], {
+        platform: platform,
+        arch: arch,
+      }),
     );
   return packaged ? join(resourcesPath, "git") : join(appPath, "vendor", "git", `${os}-${arch}`);
 }

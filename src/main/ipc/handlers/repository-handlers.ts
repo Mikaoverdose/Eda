@@ -1,21 +1,22 @@
-import { MAX_HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
-import { t } from "@shared/i18n";
+import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
-import { referenceLink } from "@shared/repository/reference-link";
-import { shell, dialog, BrowserWindow } from "electron";
-import { basename, resolve, isAbsolute, join } from "node:path";
-import { homedir } from "node:os";
-import { writeFile, readFile, stat } from "node:fs/promises";
-import type { InitRepositoryOptions } from "@shared/repository/repository";
-import type { PartialStageRequest } from "@shared/repository/partial-stage";
+import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
-import type { Services } from "../../services";
-import { broadcast, handle } from "../transport";
-import { RepositoryWatcher } from "../../repo/lifecycle/repository-watcher";
+import type { PartialStageRequest } from "@shared/repository/partial-stage";
+import { referenceLink } from "@shared/repository/reference-link";
+import type { InitRepositoryOptions } from "@shared/repository/repository";
+import { MAX_HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
+import { BrowserWindow, dialog, shell } from "electron";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { repositoryCapabilities } from "../../repo/lifecycle/repository-capabilities";
+import { RepositoryWatcher } from "../../repo/lifecycle/repository-watcher";
 import { readImagePreview } from "../../repo/working-tree/image-preview";
+import type { Services } from "../../services";
 import { showOpenDialog } from "../dialogs";
 import { invalidRequest } from "../request-errors";
+import { broadcast, handle } from "../transport";
 import {
   optionalInteger,
   requireAbsolutePath,
@@ -32,7 +33,7 @@ export function registerRepositoryHandlers(services: Services): void {
     const repository = repositories.resolveActiveRepository(requireId(rawId));
 
     if (kind !== "commit" && kind !== "branch" && kind !== "remote-branch" && kind !== "tag")
-      throw invalidRequest(t("main.repositoryHandlers.chooseAReferenceKind"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseAReferenceKind"));
 
     let name = requireString(rawName, t("fields.referenceName"), 255);
     const result = await git.exec(["remote"], {
@@ -94,17 +95,19 @@ export function registerRepositoryHandlers(services: Services): void {
     const info = await stat(path);
 
     if (!info.isFile() || info.size > 100_000)
-      throw invalidRequest(t("main.repositoryHandlers.theCommitTemplateMustBeATextFileUnder100Kb"));
+      throw invalidRequest(
+        errorText("main.repositoryHandlers.theCommitTemplateMustBeATextFileUnder100Kb"),
+      );
 
     const bytes = await readFile(path);
 
     if (bytes.length > 100_000)
-      throw invalidRequest(t("main.repositoryHandlers.theCommitTemplateExceeds100Kb"));
+      throw invalidRequest(errorText("main.repositoryHandlers.theCommitTemplateExceeds100Kb"));
 
     try {
       return ok(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
-      throw invalidRequest(t("main.repositoryHandlers.theCommitTemplateMustUseUtf8Text"));
+      throw invalidRequest(errorText("main.repositoryHandlers.theCommitTemplateMustUseUtf8Text"));
     }
   });
 
@@ -114,7 +117,7 @@ export function registerRepositoryHandlers(services: Services): void {
       const path = requireString(rawPath, t("fields.savedFile"));
 
       if (stage !== undefined && (typeof stage !== "number" || ![0, 1, 2, 3].includes(stage)))
-        throw invalidRequest(t("main.repositoryHandlers.chooseASavedIndexStage"));
+        throw invalidRequest(errorText("main.repositoryHandlers.chooseASavedIndexStage"));
 
       const bytes = services.writer.savedRecoveryFile(
         requireId(rawId),
@@ -169,7 +172,7 @@ export function registerRepositoryHandlers(services: Services): void {
 
   const ignoreKind = (kind: unknown) => {
     if (kind !== "path" && kind !== "extension" && kind !== "directory")
-      throw invalidRequest(t("main.repositoryHandlers.chooseAnIgnoreRuleType"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseAnIgnoreRuleType"));
     return kind;
   };
 
@@ -207,7 +210,7 @@ export function registerRepositoryHandlers(services: Services): void {
     const metadata = requireRecord(rawMetadata, t("main.repositoryHandlers.repositoryMetadata"));
 
     if (typeof metadata["favourite"] !== "boolean")
-      throw invalidRequest(t("main.repositoryHandlers.chooseAFavouriteState"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseAFavouriteState"));
 
     repositories.updateMetadata(
       requireId(rawId),
@@ -225,7 +228,9 @@ export function registerRepositoryHandlers(services: Services): void {
 
     if (error)
       throw invalidRequest(
-        t("main.repositoryHandlers.theRepositoryFolderCouldNotBeOpenedCheckThatItStillExists"),
+        errorText(
+          "main.repositoryHandlers.theRepositoryFolderCouldNotBeOpenedCheckThatItStillExists",
+        ),
       );
 
     return ok(undefined);
@@ -257,7 +262,7 @@ export function registerRepositoryHandlers(services: Services): void {
   handle(IPC_CHANNELS.repositoryClearLocalCommitConfig, async (_event, rawId, group) => {
     if (group !== "author" && group !== "signing" && group !== "all")
       throw invalidRequest(
-        t("main.repositoryHandlers.chooseAuthorSigningOrBothLocalCommitSettings"),
+        errorText("main.repositoryHandlers.chooseAuthorSigningOrBothLocalCommitSettings"),
       );
     const id = requireId(rawId);
     await services.writer.clearLocalCommitConfig(id, group);
@@ -271,7 +276,9 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryAssignProfile, async (_event, rawId, rawTarget, rawMove) => {
     if (typeof rawMove !== "boolean")
-      throw invalidRequest(t("main.repositoryHandlers.chooseWhetherToKeepTheSourceMembership"));
+      throw invalidRequest(
+        errorText("main.repositoryHandlers.chooseWhetherToKeepTheSourceMembership"),
+      );
 
     const id = await services.profiles.assignRepository(
       requireId(rawId),
@@ -314,7 +321,7 @@ export function registerRepositoryHandlers(services: Services): void {
         (ignore !== "none" && ignore !== "node" && ignore !== "python") ||
         (license !== "none" && license !== "MIT")
       )
-        throw invalidRequest(t("main.repositoryHandlers.chooseSupportedInitialFiles"));
+        throw invalidRequest(errorText("main.repositoryHandlers.chooseSupportedInitialFiles"));
 
       options = {
         branch: requireString(input["branch"], t("fields.initialBranch")),
@@ -364,7 +371,7 @@ export function registerRepositoryHandlers(services: Services): void {
     );
 
     if (input["showStashes"] !== undefined && typeof input["showStashes"] !== "boolean")
-      throw invalidRequest(t("main.repositoryHandlers.chooseWhetherToShowStashes"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseWhetherToShowStashes"));
 
     return ok(
       await git.history(repository.path, {
@@ -396,7 +403,7 @@ export function registerRepositoryHandlers(services: Services): void {
     const area = input["area"];
 
     if (area !== "staged" && area !== "unstaged")
-      throw invalidRequest(t("main.repositoryHandlers.chooseAValidDiffArea"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseAValidDiffArea"));
 
     return ok(
       await git.workingDiff(repository.path, {
@@ -433,7 +440,7 @@ export function registerRepositoryHandlers(services: Services): void {
     const kind = input["kind"];
 
     if (kind !== "working" && kind !== "staged" && kind !== "commit")
-      throw invalidRequest(t("main.repositoryHandlers.chooseAValidImageSource"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseAValidImageSource"));
 
     const request = {
       repositoryId: repository.id,
@@ -468,18 +475,18 @@ export function registerRepositoryHandlers(services: Services): void {
     const area = input["area"];
 
     if (area !== "staged" && area !== "unstaged")
-      throw invalidRequest(t("main.repositoryHandlers.chooseStagedOrUnstagedChanges"));
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseStagedOrUnstagedChanges"));
 
     const index = (raw: unknown) => {
       const value = optionalInteger(raw, t("fields.selectionIndex"), 0, 100_000);
       if (value === undefined)
-        throw invalidRequest(t("main.repositoryHandlers.missingSelectionIndex"));
+        throw invalidRequest(errorText("main.repositoryHandlers.missingSelectionIndex"));
       return value;
     };
     const array = (raw: unknown): unknown[] => {
       if (raw === undefined) return [];
       if (!Array.isArray(raw) || raw.length > 12_000)
-        throw invalidRequest(t("main.repositoryHandlers.tooManySelectedLines"));
+        throw invalidRequest(errorText("main.repositoryHandlers.tooManySelectedLines"));
       return raw;
     };
 
