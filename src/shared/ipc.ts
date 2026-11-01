@@ -642,3 +642,21 @@ export const IPC_EVENTS = {
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
+
+type EventSubscriptions = {
+  [IPC_EVENTS.updateChanged]: EdaApi["events"]["onUpdateChanged"];
+  [IPC_EVENTS.githubInstallationChanged]: EdaApi["events"]["onGitHubInstallationChanged"];
+  [IPC_EVENTS.sshHostTrustChanged]: EdaApi["events"]["onSshHostTrustChanged"];
+  [IPC_EVENTS.navigation]: EdaApi["events"]["onNavigation"];
+  [IPC_EVENTS.operationsChanged]: EdaApi["events"]["onOperationsChanged"];
+  [IPC_EVENTS.identityChanged]: EdaApi["events"]["onIdentityChanged"];
+  [IPC_EVENTS.repositoriesChanged]: EdaApi["events"]["onRepositoriesChanged"];
+  [IPC_EVENTS.repositoryChanged]: EdaApi["events"]["onRepositoryChanged"];
+  [IPC_EVENTS.settingChanged]: EdaApi["events"]["onSettingChanged"];
+  [IPC_EVENTS.flushRequested]: EdaApi["events"]["onFlushRequested"];
+};
+
+export type IpcEvent = (typeof IPC_EVENTS)[keyof typeof IPC_EVENTS];
+export type IpcEventArgs = {
+  [K in IpcEvent]: Parameters<Parameters<EventSubscriptions[K]>[0]>;
+};

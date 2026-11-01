@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
-import type { EdaApi } from "@shared/ipc";
+import type { EdaApi, IpcEvent, IpcEventArgs } from "@shared/ipc";
 
 const api: EdaApi = {
   updates: {
@@ -286,11 +286,11 @@ const api: EdaApi = {
   },
 };
 
-function subscribe<T extends unknown[]>(
-  channel: string,
-  handler: (...args: T) => void,
+function subscribe<C extends IpcEvent>(
+  channel: C,
+  handler: (...args: NoInfer<IpcEventArgs[C]>) => void,
 ): () => void {
-  const listener = (_event: unknown, ...args: unknown[]) => handler(...(args as T));
+  const listener = (_event: unknown, ...args: unknown[]) => handler(...(args as IpcEventArgs[C]));
   ipcRenderer.on(channel, listener);
   return () => {
     ipcRenderer.removeListener(channel, listener);

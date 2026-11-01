@@ -634,7 +634,6 @@
   "main.repositoryHandlers.missingSelectionIndex": "Missing selection index.",
   "main.repositoryHandlers.partialStaging": "partial staging",
   "main.repositoryHandlers.repositoryMetadata": "repository metadata",
-  "main.repositoryHandlers.request": "request",
   "main.repositoryHandlers.saveRecoveredFileCopy": "Save recovered file copy",
   "main.repositoryHandlers.stageRequest": "stage request",
   "main.repositoryHandlers.tagRequest": "tag request",

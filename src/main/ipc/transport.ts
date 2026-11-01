@@ -1,7 +1,7 @@
 import { errorText } from "@shared/error-codes";
 import { AppError, GitError, err, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { IPC_CHANNELS, type IPC_EVENTS, type IpcChannel } from "@shared/ipc";
+import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventArgs } from "@shared/ipc";
 import { BrowserWindow, ipcMain } from "electron";
 
 let activeRequests = 0;
@@ -76,10 +76,7 @@ export function handle(channel: IpcChannel, handler: Handler): void {
   });
 }
 
-export function broadcast(
-  channel: (typeof IPC_EVENTS)[keyof typeof IPC_EVENTS],
-  ...args: unknown[]
-): void {
+export function broadcast<C extends IpcEvent>(channel: C, ...args: NoInfer<IpcEventArgs[C]>): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(channel, ...args);
   }

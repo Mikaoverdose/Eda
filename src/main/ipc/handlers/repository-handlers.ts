@@ -517,40 +517,48 @@ export function registerRepositoryHandlers(services: Services): void {
     return ok(undefined);
   });
 
-  const repoId = (raw: unknown) =>
-    requireId(
-      requireRecord(raw, t("main.repositoryHandlers.request"))["repositoryId"],
-      t("fields.repositoryId"),
-    );
+  const repositoryRequest = (raw: unknown, label: string) => {
+    const input = requireRecord(raw, label);
+    return { input, repositoryId: requireId(input["repositoryId"], t("fields.repositoryId")) };
+  };
   const optionalPaths = (raw: unknown) =>
     raw === undefined ? undefined : requireStringArray(raw, t("fields.paths"), 256);
 
   handle(IPC_CHANNELS.repositoryStage, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.stageRequest"));
-    await writer.stage(repoId(raw), optionalPaths(input["paths"]));
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.stageRequest"),
+    );
+    await writer.stage(repositoryId, optionalPaths(input["paths"]));
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryUnstage, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.unstageRequest"));
-    await writer.unstage(repoId(raw), optionalPaths(input["paths"]));
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.unstageRequest"),
+    );
+    await writer.unstage(repositoryId, optionalPaths(input["paths"]));
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryCommit, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.commitRequest"));
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.commitRequest"),
+    );
     const message = requireString(input["message"], t("fields.commitMessage"), 100_000);
     const options = { amend: input["amend"] === true, signOff: input["signOff"] === true };
     const stagePaths = optionalPaths(input["stagePaths"]);
 
     const result =
       stagePaths === undefined
-        ? await writer.commit(repoId(raw), message, options)
-        : await writer.stageAndCommit(repoId(raw), stagePaths, message, options);
+        ? await writer.commit(repositoryId, message, options)
+        : await writer.stageAndCommit(repositoryId, stagePaths, message, options);
 
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(result);
   });
@@ -560,10 +568,13 @@ export function registerRepositoryHandlers(services: Services): void {
   );
 
   handle(IPC_CHANNELS.repositoryCreateBranch, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.branchRequest"));
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.branchRequest"),
+    );
 
     await writer.createBranch(
-      repoId(raw),
+      repositoryId,
       requireString(input["name"], t("fields.branchName"), 255),
       {
         checkout: input["checkout"] === true,
@@ -572,51 +583,63 @@ export function registerRepositoryHandlers(services: Services): void {
         }),
       },
     );
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryCheckoutBranch, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.branchRequest"));
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.branchRequest"),
+    );
     await writer.checkoutBranch(
-      repoId(raw),
+      repositoryId,
       requireString(input["name"], t("fields.branchName"), 255),
     );
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryDeleteBranch, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.branchRequest"));
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.branchRequest"),
+    );
     await writer.deleteBranch(
-      repoId(raw),
+      repositoryId,
       requireString(input["name"], t("fields.branchName"), 255),
       {
         force: input["force"] === true,
       },
     );
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryRenameBranch, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.branchRequest"));
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.branchRequest"),
+    );
 
     await writer.renameBranch(
-      repoId(raw),
+      repositoryId,
       requireString(input["from"], t("fields.branchName"), 255),
       requireString(input["to"], t("fields.branchName"), 255),
     );
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryVerifyTag, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.tagVerification"));
+    const { input, repositoryId } = repositoryRequest(
+      raw,
+      t("main.repositoryHandlers.tagVerification"),
+    );
     return ok(
-      await writer.verifyTag(repoId(raw), requireString(input["name"], t("fields.tagName"), 255)),
+      await writer.verifyTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255)),
     );
   });
 
@@ -625,9 +648,9 @@ export function registerRepositoryHandlers(services: Services): void {
   );
 
   handle(IPC_CHANNELS.repositoryCreateTag, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.tagRequest"));
+    const { input, repositoryId } = repositoryRequest(raw, t("main.repositoryHandlers.tagRequest"));
 
-    await writer.createTag(repoId(raw), requireString(input["name"], t("fields.tagName"), 255), {
+    await writer.createTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255), {
       sign: input["sign"] === true,
       ...(input["message"] !== undefined && {
         message: requireString(input["message"], t("fields.tagMessage"), 100_000),
@@ -636,22 +659,22 @@ export function registerRepositoryHandlers(services: Services): void {
         target: requireString(input["target"], t("fields.target"), 64),
       }),
     });
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryDeleteTag, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.tagRequest"));
-    await writer.deleteTag(repoId(raw), requireString(input["name"], t("fields.tagName"), 255));
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    const { input, repositoryId } = repositoryRequest(raw, t("main.repositoryHandlers.tagRequest"));
+    await writer.deleteTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255));
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryCheckoutTag, async (_e, raw) => {
-    const input = requireRecord(raw, t("main.repositoryHandlers.tagRequest"));
-    await writer.checkoutTag(repoId(raw), requireString(input["name"], t("fields.tagName"), 255));
-    broadcast(IPC_EVENTS.repositoryChanged, input["repositoryId"]);
+    const { input, repositoryId } = repositoryRequest(raw, t("main.repositoryHandlers.tagRequest"));
+    await writer.checkoutTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255));
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 }
