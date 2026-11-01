@@ -1,31 +1,46 @@
-import { t } from "@shared/i18n";
+import { english, t } from "@shared/i18n";
+import { isOneOf, isRecord } from "@shared/validation";
 import { desc, eq, inArray } from "drizzle-orm";
 import type { OperationRecord } from "@shared/operations";
 import type { Database } from "./types";
 import { identities, operations } from "./schema";
 
+function isOperationRecord(value: unknown): value is OperationRecord {
+  return (
+    isRecord(value) &&
+    [
+      "id",
+      "profileId",
+      "repositoryId",
+      "repositoryName",
+      "kind",
+      "startedAt",
+      "updatedAt",
+      "output",
+      "message",
+    ].every((key) => typeof value[key] === "string") &&
+    isOneOf(value["state"], ["queued", "running", "succeeded", "failed", "interrupted"]) &&
+    typeof value["durationMs"] === "number" &&
+    Number.isFinite(value["durationMs"]) &&
+    value["durationMs"] >= 0 &&
+    typeof value["cancellable"] === "boolean" &&
+    typeof value["retryable"] === "boolean" &&
+    (value["recovery"] === undefined || typeof value["recovery"] === "string") &&
+    (value["exitCode"] === undefined ||
+      (typeof value["exitCode"] === "number" && Number.isSafeInteger(value["exitCode"]))) &&
+    (value["kindKey"] === undefined ||
+      (typeof value["kindKey"] === "string" && Object.hasOwn(english, value["kindKey"])))
+  );
+}
+
 function decode(row: typeof operations.$inferSelect): OperationRecord {
   try {
-    const value = JSON.parse(row.record) as OperationRecord;
-
+    const value: unknown = JSON.parse(row.record);
     if (
       row.version === 1 &&
-      value &&
+      isOperationRecord(value) &&
       value.id === row.id &&
-      value.profileId === row.profileId &&
-      ["queued", "running", "succeeded", "failed", "interrupted"].includes(value.state) &&
-      [
-        "repositoryId",
-        "repositoryName",
-        "kind",
-        "startedAt",
-        "updatedAt",
-        "output",
-        "message",
-      ].every((key) => typeof (value as unknown as Record<string, unknown>)[key] === "string") &&
-      typeof value.durationMs === "number" &&
-      typeof value.cancellable === "boolean" &&
-      typeof value.retryable === "boolean"
+      value.profileId === row.profileId
     )
       return value;
   } catch {}

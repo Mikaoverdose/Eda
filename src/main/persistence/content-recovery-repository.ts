@@ -1,5 +1,11 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import type { RecoverySummary } from "@shared/workflows/recovery";
+import {
+  RECOVERY_SOURCES,
+  RECOVERY_STATES,
+  type RecoverySummary,
+} from "@shared/workflows/recovery";
+import { isOneOf, isRecord } from "@shared/validation";
+import { createHash } from "node:crypto";
 import type { Database } from "./types";
 import { contentRecovery } from "./schema";
 
@@ -18,6 +24,107 @@ export interface ContentRecoveryRecord extends RecoverySummary {
   root: string;
   files: SavedFile[];
   after?: Record<string, string>;
+}
+
+export function recoveryFileHash(data: Buffer, mode: number): string {
+  return createHash("sha256")
+    .update(data)
+    .update(String(mode & 0o777))
+    .digest("hex");
+}
+
+function isIndexVersion(
+  value: unknown,
+): value is NonNullable<RecoverySummary["indexVersions"]>[number] {
+  return (
+    isRecord(value) &&
+    typeof value["path"] === "string" &&
+    typeof value["stage"] === "number" &&
+    Number.isInteger(value["stage"]) &&
+    value["stage"] >= 0 &&
+    value["stage"] <= 3 &&
+    typeof value["mode"] === "string" &&
+    /^[0-7]{6}$/.test(value["mode"])
+  );
+}
+
+function isRecoverySummary(value: unknown): value is RecoverySummary {
+  return (
+    isRecord(value) &&
+    typeof value["id"] === "string" &&
+    typeof value["createdAt"] === "string" &&
+    Array.isArray(value["paths"]) &&
+    value["paths"].every((path: unknown) => typeof path === "string") &&
+    isOneOf(value["state"], RECOVERY_STATES) &&
+    typeof value["bytes"] === "number" &&
+    Number.isSafeInteger(value["bytes"]) &&
+    value["bytes"] >= 0 &&
+    (value["source"] === undefined || isOneOf(value["source"], RECOVERY_SOURCES)) &&
+    (value["indexOnly"] === undefined || typeof value["indexOnly"] === "boolean") &&
+    (value["indexVersions"] === undefined ||
+      (Array.isArray(value["indexVersions"]) && value["indexVersions"].every(isIndexVersion)))
+  );
+}
+
+function isBase64(value: unknown): value is string {
+  return typeof value === "string" && Buffer.from(value, "base64").toString("base64") === value;
+}
+
+function isSavedFile(value: unknown): value is SavedFile {
+  if (
+    !isRecord(value) ||
+    typeof value["path"] !== "string" ||
+    typeof value["tracked"] !== "boolean" ||
+    typeof value["mode"] !== "number" ||
+    !Number.isInteger(value["mode"]) ||
+    value["mode"] < 0 ||
+    value["mode"] > 0o777
+  )
+    return false;
+  if (value["content"] === null) return value["hash"] === "missing" && value["mode"] === 0;
+  return (
+    isBase64(value["content"]) &&
+    recoveryFileHash(Buffer.from(value["content"], "base64"), value["mode"]) === value["hash"]
+  );
+}
+
+function isRecoveryRecord(value: unknown): value is ContentRecoveryRecord {
+  if (
+    !isRecord(value) ||
+    !isRecoverySummary(value) ||
+    typeof value["profileId"] !== "string" ||
+    typeof value["repositoryId"] !== "string" ||
+    typeof value["root"] !== "string" ||
+    !Array.isArray(value["files"]) ||
+    !value["files"].every(isSavedFile)
+  )
+    return false;
+  const paths = new Set(value.paths);
+  if (
+    paths.size !== value.paths.length ||
+    value["files"].some((file: SavedFile) => !paths.has(file.path)) ||
+    new Set(value["files"].map((file: SavedFile) => file.path)).size !== value["files"].length
+  )
+    return false;
+  const savedIndex = value["savedIndex"];
+  const after = value["after"];
+  return (
+    (savedIndex === undefined ||
+      (Array.isArray(savedIndex) &&
+        savedIndex.every(
+          (entry: unknown) =>
+            isIndexVersion(entry) &&
+            paths.has(entry.path) &&
+            "content" in entry &&
+            isBase64(entry.content),
+        ))) &&
+    (after === undefined ||
+      (isRecord(after) &&
+        Object.values(after).every(
+          (hash) => typeof hash === "string" && (hash === "missing" || /^[a-f0-9]{64}$/.test(hash)),
+        ) &&
+        value["files"].every((file: SavedFile) => Object.hasOwn(after, file.path))))
+  );
 }
 
 export class ContentRecoveryRepository {
@@ -68,13 +175,12 @@ export class ContentRecoveryRepository {
 
     if (!row || row.version !== 1) return undefined;
     try {
-      const record = JSON.parse(row.value) as ContentRecoveryRecord;
-      return record &&
+      const record: unknown = JSON.parse(row.value);
+      return isRecoveryRecord(record) &&
+        record.createdAt === row.createdAt &&
         record.id === row.id &&
         record.profileId === row.profileId &&
-        record.repositoryId === row.repositoryId &&
-        typeof record.root === "string" &&
-        Array.isArray(record.files)
+        record.repositoryId === row.repositoryId
         ? record
         : undefined;
     } catch {
@@ -101,14 +207,10 @@ export class ContentRecoveryRepository {
       .all()
       .flatMap((row) => {
         try {
-          const record = JSON.parse(row.value) as RecoverySummary;
-          return record &&
+          const record: unknown = JSON.parse(row.value);
+          return isRecoverySummary(record) &&
             record.id === row.id &&
-            record.createdAt === row.createdAt &&
-            Array.isArray(record.paths) &&
-            ["prepared", "completed", "restored"].includes(record.state) &&
-            Number.isFinite(record.bytes) &&
-            record.bytes >= 0
+            record.createdAt === row.createdAt
             ? [record]
             : [];
         } catch {
@@ -130,6 +232,7 @@ export class ContentRecoveryRepository {
             Date.parse(record.createdAt) < Date.now() - 30 * 86400_000)
         );
       })
+      .filter((record) => this.get(profileId, repositoryId, record.id) !== undefined)
       .map((record) => record.id);
 
     if (expired.length)

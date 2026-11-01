@@ -10,19 +10,15 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import type { GitService } from "../../git/git-service";
 import { partialPatch } from "../../git/operations/partial-patch";
 import { assertRepositoryPath } from "../../git/validation";
-import type {
-  ContentRecoveryRecord,
-  ContentRecoveryRepository,
-  SavedFile,
+import {
+  recoveryFileHash,
+  type ContentRecoveryRecord,
+  type ContentRecoveryRepository,
+  type SavedFile,
 } from "../../persistence/content-recovery-repository";
 
 const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.recoverLocalChanges"), message });
-const hash = (data: Buffer, mode: number) =>
-  createHash("sha256")
-    .update(data)
-    .update(String(mode & 0o777))
-    .digest("hex");
 const MAX_BYTES = 32 * 1024 * 1024;
 
 export type OperationSnapshot = Awaited<ReturnType<DiscardService["prepareOperation"]>>;
@@ -181,7 +177,7 @@ export class DiscardService {
           path,
           content: content.stdoutBytes.toString("base64"),
           mode,
-          hash: hash(content.stdoutBytes, mode),
+          hash: recoveryFileHash(content.stdoutBytes, mode),
           tracked: true,
         });
       } else {
@@ -342,7 +338,7 @@ export class DiscardService {
       path,
       content: content.toString("base64"),
       mode: stat.mode & 0o777,
-      hash: hash(content, stat.mode),
+      hash: recoveryFileHash(content, stat.mode),
       tracked,
     };
   }

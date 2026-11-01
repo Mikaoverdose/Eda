@@ -138,3 +138,71 @@ it("ignores inconsistent workflow payload ownership without losing the stored re
   expect(store.latest(profileId, "repo")).toBeUndefined();
   expect(db.select().from(workflowJournal).all()).toHaveLength(1);
 });
+
+it.each([
+  { recovery: { unexpected: "object" } },
+  { exitCode: "failure" },
+  { kindKey: "unknown.translation" },
+  { durationMs: -1 },
+])("uses a safe fallback for malformed operation fields: %j", (invalid) => {
+  const record = JSON.stringify({
+    id: "damaged",
+    profileId,
+    repositoryId: "repo",
+    repositoryName: "repo",
+    kind: "fetch",
+    state: "succeeded",
+    startedAt: "now",
+    updatedAt: "now",
+    durationMs: 0,
+    output: "",
+    message: "done",
+    cancellable: false,
+    retryable: false,
+    ...invalid,
+  });
+  db.insert(operations)
+    .values({ id: "damaged", profileId, version: 1, updatedAt: "now", record })
+    .run();
+  expect(new OperationRepository(db).list(profileId)[0]).toMatchObject({
+    state: "interrupted",
+    output: "",
+  });
+  expect(db.select().from(operations).get()?.record).toBe(record);
+});
+
+it.each([
+  { paths: [42] },
+  { files: [null] },
+  { files: [{ path: "file", content: 42, mode: 420, hash: "hash", tracked: true }] },
+  { savedIndex: [{ path: "file", stage: 4, mode: "100644", content: "" }] },
+  { after: { file: 42 } },
+  { indexVersions: [{ path: "file", stage: "0", mode: "100644" }] },
+])("rejects malformed recovery payloads without deleting their evidence: %j", (invalid) => {
+  const record = {
+    id: "damaged-snapshot",
+    profileId,
+    repositoryId: "repo",
+    root: "/repo",
+    createdAt: "2000-01-01T00:00:00.000Z",
+    state: "completed",
+    bytes: 0,
+    paths: ["file"],
+    files: [],
+    ...invalid,
+  };
+  db.insert(contentRecovery)
+    .values({
+      id: record.id,
+      profileId,
+      repositoryId: "repo",
+      version: 1,
+      createdAt: record.createdAt,
+      value: JSON.stringify(record),
+    })
+    .run();
+  const store = new ContentRecoveryRepository(db);
+  expect(store.get(profileId, "repo", record.id)).toBeUndefined();
+  store.prune(profileId, "repo");
+  expect(db.select().from(contentRecovery).all()).toHaveLength(1);
+});

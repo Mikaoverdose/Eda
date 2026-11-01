@@ -142,3 +142,20 @@ it("discards one hunk with an exact reverse patch and recovers its original work
   await service.restore(repo.path, profileId, "r", service.list(profileId, "r")[0]!.id);
   expect(await readFile(join(repo.path, "file.txt"), "utf8")).toBe(changed);
 });
+
+it("rejects corrupted saved bytes before restoring any file and preserves the snapshot", async () => {
+  const { service, profileId, store } = await setup();
+  for (const path of ["first.txt", "second.txt"]) await repo.writeFile(path, "base");
+  await repo.commit("initial");
+  for (const path of ["first.txt", "second.txt"]) await repo.writeFile(path, "working changes");
+  const preview = await service.preview(repo.path, profileId, "r", ["first.txt", "second.txt"]);
+  await service.apply(repo.path, profileId, "r", preview.token);
+  const id = service.list(profileId, "r")[0]!.id;
+  const record = store.get(profileId, "r", id)!;
+  record.files[1]!.content = Buffer.from("corrupted content").toString("base64");
+  store.save(record);
+  await expect(service.restore(repo.path, profileId, "r", id)).rejects.toThrow();
+  for (const path of ["first.txt", "second.txt"])
+    expect(await readFile(join(repo.path, path), "utf8")).toBe("base");
+  expect(store.list(profileId, "r").map((entry) => entry.id)).toContain(id);
+});
