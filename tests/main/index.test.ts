@@ -1,6 +1,9 @@
 import { errorFixture } from "../helpers/error";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type * as FileSystem from "node:fs";
+import { join } from "node:path";
+
+const appData = "/eda-test-missing-user-data";
 
 const startup = vi.hoisted(() => ({
   createServices: vi.fn(),
@@ -25,7 +28,7 @@ vi.mock("electron", () => ({
   app: {
     isPackaged: false,
     commandLine: { hasSwitch: startup.hasSwitch },
-    getPath: () => "/eda-test-missing-user-data",
+    getPath: () => appData,
     setPath: startup.setPath,
     requestSingleInstanceLock: () => true,
     whenReady: () => Promise.resolve(),
@@ -61,11 +64,12 @@ it.each([
   startup.existsSync.mockImplementation((path?: unknown) =>
     String(path).endsWith(name.toLowerCase()),
   );
-  const userData = `/eda-test-missing-user-data/${name}`;
+  const userData = join(appData, name);
+  const legacyData = join(appData, name.toLowerCase());
 
   await import("@main/index");
 
-  expect(startup.renameSync).toHaveBeenCalledExactlyOnceWith(userData.toLowerCase(), userData);
+  expect(startup.renameSync).toHaveBeenCalledExactlyOnceWith(legacyData, userData);
   expect(startup.setPath).toHaveBeenCalledExactlyOnceWith("userData", userData);
 });
 
@@ -75,7 +79,7 @@ it("keeps an existing capitalized data directory without replacing it", async ()
   await import("@main/index");
 
   expect(startup.renameSync).not.toHaveBeenCalled();
-  expect(startup.setPath).toHaveBeenCalledWith("userData", "/eda-test-missing-user-data/Eda");
+  expect(startup.setPath).toHaveBeenCalledWith("userData", join(appData, "Eda"));
 });
 
 it("preserves an explicit user-data-dir override", async () => {
