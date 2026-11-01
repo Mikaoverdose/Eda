@@ -6,6 +6,8 @@ import { transportOptions } from "@main/git/operations/remotes";
 import { ProcessSpawnError } from "@main/git/execution/process-runner";
 import type { GitEngine } from "@main/git/execution/git-engine";
 import { assertHermetic, createTempRepo, type TempRepo } from "../../helpers/temp-repo";
+import { access } from "node:fs/promises";
+import { join } from "node:path";
 
 const FAKE_ENGINE: GitEngine = {
   source: "system",
@@ -31,6 +33,23 @@ describe("GitService against real Git", () => {
     expect(root.endsWith("repo")).toBe(true);
 
     expect(await repo.git.isRepository(repo.path)).toBe(true);
+  });
+
+  it("does not execute tracked clone hooks selected by global configuration", async () => {
+    repo = await createTempRepo();
+    const marker = join(repo.home, "clone-hook-executed");
+    await repo.writeFile(
+      ".githooks/post-checkout",
+      `#!/bin/sh\nprintf executed > '${marker.replaceAll("\\", "/")}'\n`,
+    );
+    await repo.run(["add", "--chmod=+x", ".githooks/post-checkout"]);
+    await repo.run(["commit", "-m", "tracked hook"]);
+    await repo.run(["config", "--global", "core.hooksPath", ".githooks"]);
+    await repo.git.exec(["clone", "--", repo.path, join(repo.home, "clone")], {
+      operation: "clone",
+      cwd: repo.home,
+    });
+    await expect(access(marker)).rejects.toThrow();
   });
 
   it("never touches the developer's real global config", async () => {

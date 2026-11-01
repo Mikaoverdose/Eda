@@ -165,6 +165,7 @@ export class RemoteService {
         const result = await this.git.exec(
           [
             "fetch",
+            "--upload-pack=git-upload-pack",
             "--progress",
             "--no-recurse-submodules",
             request.prune ? "--prune" : "--no-prune",
@@ -263,11 +264,14 @@ export class RemoteService {
           : null;
 
         const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
-        const result = await this.git.exec(["ls-remote", "--refs", "--", url, destination], {
-          cwd: path,
-          operation: t("operations.inspectRemoteBranch"),
-          ...transportOptions(url, identity, credentials),
-        });
+        const result = await this.git.exec(
+          ["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--", url, destination],
+          {
+            cwd: path,
+            operation: t("operations.inspectRemoteBranch"),
+            ...transportOptions(url, identity, credentials),
+          },
+        );
         const match = result.stdout
           .split("\n")
           .map((line) => line.split("\t"))
@@ -356,6 +360,7 @@ export class RemoteService {
             "-c",
             `remote.${request.remote}.mirror=false`,
             "push",
+            "--receive-pack=git-receive-pack",
             "--porcelain",
             "--progress",
             "--no-follow-tags",
@@ -438,7 +443,15 @@ export class RemoteService {
 
           try {
             await this.git.exec(
-              ["clone", "--progress", "--no-recurse-submodules", "--", request.url, path],
+              [
+                "clone",
+                "--upload-pack=git-upload-pack",
+                "--progress",
+                "--no-recurse-submodules",
+                "--",
+                request.url,
+                path,
+              ],
               {
                 operation: t("operations.cloneRepository"),
                 ...transport,

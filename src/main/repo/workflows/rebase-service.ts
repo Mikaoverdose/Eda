@@ -15,6 +15,7 @@ import {
   writeRebasePlan,
 } from "../../git/operations/rebase-plan";
 import { assertFullObjectId } from "../../git/validation";
+import { assertSafeRebaseState } from "../../git/security/rebase-state";
 import type { IdentityManager } from "../../identity/identity-manager";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
@@ -139,6 +140,8 @@ export class RebaseService {
 
           if (action === "skip" && workflow.rebaseEdit)
             throw invalid(errorText("main.rebaseService.thisCommitHasAlreadyBeenReplayedAmendOr"));
+          if (action === "continue" || action === "skip")
+            await assertSafeRebaseState(this.git, root);
         }
 
         const captured = record?.identity ?? identity;
@@ -313,6 +316,8 @@ export class RebaseService {
         );
 
       if (review.action !== "abort") this.identities.assertOperationIdentity(identity);
+      if (review.action === "continue" || review.action === "skip")
+        await assertSafeRebaseState(this.git, root);
 
       if (pending.snapshot)
         await this.recovery.saveOperation(pending.snapshot.record, pending.snapshot.index);

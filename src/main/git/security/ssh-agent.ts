@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildGitEnvironment } from "../execution/environment";
+import { resolveExecutable } from "../execution/executable";
 
 export class SshAgent {
   readonly environment: Record<string, string>;
@@ -38,10 +39,12 @@ export class SshAgent {
     try {
       this.directory = await mkdtemp(join(tmpdir(), "eda-ssh-agent-"));
       const socket = join(this.directory, "agent").replaceAll("\\", "/");
-      const child = spawn(this.executable, ["-D", "-s", "-a", socket, "-t", "3600"], {
+      const env = buildGitEnvironment({ overrides: { ...this.baseEnv, ...this.environment } });
+      const executable = await resolveExecutable(this.executable, env);
+      const child = spawn(executable, ["-D", "-s", "-a", socket, "-t", "3600"], {
         shell: false,
         windowsHide: true,
-        env: buildGitEnvironment({ overrides: { ...this.baseEnv, ...this.environment } }),
+        env,
         stdio: ["ignore", "pipe", "ignore"],
       });
       this.child = child;

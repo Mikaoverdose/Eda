@@ -1,3 +1,5 @@
+import { absoluteSearchPath } from "./executable";
+
 export interface GitEnvironmentOptions {
   sshKeyPath?: string;
   askpassPath?: string;
@@ -86,6 +88,7 @@ export function buildGitEnvironment(
   }
 
   Object.assign(env, options.overrides ?? {});
+  if (env["PATH"] !== undefined) env["PATH"] = absoluteSearchPath(env["PATH"]);
 
   return env;
 }

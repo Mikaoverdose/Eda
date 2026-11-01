@@ -1,16 +1,19 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
+import { resolveExecutable } from "./executable";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "./process-runner";
 import { ProcessSpawnError } from "./process-runner";
 
 export class NodeProcessRunner implements ProcessRunner {
-  launch(
+  async launch(
     executable: string,
     args: readonly string[],
     cwd: string,
     env: Record<string, string>,
   ): Promise<void> {
+    const resolved = await this.resolve(executable, env);
     return new Promise((resolve, reject) => {
-      const child = spawn(executable, [...args], {
+      const child = spawn(resolved, [...args], {
         cwd,
         env,
         shell: false,
@@ -27,9 +30,10 @@ export class NodeProcessRunner implements ProcessRunner {
     });
   }
 
-  run(request: ProcessRequest): Promise<ProcessResult> {
+  async run(request: ProcessRequest): Promise<ProcessResult> {
+    const executable = await this.resolve(request.executable, request.env);
     return new Promise((resolve, reject) => {
-      const child = spawn(request.executable, [...request.args], {
+      const child = spawn(executable, [...request.args], {
         shell: false,
         cwd: request.cwd,
         env: { ...request.env },
@@ -145,6 +149,17 @@ export class NodeProcessRunner implements ProcessRunner {
       }
     });
   }
+
+  private async resolve(
+    executable: string,
+    env: Readonly<Record<string, string>>,
+  ): Promise<string> {
+    try {
+      return await resolveExecutable(executable, env);
+    } catch (error) {
+      throw new ProcessSpawnError(executable, error as NodeJS.ErrnoException);
+    }
+  }
 }
 
 function killTree(pid: number | undefined): () => void {
@@ -154,10 +169,14 @@ function killTree(pid: number | undefined): () => void {
 
   try {
     if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-        shell: false,
-        windowsHide: true,
-      }).once("error", () => {
+      spawn(
+        join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "taskkill.exe"),
+        ["/pid", String(pid), "/T", "/F"],
+        {
+          shell: false,
+          windowsHide: true,
+        },
+      ).once("error", () => {
         try {
           process.kill(pid);
         } catch {}

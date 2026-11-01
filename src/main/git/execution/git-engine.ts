@@ -19,7 +19,16 @@ export interface ResolveEngineOptions {
   bundledEnvironment?: Readonly<Record<string, string>>;
 }
 
-const MINIMUM_VERSION = { major: 2, minor: 44, patch: 0 };
+const MINIMUM_VERSION = { major: 2, minor: 44, patch: 4 };
+const SECURITY_PATCHES: Readonly<Record<number, number>> = {
+  44: 4,
+  45: 4,
+  46: 4,
+  47: 3,
+  48: 2,
+  49: 1,
+  50: 1,
+};
 
 export async function resolveGitEngine(
   runner: ProcessRunner,
@@ -131,11 +140,12 @@ async function probeVersion(
   };
 
   if (isOlderThanMinimum(versionParts)) {
+    const minimum = minimumFor(versionParts);
     throw new AppError(
       errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.GIT_VERSION_UNSUPPORTED], {
         major: versionParts.major,
         minor: versionParts.minor,
-        minimumVersion: `${MINIMUM_VERSION.major}.${MINIMUM_VERSION.minor}`,
+        minimumVersion: `${minimum.major}.${minimum.minor}.${minimum.patch}`,
       }),
     );
   }
@@ -147,9 +157,15 @@ async function probeVersion(
 }
 
 function isOlderThanMinimum(v: GitEngine["versionParts"]): boolean {
-  if (v.major !== MINIMUM_VERSION.major) return v.major < MINIMUM_VERSION.major;
-  if (v.minor !== MINIMUM_VERSION.minor) return v.minor < MINIMUM_VERSION.minor;
-  return v.patch < MINIMUM_VERSION.patch;
+  const minimum = minimumFor(v);
+  if (v.major !== minimum.major) return v.major < minimum.major;
+  if (v.minor !== minimum.minor) return v.minor < minimum.minor;
+  return v.patch < minimum.patch;
+}
+
+function minimumFor(v: GitEngine["versionParts"]): GitEngine["versionParts"] {
+  const patch = v.major === 2 ? SECURITY_PATCHES[v.minor] : undefined;
+  return patch === undefined ? MINIMUM_VERSION : { major: 2, minor: v.minor, patch };
 }
 
 function describe(error: unknown): string {

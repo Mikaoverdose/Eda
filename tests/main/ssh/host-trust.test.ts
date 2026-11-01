@@ -299,6 +299,7 @@ describe("host trust during real SSH connections", () => {
     const url = `ssh://git@127.0.0.1:${port}/fixture.git`;
     await expect(
       git.exec(["ls-remote", url], {
+        cwd: home,
         operation: "inspect remote",
         ...transportOptions(url, { name: "Fixture", sshKeyPath: key }),
       }),

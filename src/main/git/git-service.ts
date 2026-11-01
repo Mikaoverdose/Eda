@@ -147,7 +147,28 @@ export class GitService {
     try {
       result = await this.runner.run({
         executable: this.engine.path,
-        args: ["--no-pager", ...args],
+        args: [
+          "--no-pager",
+          ...(args[0] === "clone"
+            ? [
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "core.fsmonitor=false",
+                "-c",
+                "init.templateDir=",
+              ]
+            : []),
+          "-c",
+          "submodule.recurse=false",
+          "-c",
+          "status.submoduleSummary=false",
+          "-c",
+          "diff.submodule=short",
+          "-c",
+          "diff.ignoreSubmodules=dirty",
+          ...args,
+        ],
         ...(options.cwd !== undefined && { cwd: options.cwd }),
         env,
         ...(options.stdin !== undefined && { stdin: options.stdin }),
@@ -252,6 +273,7 @@ export class GitService {
       const { stdout } = await this.exec(["rev-parse", "--is-inside-work-tree"], {
         cwd: path,
         operation: t("operations.checkRepository"),
+        signal: AbortSignal.timeout(10_000),
       });
       return stdout.trim() === "true";
     } catch (error) {
@@ -269,6 +291,7 @@ export class GitService {
         "--branch",
         "-z",
         "--untracked-files=all",
+        "--ignore-submodules=dirty",
         "--",
       ],
       {

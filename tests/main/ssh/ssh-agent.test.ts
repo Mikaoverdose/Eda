@@ -42,6 +42,7 @@ it("pins Git and connection tests to the owned agent even with transport overrid
   const runner = new FakeProcessRunner().otherwise({ exitCode: 0 });
   const git = new GitService(runner, engine, { SSH_AUTH_SOCK: "/eda/agent" });
   await git.exec(["fetch"], {
+    cwd: "/fixture",
     operation: "fixture",
     env: {
       overrides: {
@@ -113,7 +114,7 @@ it("unlocks a disposable encrypted key for real Git signing and stops only its o
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_SYSTEM: "/dev/null",
   });
-  await git.exec(["init", home], { operation: "init fixture" });
+  await git.exec(["init", home], { cwd: home, operation: "init fixture" });
   await git.exec(
     [
       "-c",

@@ -32,17 +32,17 @@ describe("resolving the Git engine", () => {
   });
 
   it("treats a missing patch component as zero", async () => {
-    const engine = await resolveGitEngine(version("git version 2.44\n"));
-    expect(engine.versionParts).toEqual({ major: 2, minor: 44, patch: 0 });
-    expect(engine.version).toBe("2.44.0");
+    const engine = await resolveGitEngine(version("git version 2.55\n"));
+    expect(engine.versionParts).toEqual({ major: 2, minor: 55, patch: 0 });
+    expect(engine.version).toBe("2.55.0");
   });
 
   it("parses the platform suffixes Git ships on macOS and Windows", async () => {
     const apple = await resolveGitEngine(version("git version 2.44.5 (Apple Git-154)\n"));
     expect(apple.versionParts).toMatchObject({ major: 2, minor: 44, patch: 5 });
 
-    const windows = await resolveGitEngine(version("git version 2.47.1.windows.1\n"));
-    expect(windows.versionParts).toMatchObject({ major: 2, minor: 47, patch: 1 });
+    const windows = await resolveGitEngine(version("git version 2.47.3.windows.1\n"));
+    expect(windows.versionParts).toMatchObject({ major: 2, minor: 47, patch: 3 });
   });
 
   it("probes with an isolated config so a user gitconfig cannot change the answer", async () => {
@@ -124,6 +124,21 @@ describe("engine preference", () => {
 });
 
 describe("when no engine works", () => {
+  it.each(["2.44.0", "2.44.3", "2.45.3", "2.46.3", "2.47.2", "2.48.1", "2.49.0", "2.50.0"])(
+    "rejects unpatched Git %s",
+    async (release) => {
+      await expect(resolveGitEngine(version(`git version ${release}`))).rejects.toMatchObject({
+        kind: "git-not-found",
+      });
+    },
+  );
+
+  it.each(["2.44.4", "2.45.4", "2.46.4", "2.47.3", "2.48.2", "2.49.1", "2.50.1", "2.56.0"])(
+    "accepts patched Git %s",
+    async (release) => {
+      expect((await resolveGitEngine(version(`git version ${release}`))).version).toBe(release);
+    },
+  );
   it("raises git-not-found rather than a raw spawn error", async () => {
     await expect(resolveGitEngine(missing())).rejects.toMatchObject({
       kind: "git-not-found",
@@ -161,7 +176,7 @@ describe("when no engine works", () => {
 
 describe("the minimum supported version", () => {
   it("accepts the documented minimum and anything newer", async () => {
-    for (const banner of ["git version 2.44.0", "git version 2.45.0", "git version 3.0.0"]) {
+    for (const banner of ["git version 2.44.4", "git version 2.45.4", "git version 3.0.0"]) {
       await expect(resolveGitEngine(version(banner))).resolves.toBeDefined();
     }
   });

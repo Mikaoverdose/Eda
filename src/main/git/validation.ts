@@ -84,7 +84,7 @@ export function assertAllowedRemoteUrl(value: string, operation: string): void {
   if (isAbsolute(value) && !value.includes("://")) return;
   if (/\s/.test(value))
     throw remoteError(errorText("main.git.validation.encodeSpacesInRemoteUrLs"));
-  if (/^[\w.-]+@[\w.-]+:[^:]+$/.test(value)) return;
+  if (/^[A-Za-z0-9_][\w.-]*@[A-Za-z0-9][\w.-]*:[^:]+$/.test(value)) return;
 
   let url: URL;
 
@@ -104,6 +104,24 @@ export function assertAllowedRemoteUrl(value: string, operation: string): void {
     (url.protocol === "https:" && url.username)
   )
     throw remoteError(errorText("main.git.validation.useHttpssshOrFileUrLsWithoutEmbedded"));
+
+  if (url.protocol === "ssh:") {
+    let user: string;
+    try {
+      user = decodeURIComponent(url.username);
+    } catch {
+      throw remoteError(
+        errorText("main.git.validation.enterAnHttpssshOrAbsoluteLocalRepositoryUrl"),
+      );
+    }
+    if (
+      (user && !/^[A-Za-z0-9_][A-Za-z0-9._-]*$/.test(user)) ||
+      !/^(?:[A-Za-z0-9][A-Za-z0-9._-]*|\[[A-Fa-f0-9:]+\])$/.test(url.hostname)
+    )
+      throw remoteError(
+        errorText("main.git.validation.enterAnHttpssshOrAbsoluteLocalRepositoryUrl"),
+      );
+  }
 }
 
 // OpenSSH has no safe end-of-options marker for destinations.
