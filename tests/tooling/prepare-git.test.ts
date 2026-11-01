@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, writeFile, rm, rmdir } from "node:fs/promises";
+import { access, mkdir, mkdtemp, writeFile, rm, rmdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { targetFor, verifyArchive } from "../../scripts/prepare-git.ts";
+import { pruneCredentialManager, targetFor, verifyArchive } from "../../scripts/prepare-git.ts";
 
 test("each supported package target has a pinned upstream checksum", () => {
   for (const platform of ["win32", "darwin", "linux"])
@@ -35,5 +35,65 @@ test("a modified download is rejected before extraction", async () => {
   } finally {
     await rm(join(root, "archive"), { force: true });
     await rmdir(root);
+  }
+});
+
+test("prunes GCM and its manifest-owned runtime without removing Git transports or LFS", async () => {
+  const root = await mkdtemp(join(tmpdir(), "eda-gcm-test-"));
+  const core = join(root, "libexec/git-core");
+  await mkdir(join(core, "fr"), { recursive: true });
+  const removed = [
+    "git-credential-manager",
+    "git-credential-manager.dll",
+    "git-credential-manager.deps.json",
+    "git-credential-manager.runtimeconfig.json",
+    "System.Private.CoreLib.dll",
+    "libcoreclr.dylib",
+    "libSkiaSharp.dylib",
+    "fr/System.CommandLine.resources.dll",
+  ];
+  const retained = ["git", "git-lfs", "git-remote-http", "git-credential-osxkeychain", "NOTICE"];
+  try {
+    for (const file of [...removed, ...retained]) await writeFile(join(core, file), "fixture");
+    await writeFile(
+      join(core, "git-credential-manager.deps.json"),
+      JSON.stringify({
+        targets: {
+          "net/osx-arm64": {
+            runtime: {
+              runtime: { "System.Private.CoreLib.dll": {} },
+              native: { "libcoreclr.dylib": {} },
+              runtimeTargets: { "runtimes/osx/native/libSkiaSharp.dylib": {} },
+              resources: { "fr/System.CommandLine.resources.dll": {} },
+            },
+          },
+        },
+      }),
+    );
+    await pruneCredentialManager(root);
+    for (const file of removed) await assert.rejects(access(join(core, file)), { code: "ENOENT" });
+    for (const file of retained) await access(join(core, file));
+    await pruneCredentialManager(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("prunes the Linux single-file GCM without a .NET manifest", async () => {
+  const root = await mkdtemp(join(tmpdir(), "eda-gcm-linux-test-"));
+  try {
+    for (const file of [
+      "git-credential-manager",
+      "libSkiaSharp.so",
+      "libHarfBuzzSharp.so",
+      "git-lfs",
+    ])
+      await writeFile(join(root, file), "fixture");
+    await pruneCredentialManager(root);
+    await access(join(root, "git-lfs"));
+    for (const file of ["git-credential-manager", "libSkiaSharp.so", "libHarfBuzzSharp.so"])
+      await assert.rejects(access(join(root, file)), { code: "ENOENT" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { pipeline } from "node:stream/promises";
 import { x as extract } from "tar";
 
 const project = fileURLToPath(new URL("..", import.meta.url));
+const bundleLayout = 1;
 
 interface GitArtifact {
   url: string;
@@ -41,6 +42,51 @@ export async function verifyArchive(path: string, expected: string) {
     throw new Error("Bundled Git checksum mismatch. Refusing to extract or run it.");
 }
 
+export async function pruneCredentialManager(root: string): Promise<void> {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  const directories = new Set(
+    entries
+      .filter((entry) => /^git-credential-manager(?:\.exe|\.deps\.json)?$/.test(entry.name))
+      .map((entry) => entry.parentPath),
+  );
+
+  for (const directory of directories) {
+    const files = new Set([
+      "git-credential-manager",
+      "git-credential-manager.exe",
+      "git-credential-manager.dll",
+      "git-credential-manager.deps.json",
+      "git-credential-manager.runtimeconfig.json",
+      "libSkiaSharp.so",
+      "libHarfBuzzSharp.so",
+    ]);
+    let manifest:
+      | {
+          targets: Record<string, Record<string, Record<string, Record<string, unknown>>>>;
+        }
+      | undefined;
+    try {
+      manifest = JSON.parse(
+        await readFile(join(directory, "git-credential-manager.deps.json"), "utf8"),
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    for (const target of Object.values(manifest?.targets ?? {}))
+      for (const dependency of Object.values(target))
+        for (const section of ["runtime", "native", "runtimeTargets", "resources"]) {
+          for (const asset of Object.keys(dependency[section] ?? {})) {
+            // Runtime/native assets are flattened; resources retain locale directories.
+            const file = section === "resources" ? asset : basename(asset);
+            if (file.split(/[\\/]/).some((part) => part === "..") || /^[\\/]/.test(file))
+              throw new Error("Invalid Git Credential Manager asset path.");
+            files.add(file);
+          }
+        }
+    await Promise.all([...files].map((file) => rm(join(directory, file), { force: true })));
+  }
+}
+
 export async function prepareGit(platform: string = process.platform, arch: string = process.arch) {
   const target = targetFor(platform, arch);
   const parent = resolve(project, "vendor/git");
@@ -49,7 +95,8 @@ export async function prepareGit(platform: string = process.platform, arch: stri
   try {
     const installed = JSON.parse(await readFile(join(destination, "eda-bundle.json"), "utf8"));
     await access(join(destination, target.executable));
-    if (installed.sha256 === target.sha256) return destination;
+    if (installed.sha256 === target.sha256 && installed.bundleLayout === bundleLayout)
+      return destination;
   } catch {}
 
   const cache = resolve(project, ".cache/bundled-git");
@@ -85,9 +132,10 @@ export async function prepareGit(platform: string = process.platform, arch: stri
   try {
     await extract({ file: archive, cwd: staging, strict: true, preservePaths: false });
     await access(join(staging, target.executable));
+    await pruneCredentialManager(staging);
     await writeFile(
       join(staging, "eda-bundle.json"),
-      JSON.stringify({ release: manifest.release, ...target }, null, 2),
+      JSON.stringify({ release: manifest.release, bundleLayout, ...target }, null, 2),
     );
 
     if (dirname(destination) !== parent) throw new Error("Invalid Git bundle destination.");
