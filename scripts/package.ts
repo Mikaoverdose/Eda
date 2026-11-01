@@ -108,7 +108,7 @@ if (!args.includes("--dir")) {
       "--signAppIdentity",
       process.env["EDA_MAC_SIGN_IDENTITY"] ?? "-",
       "--signEntitlements",
-      resolve("build/entitlements.mac.plist"),
+      resolve("build/mac.entitlements"),
     );
 
     if (process.env["EDA_MAC_NOTARY_PROFILE"])
