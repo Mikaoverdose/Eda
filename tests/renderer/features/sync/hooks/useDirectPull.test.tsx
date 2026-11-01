@@ -209,3 +209,14 @@ it("allows cancelling the GitHub settings prompt without navigating or retrying 
   expect(prepare).toHaveBeenCalledOnce();
   expect(execute).not.toHaveBeenCalled();
 });
+
+it("does not start work for an inactive repository or without an active profile", async () => {
+  useAppStore.setState({ selectedRepositoryId: "another-repo" });
+  await act(async () => api.pull("rebase"));
+  expect(prepare).not.toHaveBeenCalled();
+  useAppStore.setState({ selectedRepositoryId: "repo", activeIdentity: null });
+  await act(async () => api.pull("rebase"));
+  expect(prepare).not.toHaveBeenCalled();
+  expect(preference).not.toHaveBeenCalled();
+  expect(api.busy).toBe(false);
+});

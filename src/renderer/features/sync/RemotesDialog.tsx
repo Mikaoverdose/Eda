@@ -4,7 +4,8 @@ import { RemoteSelect } from "./RemoteSelect";
 import { RejectedPushNotice } from "./RejectedPushNotice";
 import { PushReview } from "./PushReview";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import type { PushRequest } from "@shared/integrations/remotes";
+import { PUSH_MODES, REMOTE_REF_KINDS } from "@shared/integrations/remotes";
+import { isOneOf } from "@shared/validation";
 import { Button, Dialog, Input, Checkbox, ErrorDialog } from "../../components/ui/index";
 import { TransferProgress, TransportFields } from "./TransportFields";
 import type { RemoteTab } from "./hooks/useRemotesDialog";
@@ -57,7 +58,7 @@ export function RemotesDialog({
     credentials,
     selectedRemote,
     selectedBranch,
-  } = useRemotesDialog(repositoryId, afterCommit, initialTab);
+  } = useRemotesDialog(repositoryId, initialTab);
 
   return (
     <Dialog
@@ -134,7 +135,7 @@ export function RemotesDialog({
                 value={refKind}
                 disabled={!!busy || !!preview}
                 onValueChange={(value) => {
-                  setRefKind(value as "branch" | "tag");
+                  if (isOneOf(value, REMOTE_REF_KINDS)) setRefKind(value);
                   setBranch("");
                   setDestination("");
                 }}
@@ -249,7 +250,7 @@ export function RemotesDialog({
                   value={mode}
                   disabled={!!busy || !!preview}
                   onValueChange={(value) => {
-                    setMode(value as PushRequest["mode"]);
+                    if (isOneOf(value, PUSH_MODES)) setMode(value);
                     setConfirmation("");
                   }}
                 >

@@ -1,6 +1,10 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import type { RemoteSummary, TransportCredentials } from "@shared/integrations/remotes";
+import {
+  preferredRemote,
+  type RemoteSummary,
+  type TransportCredentials,
+} from "@shared/integrations/remotes";
 import { useEffect, useRef, useState } from "react";
 import { ACTION_FEEDBACK } from "../../../motion";
 import { useAppStore } from "../../../stores/app-store";
@@ -62,11 +66,7 @@ export function useDirectFetch(repositoryId: string) {
         return;
       }
       setRemotes(inspected.value.remotes);
-      const head = inspected.value.branches.find((branch) => branch.isHead);
-      const preferred =
-        inspected.value.remotes.find((remote) => head?.upstream?.startsWith(`${remote.name}/`)) ??
-        inspected.value.remotes.find((remote) => remote.name === "origin") ??
-        inspected.value.remotes[0];
+      const preferred = preferredRemote(inspected.value);
       const remote = target === undefined ? preferred?.name : target;
       if (remote === undefined || !inspected.value.remotes.length) {
         setError(t("useDirectFetch.noRemotesConfiguredAddARemoteInThe"));

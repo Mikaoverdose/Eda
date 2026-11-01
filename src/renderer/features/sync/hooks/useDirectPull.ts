@@ -1,7 +1,7 @@
 import type { GitErrorData } from "@shared/errors";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import type { TransportCredentials } from "@shared/integrations/remotes";
+import { remoteForTrackingRef, type TransportCredentials } from "@shared/integrations/remotes";
 import type { PullStrategy } from "@shared/workflows/pull";
 import { useEffect, useRef, useState } from "react";
 import { ACTION_FEEDBACK } from "../../../motion";
@@ -31,6 +31,7 @@ export function useDirectPull(repositoryId: string) {
       mounted.current &&
       useAppStore.getState().selectedRepositoryId === repositoryId &&
       useAppStore.getState().activeIdentity?.id === identityId;
+    if (!current() || !identityId) return;
     running.current = true;
     const minimumPending = new Promise<void>((resolve) =>
       setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
@@ -59,9 +60,7 @@ export function useDirectPull(repositoryId: string) {
         if (!current()) return;
         if (result.ok) {
           const head = result.value.branches.find((branch) => branch.isHead);
-          const remote = result.value.remotes.find((item) =>
-            head?.upstream?.startsWith(`${item.name}/`),
-          );
+          const remote = remoteForTrackingRef(result.value.remotes, head?.upstream);
           if (remote?.fetchUrls.some((url) => url.startsWith("https://"))) {
             setAuthentication(strategy);
             setError(errorMessage(failure));

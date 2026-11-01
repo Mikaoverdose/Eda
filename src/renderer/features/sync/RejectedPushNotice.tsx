@@ -1,12 +1,12 @@
 import { t } from "@shared/i18n";
-import type { RemoteState } from "@shared/integrations/remotes";
+import type { RemoteRefKind, RemoteState } from "@shared/integrations/remotes";
 import { Button } from "../../components/ui/index";
 
 export interface RejectedPush {
   branch: string;
   remote: string;
   destination: string;
-  refKind: "branch" | "tag";
+  refKind: RemoteRefKind;
 }
 
 export function RejectedPushNotice({

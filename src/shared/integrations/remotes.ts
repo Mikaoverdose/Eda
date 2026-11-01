@@ -30,14 +30,19 @@ export interface FetchRequest {
   credentials?: TransportCredentials;
 }
 
+export const PUSH_MODES = ["normal", "lease", "force", "delete"] as const;
+export type PushMode = (typeof PUSH_MODES)[number];
+export const REMOTE_REF_KINDS = ["branch", "tag"] as const;
+export type RemoteRefKind = (typeof REMOTE_REF_KINDS)[number];
+
 export interface PushRequest {
   repositoryId: string;
   remote: string;
   branch: string;
   destination: string;
   setUpstream: boolean;
-  mode: "normal" | "lease" | "force" | "delete";
-  refKind?: "branch" | "tag";
+  mode: PushMode;
+  refKind?: RemoteRefKind;
   credentials?: TransportCredentials;
 }
 
@@ -48,7 +53,7 @@ export interface PushPreview {
   destination: string;
   localOid: string | null;
   remoteOid: string | null;
-  mode: "normal" | "lease" | "force" | "delete";
+  mode: PushMode;
 }
 
 export interface CloneRequest {
@@ -57,4 +62,28 @@ export interface CloneRequest {
   parent: string;
   name: string;
   credentials?: TransportCredentials;
+}
+
+// Prefer team/fork over team when both match the tracking ref.
+export function remoteForTrackingRef(
+  remotes: readonly RemoteSummary[],
+  ref: string | null | undefined,
+): RemoteSummary | undefined {
+  if (!ref) return undefined;
+  return remotes.reduce<RemoteSummary | undefined>(
+    (match, remote) =>
+      ref.startsWith(`${remote.name}/`) && (!match || remote.name.length > match.name.length)
+        ? remote
+        : match,
+    undefined,
+  );
+}
+
+export function preferredRemote(state: RemoteState): RemoteSummary | undefined {
+  const head = state.branches.find((branch) => branch.isHead && !branch.remote);
+  return (
+    remoteForTrackingRef(state.remotes, head?.upstream) ??
+    state.remotes.find((remote) => remote.name === "origin") ??
+    state.remotes[0]
+  );
 }

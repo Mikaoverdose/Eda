@@ -1,7 +1,13 @@
 import type { GitErrorData } from "@shared/errors";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import type { PushPreview, PushRequest, TransportCredentials } from "@shared/integrations/remotes";
+import {
+  preferredRemote,
+  remoteForTrackingRef,
+  type PushPreview,
+  type PushRequest,
+  type TransportCredentials,
+} from "@shared/integrations/remotes";
 import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Field, Input } from "../../components/ui/index";
@@ -20,6 +26,13 @@ export function DirectPush({
   disabled?: boolean;
 }) {
   const running = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +48,12 @@ export function DirectPush({
 
   const runPush = async (mode: PushRequest["mode"], auth?: TransportCredentials) => {
     if (running.current) return;
+    const identityId = useAppStore.getState().activeIdentity?.id;
+    const current = () =>
+      mounted.current &&
+      useAppStore.getState().selectedRepositoryId === repositoryId &&
+      useAppStore.getState().activeIdentity?.id === identityId;
+    if (!current() || !identityId) return;
     running.current = true;
     const minimumPending = new Promise<void>((resolve) =>
       setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
@@ -43,10 +62,6 @@ export function DirectPush({
     setShowError(false);
     setError(null);
     setMessage(null);
-    const identityId = useAppStore.getState().activeIdentity?.id;
-    const current = () =>
-      useAppStore.getState().selectedRepositoryId === repositoryId &&
-      useAppStore.getState().activeIdentity?.id === identityId;
     const fail = (failure: GitErrorData) => {
       if (!current()) return;
       setError(errorMessage(failure));
@@ -62,16 +77,10 @@ export function DirectPush({
         setError(t("directPush.checkOutALocalBranchBeforePushing"));
         return;
       }
-      const upstreamRemote = inspected.value.remotes.find((item) =>
-        head.upstream?.startsWith(`${item.name}/`),
-      );
+      const upstreamRemote = remoteForTrackingRef(inspected.value.remotes, head.upstream);
       const remote = upstreamRemote?.name;
       const destination = remote ? head.upstream!.slice(remote.length + 1) : head.name;
-      const target =
-        remote && inspected.value.remotes.find((item) => item.name === remote)
-          ? remote
-          : (inspected.value.remotes.find((item) => item.name === "origin")?.name ??
-            inspected.value.remotes[0]?.name);
+      const target = preferredRemote(inspected.value)?.name;
       if (!target) {
         setError(t("directPush.noRemoteIsConfiguredAddOneInSettingsRepoThenRetry"));
         return;
@@ -125,16 +134,18 @@ export function DirectPush({
 
   const confirmLease = async () => {
     if (!preview || running.current) return;
+    const identityId = useAppStore.getState().activeIdentity?.id;
+    const current = () =>
+      mounted.current &&
+      useAppStore.getState().selectedRepositoryId === repositoryId &&
+      useAppStore.getState().activeIdentity?.id === identityId;
+    if (!current() || !identityId) return;
     running.current = true;
     const minimumPending = new Promise<void>((resolve) =>
       setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
     );
     setBusy(true);
     setError(null);
-    const identityId = useAppStore.getState().activeIdentity?.id;
-    const current = () =>
-      useAppStore.getState().selectedRepositoryId === repositoryId &&
-      useAppStore.getState().activeIdentity?.id === identityId;
     try {
       const result = await window.eda.remotes.push(
         repositoryId,

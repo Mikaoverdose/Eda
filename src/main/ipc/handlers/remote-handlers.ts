@@ -1,7 +1,13 @@
 import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
 import { t } from "@shared/i18n";
-import type { RemoteChange, TransportCredentials } from "@shared/integrations/remotes";
+import {
+  PUSH_MODES,
+  REMOTE_REF_KINDS,
+  type RemoteChange,
+  type TransportCredentials,
+} from "@shared/integrations/remotes";
+import { isOneOf } from "@shared/validation";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import { isPullStrategy } from "@shared/workflows/pull";
 import type { Services } from "../../services";
@@ -162,12 +168,12 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
     const input = requireRecord(raw, t("main.remoteHandlers.pushPreview"));
     const mode = input["mode"];
 
-    if (mode !== "normal" && mode !== "lease" && mode !== "force" && mode !== "delete")
+    if (!isOneOf(mode, PUSH_MODES))
       throw invalidRequest(errorText("main.remoteHandlers.chooseASupportedPushMode"));
 
     const refKind = input["refKind"] ?? "branch";
 
-    if (refKind !== "branch" && refKind !== "tag")
+    if (!isOneOf(refKind, REMOTE_REF_KINDS))
       throw invalidRequest(errorText("main.remoteHandlers.chooseABranchOrTag"));
 
     const auth = credentials(input["credentials"]);

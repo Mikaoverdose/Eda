@@ -5,7 +5,7 @@ import { Button, Dialog, ErrorDialog } from "../../../components/ui/index";
 
 export function RepositoryRemotesSettings({ repositoryId }: { repositoryId: string }) {
   const { state, edit, setEdit, remove, setRemove, run, busy, error, setError, message } =
-    useRemotesDialog(repositoryId, false, "configure");
+    useRemotesDialog(repositoryId, "configure");
   return (
     <div className="max-w-xl space-y-4">
       <RemoteConfiguration

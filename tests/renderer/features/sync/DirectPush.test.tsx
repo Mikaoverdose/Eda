@@ -1,7 +1,7 @@
 import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ok, err } from "@shared/errors";
+import { ok, err, type Result } from "@shared/errors";
 import { DirectPush } from "@renderer/features/sync/DirectPush";
 import { useAppStore } from "@renderer/stores/app-store";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
@@ -84,3 +84,44 @@ it.each(["preview", "push"])(
     expect(preparePush).toHaveBeenCalledOnce();
   },
 );
+
+it("pushes to the most specific upstream remote when configured names overlap", async () => {
+  vi.mocked(window.eda.remotes.inspect).mockResolvedValueOnce(
+    ok({
+      branches: [
+        {
+          name: "main",
+          isHead: true,
+          remote: false,
+          oid: "a".repeat(40),
+          upstreamState: "",
+          upstream: "team/fork/release",
+        },
+      ],
+      remotes: [
+        { name: "team", fetchUrls: [], pushUrls: [] },
+        { name: "team/fork", fetchUrls: [], pushUrls: [] },
+      ],
+    }),
+  );
+  await act(async () => button().click());
+  await finish();
+  expect(preparePush).toHaveBeenCalledWith(
+    expect.objectContaining({ remote: "team/fork", destination: "release" }),
+  );
+});
+
+it("does not send a push after the component closes while its preview is pending", async () => {
+  let resolve: (value: Result<typeof preview>) => void = () => {};
+  preparePush.mockReturnValueOnce(
+    new Promise<Result<typeof preview>>((done) => {
+      resolve = done;
+    }),
+  );
+  await act(async () => button().click());
+  expect(preparePush).toHaveBeenCalledOnce();
+  await act(async () => root.render(null));
+  await act(async () => resolve(ok(preview)));
+  await finish();
+  expect(push).not.toHaveBeenCalled();
+});

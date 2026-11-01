@@ -1,7 +1,9 @@
 import type { Result } from "@shared/errors";
 import { errorAction, errorMessage } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
+import { preferredRemote } from "@shared/integrations/remotes";
 import type {
+  RemoteRefKind,
   PushPreview,
   PushRequest,
   RemoteChange,
@@ -14,12 +16,10 @@ import type { RejectedPush } from "../RejectedPushNotice";
 
 export type RemoteTab = "push" | "tracking" | "configure";
 
-export function useRemotesDialog(
-  repositoryId: string,
-  _afterCommit: boolean,
-  initialTab?: RemoteTab,
-) {
+export function useRemotesDialog(repositoryId: string, initialTab?: RemoteTab) {
   const loadRevision = useRef(0);
+  const running = useRef(false);
+  const mounted = useRef(false);
   const contextRevision = useRef(0);
   const [state, setState] = useState<RemoteState>({ remotes: [], branches: [] });
   const [tab, setTab] = useState<RemoteTab>(initialTab ?? "push");
@@ -29,7 +29,7 @@ export function useRemotesDialog(
   const [upstream, setUpstream] = useState("");
   const [publish, setPublish] = useState(true);
   const [mode, setMode] = useState<PushRequest["mode"]>("normal");
-  const [refKind, setRefKind] = useState<"branch" | "tag">("branch");
+  const [refKind, setRefKind] = useState<RemoteRefKind>("branch");
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [confirmation, setConfirmation] = useState("");
   const [preview, setPreview] = useState<PushPreview | null>(null);
@@ -42,41 +42,63 @@ export function useRemotesDialog(
   const [message, setMessage] = useState<string | null>(null);
   const load = async () => {
     const revision = ++loadRevision.current;
-    const result = await window.eda.remotes.inspect(repositoryId);
+    try {
+      const result = await window.eda.remotes.inspect(repositoryId);
 
-    if (revision !== loadRevision.current) return;
+      if (revision !== loadRevision.current) return;
 
-    if (!result.ok) {
-      setError(errorMessage(result.error));
-      return;
+      if (!result.ok) {
+        setError(errorMessage(result.error));
+        return;
+      }
+
+      setState(result.value);
+
+      const tagResult = await window.eda.repository.listTags(repositoryId);
+
+      if (revision !== loadRevision.current) return;
+      if (tagResult.ok) setTagNames(tagResult.value.map((tag) => tag.name));
+
+      const preferred = preferredRemote(result.value);
+
+      setRemote((old) =>
+        result.value.remotes.some((item) => item.name === old) ? old : (preferred?.name ?? ""),
+      );
+
+      const current = result.value.branches.find((item) => item.isHead)?.name ?? "";
+
+      setBranch((old) => old || current);
+      setDestination((old) => old || current);
+    } catch (error) {
+      if (revision === loadRevision.current) setError(errorMessage(error));
     }
-
-    setState(result.value);
-
-    const tagResult = await window.eda.repository.listTags(repositoryId);
-
-    if (revision !== loadRevision.current) return;
-    if (tagResult.ok) setTagNames(tagResult.value.map((tag) => tag.name));
-
-    const head = result.value.branches.find((item) => item.isHead);
-    const preferredRemote =
-      result.value.remotes.find((item) => head?.upstream?.startsWith(`${item.name}/`)) ??
-      result.value.remotes.find((item) => item.name === "origin") ??
-      result.value.remotes[0];
-
-    setRemote((old) =>
-      result.value.remotes.some((item) => item.name === old) ? old : (preferredRemote?.name ?? ""),
-    );
-
-    const current = result.value.branches.find((item) => item.isHead)?.name ?? "";
-
-    setBranch((old) => old || current);
-    setDestination((old) => old || current);
   };
 
   useEffect(() => {
+    mounted.current = true;
+    running.current = false;
+    setBusy(null);
+    setState({ remotes: [], branches: [] });
+    setRemote("");
+    setBranch("");
+    setDestination("");
+    setUpstream("");
+    setTagNames([]);
+    setPublish(true);
+    setMode("normal");
+    setRefKind("branch");
+    setTab(initialTab ?? "push");
+    setPreview(null);
+    setAuth({ username: "", password: "" });
+    setEdit({ kind: "add", name: "origin", url: "" });
+    setRemove(null);
+    setConfirmation("");
+    setError(null);
+    setMessage(null);
+    setRejectedPush(null);
     void load();
     return () => {
+      mounted.current = false;
       loadRevision.current++;
       contextRevision.current++;
     };
@@ -87,6 +109,8 @@ export function useRemotesDialog(
     work: () => Promise<Result<T>>,
     done?: (value: T) => void,
   ) => {
+    if (!mounted.current || running.current) return;
+    running.current = true;
     const context = contextRevision.current;
 
     setBusy(kindKey);
@@ -113,10 +137,16 @@ export function useRemotesDialog(
 
       await load();
 
+      if (context !== contextRevision.current) return;
       if (useRepositoryStore.getState().repositoryId === repositoryId)
         await useRepositoryStore.getState().syncFromDisk();
+    } catch (error) {
+      if (context === contextRevision.current) setError(errorMessage(error));
     } finally {
-      if (context === contextRevision.current) setBusy(null);
+      if (context === contextRevision.current) {
+        running.current = false;
+        setBusy(null);
+      }
     }
   };
 
