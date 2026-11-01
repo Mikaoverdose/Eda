@@ -1,5 +1,6 @@
 import type { DesktopPlatform } from "@shared/application";
 import { t } from "@shared/i18n";
+import { createTextSearch } from "../utils/search";
 export type { DesktopPlatform } from "@shared/application";
 
 export type ShellCommandId =
@@ -321,11 +322,9 @@ export function commandReason(command: ShellCommand, context: CommandContext): s
 }
 
 export function searchCommands(query: string): readonly ShellCommand[] {
-  const terms = query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+  const matches = createTextSearch(query);
   return SHELL_COMMANDS.filter((command) =>
-    terms.every((term) =>
-      `${command.title} ${command.group} ${command.keywords}`.toLocaleLowerCase().includes(term),
-    ),
+    matches(`${command.title} ${command.group} ${command.keywords}`),
   );
 }
 

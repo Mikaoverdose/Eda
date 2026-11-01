@@ -89,16 +89,18 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
   const categories = useMemo(() => {
     const query = files.query.toLocaleLowerCase();
 
-    return Object.fromEntries(
-      Object.entries(allCategories).map(([area, changes]) => [
-        area,
-        changes.filter(
-          (change) =>
-            change.path.toLocaleLowerCase().includes(query) &&
-            (!files.status || change.index === files.status || change.worktree === files.status),
-        ),
-      ]),
-    ) as Record<ChangeArea, RepositoryChange[]>;
+    const filter = (changes: RepositoryChange[]) =>
+      changes.filter(
+        (change) =>
+          change.path.toLocaleLowerCase().includes(query) &&
+          (!files.status || change.index === files.status || change.worktree === files.status),
+      );
+    return {
+      conflicted: filter(allCategories.conflicted),
+      staged: filter(allCategories.staged),
+      unstaged: filter(allCategories.unstaged),
+      untracked: filter(allCategories.untracked),
+    };
   }, [allCategories, files.query, files.status]);
 
   const checkedStage = [...allCategories.unstaged, ...allCategories.untracked]
