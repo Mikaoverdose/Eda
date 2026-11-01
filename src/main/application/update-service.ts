@@ -2,24 +2,30 @@ import { ERROR_CODE, errorText, type ErrorText } from "@shared/error-codes";
 import { AppError, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { localizedUpdateApiError } from "@shared/update-api-errors";
-import type { UpdateCapability, UpdateProgress, UpdateRelease, UpdateState } from "@shared/updates";
+import type {
+  UpdateCapability,
+  UpdatePlatform,
+  UpdateProgress,
+  UpdateRelease,
+  UpdateState,
+} from "@shared/updates";
 import { UPDATE_FEED_BASE } from "@shared/updates";
 
 export interface UpdateDriver {
   check(): Promise<{ available: boolean; release: UpdateRelease }>;
   download(progress: (value: UpdateProgress) => void): Promise<void>;
-  cancel(): void;
-  install(): void;
+  discardDownload(): void;
+  install(): void | Promise<void>;
 }
 
 export interface UpdateOptions {
   capability: UpdateCapability;
   reason: string | null;
-  platform: "win" | "mac" | "linux";
+  platform: UpdatePlatform;
   arch: string;
   currentVersion: string;
   automaticChecks: () => boolean;
-  createDriver: (url: string, installError: (error: unknown) => void) => UpdateDriver;
+  createDriver: (url: string) => UpdateDriver;
   prepareInstall: () => Promise<() => void>;
   now?: () => number;
 }
@@ -102,18 +108,13 @@ export class UpdateService {
     clearTimeout(this.timer);
     if (this.downloading) {
       this.cancelled = true;
-      this.driver?.cancel();
+      this.driver?.discardDownload();
     }
   }
 
   private native(): UpdateDriver {
     this.requireAutomatic();
-    return (this.driver ??= this.options.createDriver(this.state.feedUrl!, (error) => {
-      if (this.state.phase !== "installing") return;
-      this.rollbackInstall?.();
-      this.rollbackInstall = undefined;
-      this.publish({ phase: "ready", error: updateError(error, "install") });
-    }));
+    return (this.driver ??= this.options.createDriver(this.state.feedUrl!));
   }
 
   private requireAutomatic(): void {
@@ -185,10 +186,10 @@ export class UpdateService {
     return this.downloading;
   }
 
-  async cancel(): Promise<UpdateState> {
+  async discardDownload(): Promise<UpdateState> {
     if (this.downloading) {
       this.cancelled = true;
-      this.driver?.cancel();
+      this.driver?.discardDownload();
       await this.downloading;
     }
     return this.state;
@@ -203,7 +204,7 @@ export class UpdateService {
     this.publish({ phase: "installing", error: null });
     try {
       this.rollbackInstall = await this.options.prepareInstall();
-      this.native().install();
+      await this.native().install();
     } catch (error) {
       this.rollbackInstall?.();
       this.rollbackInstall = undefined;
@@ -242,9 +243,9 @@ export function updateError(error: unknown, action: "check" | "download" | "inst
     return t("main.updateService.theUpdateCouldNotBeVerifiedNothingWas");
   const details =
     error instanceof Error ? `${"code" in error ? error.code : ""} ${error.message}` : "";
-  if (/404|LATEST_VERSION_NOT_FOUND|CHANNEL_FILE_NOT_FOUND|ENOTFOUND/.test(details))
+  if (/404|ENOTFOUND/.test(details))
     return t("main.updateService.theUpdateServiceIsNotAvailableYetTryAgainLater");
-  if (/sha512|checksum|signature|ERR_UPDATER_INVALID/i.test(details))
+  if (/sha256|checksum|signature|invalid.*(?:hash|package)/i.test(details))
     return t("main.updateService.theUpdateCouldNotBeVerifiedNothingWas");
   if (/TIMEDOUT|TIMEOUT|ECONN|ERR_INTERNET|network|fetch failed|ENET|EAI_AGAIN/i.test(details))
     return t("main.updateService.couldNotReachTheUpdateServiceCheckYourConnectionAndTryAgain");

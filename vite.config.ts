@@ -62,7 +62,7 @@ export default defineConfig(async ({ command }) => {
               minify: command === "build",
               outDir: resolve("./dist/main"),
               rolldownOptions: {
-                external: ["electron", "electron-updater", "node:sqlite"],
+                external: ["electron", "velopack", "node:sqlite"],
                 output: { minify: command === "build" },
               },
             },

@@ -722,7 +722,7 @@
   "main.secrets.keychainSecretStore.theSystemKeychainDidNotRespond": "The system keychain did not respond ({value1}).",
   "main.services.developmentBuildsAreNeverReplacedUseAnInstalled": "Development builds are never replaced. Use an installed build to check for updates.",
   "main.services.finishRunningGitOperationsBeforeInstallingAnUpdate": "Finish running Git operations before installing an update.",
-  "main.services.useTheDownloadPageOrYourPackageManager": "Use the download page or your package manager to update this installation. A writable AppImage supports in-app updates.",
+  "main.services.useTheDownloadPageOrYourPackageManager": "Install the latest Eda download once to enable in-app updates. Package-managed installations should use their package manager.",
   "main.sessionHandlers.invalidCloseAcknowledgement": "Invalid close acknowledgement.",
   "main.sessionHandlers.missingSessionGeneration": "Missing session generation.",
   "main.sessionHandlers.sessionContext": "session context",

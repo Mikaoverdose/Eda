@@ -116,10 +116,6 @@ export function UpdatesPreview() {
             setPhase("downloading");
             return true;
           },
-          cancel: async () => {
-            setPhase("available");
-            return true;
-          },
           install: async () => {
             setPhase("installing");
             return true;

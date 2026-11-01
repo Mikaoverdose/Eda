@@ -2,12 +2,12 @@ import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { IPC_EVENTS } from "@shared/ipc";
+import { UPDATE_FEED_BASE, type UpdateCapability, type UpdatePlatform } from "@shared/updates";
 import { app, net, powerMonitor } from "electron";
-import { accessSync, constants, statSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { NativeUpdater } from "./application/native-updater";
+import { createVelopackUpdater, type VelopackUpdater } from "./application/velopack-updater";
 import { clearDatabase } from "./application/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
 import { UpdateService } from "./application/update-service";
@@ -206,23 +206,25 @@ export async function createServices(): Promise<Services> {
       (url, options) => net.fetch(url instanceof URL ? url.href : url, options),
     );
 
-    let appImageWritable = false;
-    const appImage = process.env["APPIMAGE"];
-    if (appImage && isAbsolute(appImage)) {
+    const platform: UpdatePlatform =
+      process.platform === "win32" ? "win" : process.platform === "darwin" ? "osx" : "linux";
+    const supportedArch = ["x64", "arm64"].includes(process.arch);
+    let capability: UpdateCapability = app.isPackaged ? "manual" : "development";
+    let installedUpdater: VelopackUpdater | undefined;
+    if (app.isPackaged && supportedArch) {
       try {
-        appImageWritable = statSync(appImage).isFile();
-        accessSync(appImage, constants.W_OK);
-        accessSync(dirname(appImage), constants.W_OK);
+        installedUpdater = await createVelopackUpdater(
+          `${UPDATE_FEED_BASE}${platform}/${process.arch}/`,
+          platform,
+          process.arch,
+          app.getVersion(),
+          () => app.quit(),
+        );
+        capability = "automatic";
       } catch {
-        appImageWritable = false;
+        capability = "manual";
       }
     }
-    const supportedArch = ["x64", "arm64"].includes(process.arch);
-    const capability = !app.isPackaged
-      ? "development"
-      : !supportedArch || (process.platform === "linux" && !appImageWritable)
-        ? "manual"
-        : "automatic";
     const updates = new UpdateService({
       capability,
       reason:
@@ -231,12 +233,11 @@ export async function createServices(): Promise<Services> {
           : capability === "manual"
             ? t("main.services.useTheDownloadPageOrYourPackageManager")
             : null,
-      platform:
-        process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux",
+      platform,
       arch: process.arch,
       currentVersion: app.getVersion(),
       automaticChecks: () => preferences.resolve("automaticUpdateChecks").value,
-      createDriver: (url, installError) => new NativeUpdater(url, installError),
+      createDriver: () => installedUpdater!,
       prepareInstall: async () => {
         const release = beginUpdateInstall();
         const rollback = () => {
@@ -292,7 +293,7 @@ export async function createServices(): Promise<Services> {
       remotes,
       avatars,
       async resetData() {
-        await updates.cancel();
+        await updates.discardDownload();
         operations.reset();
         await backgroundFetch.stop();
         try {

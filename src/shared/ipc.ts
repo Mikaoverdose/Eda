@@ -304,7 +304,6 @@ export interface EdaApi {
     state(): Promise<Result<UpdateState>>;
     check(): Promise<Result<UpdateState>>;
     download(): Promise<Result<UpdateState>>;
-    cancel(): Promise<Result<UpdateState>>;
     install(): Promise<Result<UpdateState>>;
   };
 
@@ -457,7 +456,6 @@ export const IPC_CHANNELS = {
   updatesState: "updates:state",
   updatesCheck: "updates:check",
   updatesDownload: "updates:download",
-  updatesCancel: "updates:cancel",
   updatesInstall: "updates:install",
   githubStatus: "github:status",
   githubRepositoryAccess: "github:repository-access",

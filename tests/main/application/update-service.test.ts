@@ -9,8 +9,7 @@ import {
 } from "@main/application/update-service";
 import { releaseFromManifest } from "@main/application/update-manifest";
 import type { UpdateProgress } from "@shared/updates";
-import type { UpdateInfo } from "electron-updater";
-import { createHash } from "node:crypto";
+import type { VelopackAsset } from "velopack";
 
 const release = {
   version: "0.0.2",
@@ -26,8 +25,8 @@ function fixture(overrides: Partial<UpdateOptions> = {}) {
     download: vi.fn(async (listener) => {
       progress = listener;
     }),
-    cancel: vi.fn(),
-    install: vi.fn(),
+    discardDownload: vi.fn(),
+    install: vi.fn(async () => {}),
   };
   const rollback = vi.fn();
   const options: UpdateOptions = {
@@ -68,7 +67,6 @@ it("deduplicates checks and requires separate verified download and installation
   expect(driver.download).not.toHaveBeenCalled();
   expect(options.createDriver).toHaveBeenCalledWith(
     "https://eda.kirameki.cafe/api/updates/v1/stable/win/x64/",
-    expect.any(Function),
   );
 
   await service.download();
@@ -82,7 +80,7 @@ it("deduplicates checks and requires separate verified download and installation
   expect(revisions).toEqual([...revisions].sort((a, b) => a - b));
 });
 
-it("cancels downloads, rejects unverified installers, and preserves a retryable release", async () => {
+it("discards download results, rejects unverified installers, and preserves a retryable release", async () => {
   const { service, driver, progress } = fixture();
   await service.check();
   let fail!: (error: Error) => void;
@@ -92,15 +90,15 @@ it("cancels downloads, rejects unverified installers, and preserves a retryable 
       fail = reject;
     });
   });
-  vi.mocked(driver.cancel).mockImplementation(() => fail(new Error("Cancelled")));
+  vi.mocked(driver.discardDownload).mockImplementation(() => fail(new Error("Cancelled")));
   const downloading = service.download();
   await Promise.resolve();
   expect(service.snapshot().progress?.percent).toBe(25);
   expect(service.download()).toBe(downloading);
-  await service.cancel();
+  await service.discardDownload();
   expect(service.snapshot()).toMatchObject({ phase: "available", error: null, progress: null });
 
-  vi.mocked(driver.download).mockRejectedValueOnce(new Error("sha512 checksum mismatch"));
+  vi.mocked(driver.download).mockRejectedValueOnce(new Error("sha256 checksum mismatch"));
   await service.download();
   expect(service.snapshot().error).toMatch(/could not be verified/);
   expect(service.snapshot().phase).toBe("available");
@@ -111,7 +109,7 @@ it("cancels downloads, rejects unverified installers, and preserves a retryable 
 
   const count = vi.mocked(driver.download).mock.calls.length;
   service.download();
-  await service.cancel();
+  await service.discardDownload();
   expect(driver.download).toHaveBeenCalledTimes(count);
 });
 
@@ -192,9 +190,8 @@ it("recovers from shutdown refusal and asynchronous native installation failures
   await service.install();
   expect(service.snapshot().phase).toBe("ready");
   expect(driver.install).not.toHaveBeenCalled();
+  vi.mocked(driver.install).mockRejectedValueOnce(new Error("signature verification failed"));
   await service.install();
-  const installError = vi.mocked(options.createDriver).mock.calls[0]![1];
-  installError(new Error("signature verification failed"));
   expect(service.snapshot()).toMatchObject({
     phase: "ready",
     error: expect.stringContaining("verified"),
@@ -202,36 +199,24 @@ it("recovers from shutdown refusal and asynchronous native installation failures
   expect(rollback).toHaveBeenCalledOnce();
 });
 
-it("maps server metadata without restricting artifact hosts or validating checksums", () => {
-  const info: UpdateInfo = {
-    path: "Eda-0.0.2-win-x64.exe",
-    sha512: createHash("sha512").update("fixture").digest("base64"),
-    version: "0.0.2",
-    releaseName: release.name,
-    releaseDate: "2026-10-31T00:00:00Z",
-    files: [
-      {
-        url: "Eda-0.0.2-win-x64.exe",
-        sha512: createHash("sha512").update("fixture").digest("base64"),
-        size: 7,
-      },
-    ],
-    releaseNotes: "<script>These notes are rendered as text.</script>",
+it("maps Velopack full packages and uses markdown notes as plain text", () => {
+  const info: VelopackAsset = {
+    PackageId: "Eda",
+    Version: "0.0.2",
+    Type: "Full",
+    FileName: "Eda-0.0.2-win-x64-stable-full.nupkg",
+    SHA1: "a".repeat(40),
+    SHA256: "b".repeat(64),
+    Size: 100,
+    NotesMarkdown: "<script>These notes are rendered as text.</script>",
+    NotesHtml: "<script>ignored</script>",
   };
-  expect(releaseFromManifest(info)).toMatchObject({
+  expect(releaseFromManifest(info)).toEqual({
     version: "0.0.2",
-    notes: info.releaseNotes,
+    name: "Eda 0.0.2",
+    notes: info.NotesMarkdown,
+    releasedAt: null,
   });
-  for (const url of [
-    "https://downloads.example.com/Eda.exe",
-    "https://github.com/another/repo/releases/download/v1/Eda.exe",
-  ]) {
-    expect(
-      releaseFromManifest({
-        ...info,
-        files: [{ ...info.files[0]!, url, sha512: "server-checksum" }],
-      }),
-    ).toMatchObject({ version: info.version });
-  }
-  expect(releaseFromManifest({ ...info, files: [] })).toMatchObject({ version: info.version });
+  for (const change of [{ PackageId: "Other" }, { Type: "Delta" }, { Version: "0.0.2-beta" }])
+    expect(() => releaseFromManifest({ ...info, ...change })).toThrow();
 });

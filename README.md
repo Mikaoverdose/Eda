@@ -23,7 +23,7 @@ Follow a project through its visual commit history, then move straight into revi
 ## Get started
 
 > [!WARNING]
-> Eda is in active development and does not yet have a stable release. Packaged desktop builds target Windows, macOS, and Linux; official downloads will be listed here when available.
+> Eda is in active development.
 
 To run from source, install [Node.js 24+](https://nodejs.org/) and [pnpm](https://pnpm.io/), then:
 

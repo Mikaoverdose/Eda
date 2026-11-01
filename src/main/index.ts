@@ -15,6 +15,11 @@ import {
 } from "./repo/lifecycle/navigation";
 import { createServices } from "./services";
 
+if (app.isPackaged) {
+  const { VelopackApp } = await import("velopack");
+  VelopackApp.build().setAutoApplyOnStartup(false).run();
+}
+
 let navigation: RepositoryNavigationQueue | undefined;
 const pendingLinks: string[] = [];
 

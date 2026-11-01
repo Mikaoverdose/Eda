@@ -122,7 +122,6 @@ function setup() {
       snapshot: vi.fn(),
       check: vi.fn(),
       download: vi.fn(),
-      cancel: vi.fn(),
       install: vi.fn(),
     },
     resetData: vi.fn(async () => {}),

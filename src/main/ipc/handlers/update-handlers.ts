@@ -26,10 +26,6 @@ export function registerUpdateHandlers(services: Services): void {
     caller(event);
     return ok(await updates.download());
   });
-  handle(IPC_CHANNELS.updatesCancel, async (event) => {
-    caller(event);
-    return ok(await updates.cancel());
-  });
   handle(IPC_CHANNELS.updatesInstall, async (event) => {
     caller(event);
     return ok(await updates.install());

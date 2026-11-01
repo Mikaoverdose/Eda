@@ -19,7 +19,6 @@ import { useUpdates } from "./hooks/useUpdates";
 export interface UpdateActions {
   check: () => Promise<boolean>;
   download: () => Promise<boolean>;
-  cancel: () => Promise<boolean>;
   install: () => Promise<boolean>;
 }
 
@@ -61,10 +60,8 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
           />
           <p className="text-xs text-text-tertiary">
             {state.progress
-              ? t("settings.updatesSettings.of", {
-                  Math: Math.floor(state.progress.percent),
-                  value2: formatBytes(state.progress.transferred),
-                  value3: formatBytes(state.progress.total),
+              ? t("settings.updatesSettings.percentDownloaded", {
+                  percent: Math.floor(state.progress.percent),
                 })
               : t("settings.updatesSettings.preparingDownload")}
           </p>
@@ -98,14 +95,6 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
             variant="primary"
           >
             {t("settings.updatesSettings.downloadUpdate")}
-          </AsyncButton>
-        )}
-        {state.phase === "downloading" && (
-          <AsyncButton
-            label={t("settings.updatesSettings.cancelDownload")}
-            onAction={actions.cancel}
-          >
-            {t("settings.updatesSettings.cancelDownload")}
           </AsyncButton>
         )}
         {state.phase === "ready" && (
@@ -172,7 +161,6 @@ export function UpdatesSettings() {
           actions={{
             check: () => run("check"),
             download: () => run("download"),
-            cancel: () => run("cancel"),
             install: () => run("install"),
           }}
         />
@@ -194,8 +182,4 @@ export function UpdatesSettings() {
       </p>
     </section>
   );
-}
-
-function formatBytes(value: number): string {
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }

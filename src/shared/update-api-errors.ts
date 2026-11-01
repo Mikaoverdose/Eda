@@ -46,7 +46,7 @@ export function localizedUpdateApiError(error: unknown): string | undefined {
     message?: unknown;
     description?: unknown;
   };
-  // electron-updater wraps HTTP failures in an Error containing the JSON response.
+  // Update transports may wrap HTTP failures in an Error containing the JSON response.
   const candidates = [details.code, details.error];
   for (const text of [details.message, details.description]) {
     if (typeof text !== "string") continue;

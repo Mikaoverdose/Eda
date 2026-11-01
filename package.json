@@ -20,11 +20,11 @@
     "check": "pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run test",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html,json}\" \"{scripts,tests}/**/*.{ts,tsx,json}\" \"*.{js,mjs,ts,json}\" \".github/**/*.{yml,yaml}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,html,json}\" \"{scripts,tests}/**/*.{ts,tsx,json}\" \"*.{js,mjs,ts,json}\" \".github/**/*.{yml,yaml}\"",
-    "package": "pnpm build && electron-builder --config electron-builder.config.ts",
+    "package": "pnpm build && node scripts/package.ts",
     "screenshot": "pnpm build && node scripts/screenshot.ts"
   },
   "dependencies": {
-    "electron-updater": "^6.8.11"
+    "velopack": "1.2.161"
   },
   "devDependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

@@ -7,7 +7,6 @@ const api: EdaApi = {
     state: () => ipcRenderer.invoke(IPC_CHANNELS.updatesState),
     check: () => ipcRenderer.invoke(IPC_CHANNELS.updatesCheck),
     download: () => ipcRenderer.invoke(IPC_CHANNELS.updatesDownload),
-    cancel: () => ipcRenderer.invoke(IPC_CHANNELS.updatesCancel),
     install: () => ipcRenderer.invoke(IPC_CHANNELS.updatesInstall),
   },
   github: {

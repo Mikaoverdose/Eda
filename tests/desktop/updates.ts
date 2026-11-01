@@ -102,8 +102,6 @@ try {
       .getAttribute("value"),
     "45",
   );
-  await preview.getByRole("button", { name: "Cancel download", exact: true }).click();
-  await preview.getByRole("button", { name: "Download update", exact: true }).click();
   await preview.getByRole("button", { name: "Preview completed download", exact: true }).click();
   await preview.getByRole("button", { name: "Restart and install", exact: true }).waitFor();
   await mkdir("screenshots", { recursive: true });
@@ -131,7 +129,7 @@ try {
   assert.ok(live.ok && live.value.phase === "idle" && live.value.capability === "development");
   assert.deepEqual(errors, []);
   console.log(
-    "Update desktop gate passed: source-build protection, version display, persisted preference, cancellation and verified-download/install previews without a live feed or installer execution.",
+    "Update desktop gate passed: source-build protection, version display, persisted preference and verified-download/install previews without a live feed or installer execution.",
   );
 } finally {
   await app?.close();
