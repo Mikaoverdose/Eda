@@ -16,7 +16,7 @@ function devElectronEnv(): Record<string, string> {
   };
 }
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ command }) => {
   await Promise.all([prepareGit(), prepareComponentInventory()]);
   const buildInfo = readBuildInfo();
   return {
@@ -59,8 +59,12 @@ export default defineConfig(async () => {
               },
             },
             build: {
+              minify: command === "build",
               outDir: resolve("./dist/main"),
-              rollupOptions: { external: ["electron", "electron-updater", "node:sqlite"] },
+              rolldownOptions: {
+                external: ["electron", "electron-updater", "node:sqlite"],
+                output: { minify: command === "build" },
+              },
             },
           },
         },
@@ -69,7 +73,7 @@ export default defineConfig(async () => {
           vite: {
             define: { __EDA_BUILD_INFO__: JSON.stringify(buildInfo) },
             resolve: { alias: { "@shared": resolve("./src/shared") } },
-            build: { outDir: resolve("./dist/preload") },
+            build: { minify: command === "build", outDir: resolve("./dist/preload") },
           },
         },
       }),

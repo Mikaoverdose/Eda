@@ -1,4 +1,8 @@
-import Color from "colorjs.io";
+import { ColorSpace, parse } from "colorjs.io/fn";
+import OKLCH from "colorjs.io/src/spaces/oklch.js";
+import sRGB from "colorjs.io/src/spaces/srgb.js";
+
+ColorSpace.register(sRGB);
 
 export type AccentColor = number | `#${string}`;
 
@@ -15,7 +19,7 @@ export function isHexColor(value: unknown): value is `#${string}` {
 export function accentComponents(value: AccentColor): { hue: number; chroma: number } {
   if (typeof value === "number") return { hue: Math.round(value), chroma: DEFAULT_ACCENT_CHROMA };
 
-  const [, chroma, hue] = new Color(value).to("oklch").coords;
+  const [, chroma, hue] = OKLCH.from(parse(value));
 
   if (chroma === null || chroma < NEUTRAL_CHROMA_THRESHOLD) return { hue: 0, chroma: 0 };
 
@@ -32,8 +36,9 @@ function toHexChannel(channel: number | null): string {
 export function accentToHex(value: AccentColor): `#${string}` {
   if (typeof value === "string") return value.toLowerCase() as `#${string}`;
 
-  const color = new Color("oklch", [ACCENT_SWATCH_LIGHTNESS, DEFAULT_ACCENT_CHROMA, value]);
-  const channels = color.to("srgb").coords.map(toHexChannel);
+  const channels = sRGB
+    .from({ space: OKLCH, coords: [ACCENT_SWATCH_LIGHTNESS, DEFAULT_ACCENT_CHROMA, value] })
+    .map(toHexChannel);
 
   return `#${channels.join("")}`;
 }
