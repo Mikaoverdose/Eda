@@ -1,7 +1,7 @@
 import { redactDiagnostic } from "@shared/diagnostics";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useShellCommands } from "../commands/hooks/useShellCommands";
 import { RetainedView } from "../components/layout/ViewTransition";
 import { useViewTransition } from "../components/layout/hooks/useViewTransition";
@@ -11,7 +11,7 @@ import { FirstRun } from "../features/onboarding/FirstRun";
 import { IdentityDialog } from "../features/profiles/IdentityDialog";
 import { RepositoryPicker } from "../features/repositories/RepositoryPicker";
 import { RepositoryTabs } from "../features/repositories/RepositoryTabs";
-import { Settings, type SettingsSection } from "../features/settings/Settings";
+import type { SettingsSection } from "../features/settings/Settings";
 import { AppUpdateNotice } from "../features/updates/AppUpdateNotice";
 import {
   showOpenedRepository,
@@ -31,6 +31,10 @@ import { Toolbar } from "./Toolbar";
 import { StartupTitlebar } from "./WindowControls";
 import { Workspace } from "./Workspace";
 import { WorkspaceFrame } from "./WorkspaceFrame";
+
+const Settings = lazy(() =>
+  import("../features/settings/Settings").then((module) => ({ default: module.Settings })),
+);
 
 export function App() {
   useEffect(watchSystemAppearance, []);
@@ -243,12 +247,14 @@ export function App() {
             />
           </RetainedView>
           {view === "settings" && (
-            <Settings
-              selected={settingsSection}
-              onSelect={(section) => {
-                setSettingsSection(section);
-              }}
-            />
+            <Suspense fallback={null}>
+              <Settings
+                selected={settingsSection}
+                onSelect={(section) => {
+                  setSettingsSection(section);
+                }}
+              />
+            </Suspense>
           )}
         </WorkspaceFrame>
         {pickerOpen && <RepositoryPicker onClose={() => setPickerOpen(false)} />}

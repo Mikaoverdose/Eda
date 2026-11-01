@@ -242,6 +242,7 @@ export function Settings({
     debug: t("settings.debug"),
   };
   const sections = SECTIONS.map((section) => ({ ...section, group: groups[section.group] }));
+  const activeSections = sections.filter((section) => section.id === selected);
   const matches = sections.filter((section) =>
     matchesQuery(`${section.group} ${section.title} ${section.description} ${section.keywords}`),
   );
@@ -333,7 +334,7 @@ export function Settings({
               {errorMessage(error)}
             </ErrorDialog>
           )}
-          {sections.map((section) => (
+          {activeSections.map((section) => (
             <section
               key={section.id}
               id={`settings-${section.id}`}
