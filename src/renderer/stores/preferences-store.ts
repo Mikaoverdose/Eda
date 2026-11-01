@@ -23,6 +23,7 @@ type Values = {
       SettingKey,
       | "language"
       | "automaticUpdateChecks"
+      | "includePrereleaseUpdates"
       | "hardwareAcceleration"
       | "gitEngine"
       | "sshAgent"

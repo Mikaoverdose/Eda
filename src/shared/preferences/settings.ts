@@ -98,6 +98,11 @@ export const SETTING_DEFINITIONS = {
     scopes: application,
     validate: boolean,
   }),
+  includePrereleaseUpdates: define<boolean>({
+    defaultValue: true,
+    scopes: application,
+    validate: boolean,
+  }),
   repositoryCommitIdentity: define<CommitIdentity | null>({
     defaultValue: null,
     scopes: ["repository"],

@@ -9,7 +9,7 @@ import type {
   UpdateRelease,
   UpdateState,
 } from "@shared/updates";
-import { UPDATE_FEED_BASE } from "@shared/updates";
+import { updateFeedUrl } from "@shared/updates";
 
 export interface UpdateDriver {
   check(): Promise<{ available: boolean; release: UpdateRelease }>;
@@ -25,7 +25,8 @@ export interface UpdateOptions {
   arch: string;
   currentVersion: string;
   automaticChecks: () => boolean;
-  createDriver: (url: string) => UpdateDriver;
+  includePrereleases: () => boolean;
+  createDriver: (url: string) => UpdateDriver | Promise<UpdateDriver>;
   prepareInstall: () => Promise<() => void>;
   now?: () => number;
 }
@@ -36,7 +37,7 @@ export const UPDATE_CHECK_INTERVAL = 6 * 60 * 60_000;
 export class UpdateService {
   private state: UpdateState;
   private readonly listeners = new Set<(state: UpdateState) => void>();
-  private driver?: UpdateDriver;
+  private driver: UpdateDriver | undefined;
   private checking: Promise<UpdateState> | undefined;
   private downloading: Promise<UpdateState> | undefined;
   private timer?: ReturnType<typeof setTimeout>;
@@ -56,7 +57,7 @@ export class UpdateService {
       error: null,
       feedUrl:
         options.capability === "automatic"
-          ? `${UPDATE_FEED_BASE}${options.platform}/${options.arch}/`
+          ? updateFeedUrl(options.platform, options.arch, options.includePrereleases())
           : null,
     };
   }
@@ -83,8 +84,11 @@ export class UpdateService {
 
   refreshSchedule(): void {
     clearTimeout(this.timer);
+    this.refreshFeed();
+
     if (!this.running || this.state.capability !== "automatic" || !this.options.automaticChecks())
       return;
+
     const pending = ["available", "downloading", "ready", "installing"].includes(this.state.phase);
     const delay = pending
       ? UPDATE_CHECK_INTERVAL
@@ -96,25 +100,55 @@ export class UpdateService {
           )
         : UPDATE_STARTUP_DELAY;
     this.timer = setTimeout(() => {
-      void this.check()
-        .catch(() => undefined)
-        .finally(() => this.refreshSchedule());
+      void this.check().catch(() => undefined);
     }, delay);
+
     this.timer.unref();
   }
 
   stop(): void {
     this.running = false;
     clearTimeout(this.timer);
+
     if (this.downloading) {
       this.cancelled = true;
       this.driver?.discardDownload();
     }
   }
 
-  private native(): UpdateDriver {
+  private refreshFeed(): void {
+    if (
+      this.state.capability !== "automatic" ||
+      ["checking", "downloading", "installing"].includes(this.state.phase)
+    )
+      return;
+
+    const feedUrl = updateFeedUrl(
+      this.options.platform,
+      this.options.arch,
+      this.options.includePrereleases(),
+    );
+
+    if (feedUrl === this.state.feedUrl) return;
+
+    this.driver?.discardDownload();
+    this.driver = undefined;
+
+    this.publish({
+      feedUrl,
+      phase: "idle",
+      reason: null,
+      checkedAt: null,
+      release: null,
+      progress: null,
+      error: null,
+    });
+  }
+
+  private async native(): Promise<UpdateDriver> {
     this.requireAutomatic();
-    return (this.driver ??= this.options.createDriver(this.state.feedUrl!));
+
+    return (this.driver ??= await this.options.createDriver(this.state.feedUrl!));
   }
 
   private requireAutomatic(): void {
@@ -128,16 +162,23 @@ export class UpdateService {
 
   check(): Promise<UpdateState> {
     this.requireAutomatic();
+    this.refreshFeed();
+
     if (this.checking) return this.checking;
+
     if (["downloading", "ready", "installing"].includes(this.state.phase))
       return Promise.resolve(this.state);
+
     this.publish({ phase: "checking", error: null, release: null, progress: null });
+
     this.checking = Promise.resolve().then(async () => {
       try {
-        const result = await this.native().check();
+        const driver = await this.native();
+        const result = await driver.check();
         const newer = newerRelease(result.release.version, this.options.currentVersion);
         const available = result.available && newer;
-        return this.publish({
+
+        this.publish({
           phase: available ? "available" : "current",
           release: available ? result.release : null,
           reason:
@@ -147,42 +188,58 @@ export class UpdateService {
           checkedAt: new Date((this.options.now ?? Date.now)()).toISOString(),
         });
       } catch (error) {
-        return this.publish({
+        this.publish({
           phase: "error",
           error: updateError(error, "check"),
           checkedAt: new Date((this.options.now ?? Date.now)()).toISOString(),
         });
       } finally {
         this.checking = undefined;
+        this.refreshSchedule();
       }
+
+      return this.state;
     });
+
     return this.checking;
   }
 
   download(): Promise<UpdateState> {
     this.requireAutomatic();
+
     if (this.downloading) return this.downloading;
+
     if (this.state.phase !== "available" || !this.state.release)
       throw updateRequest(errorText("main.updateService.checkForAnUpdateBeforeDownloading"));
+
     this.cancelled = false;
     this.publish({ phase: "downloading", progress: null, error: null });
+
     this.downloading = Promise.resolve().then(async () => {
       try {
-        if (this.cancelled) return this.publish({ phase: "available", progress: null });
-        await this.native().download((progress) => {
-          if (!this.cancelled && this.state.phase === "downloading") this.publish({ progress });
-        });
-        return this.publish({ phase: this.cancelled ? "available" : "ready", progress: null });
+        const driver = await this.native();
+
+        if (!this.cancelled) {
+          await driver.download((progress) => {
+            if (!this.cancelled && this.state.phase === "downloading") this.publish({ progress });
+          });
+        }
+
+        this.publish({ phase: this.cancelled ? "available" : "ready", progress: null });
       } catch (error) {
-        return this.publish({
+        this.publish({
           phase: "available",
           progress: null,
           error: this.cancelled ? null : updateError(error, "download"),
         });
       } finally {
         this.downloading = undefined;
+        this.refreshSchedule();
       }
+
+      return this.state;
     });
+
     return this.downloading;
   }
 
@@ -192,27 +249,38 @@ export class UpdateService {
       this.driver?.discardDownload();
       await this.downloading;
     }
+
     return this.state;
   }
 
   async install(): Promise<UpdateState> {
     this.requireAutomatic();
+
     if (this.state.phase !== "ready")
       throw updateRequest(
         errorText("main.updateService.downloadAndVerifyAnUpdateBeforeInstallingIt"),
       );
+
     this.publish({ phase: "installing", error: null });
+
     try {
       this.rollbackInstall = await this.options.prepareInstall();
-      await this.native().install();
+
+      const driver = await this.native();
+
+      await driver.install();
     } catch (error) {
       this.rollbackInstall?.();
       this.rollbackInstall = undefined;
+
       this.publish({
         phase: "ready",
         error: error instanceof GitError ? error.message : updateError(error, "install"),
       });
+
+      this.refreshSchedule();
     }
+
     return this.state;
   }
 }
@@ -238,17 +306,28 @@ function updateRequest(message: ErrorText): GitError {
 
 export function updateError(error: unknown, action: "check" | "download" | "install"): string {
   const apiMessage = localizedUpdateApiError(error);
+
   if (apiMessage) return apiMessage;
+
   if (error instanceof AppError && error.code === ERROR_CODE.INVALID_STABLE_VERSION)
     return t("main.updateService.theUpdateCouldNotBeVerifiedNothingWas");
+
   const details =
     error instanceof Error ? `${"code" in error ? error.code : ""} ${error.message}` : "";
-  if (/404|ENOTFOUND/.test(details))
+
+  if (/404/.test(details))
     return t("main.updateService.theUpdateServiceIsNotAvailableYetTryAgainLater");
+
   if (/sha256|checksum|signature|invalid.*(?:hash|package)/i.test(details))
     return t("main.updateService.theUpdateCouldNotBeVerifiedNothingWas");
-  if (/TIMEDOUT|TIMEOUT|ECONN|ERR_INTERNET|network|fetch failed|ENET|EAI_AGAIN/i.test(details))
+
+  if (
+    /TIMEDOUT|TIMEOUT|ECONN|ENOTFOUND|ERR_INTERNET|network|fetch failed|ENET|EAI_AGAIN/i.test(
+      details,
+    )
+  )
     return t("main.updateService.couldNotReachTheUpdateServiceCheckYourConnectionAndTryAgain");
+
   return action === "install"
     ? t("main.updateService.edaCouldNotStartTheInstallerTryAgainOrUseTheDownloadPage")
     : action === "download"

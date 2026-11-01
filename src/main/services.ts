@@ -2,7 +2,7 @@ import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { IPC_EVENTS } from "@shared/ipc";
-import { UPDATE_FEED_BASE, type UpdateCapability, type UpdatePlatform } from "@shared/updates";
+import { updateFeedUrl, type UpdateCapability, type UpdatePlatform } from "@shared/updates";
 import { app, net, powerMonitor } from "electron";
 import { rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -211,10 +211,16 @@ export async function createServices(): Promise<Services> {
     const supportedArch = ["x64", "arm64"].includes(process.arch);
     let capability: UpdateCapability = app.isPackaged ? "manual" : "development";
     let installedUpdater: VelopackUpdater | undefined;
+    const initialFeedUrl = updateFeedUrl(
+      platform,
+      process.arch,
+      preferences.resolve("includePrereleaseUpdates").value,
+    );
+
     if (app.isPackaged && supportedArch) {
       try {
         installedUpdater = await createVelopackUpdater(
-          `${UPDATE_FEED_BASE}${platform}/${process.arch}/`,
+          initialFeedUrl,
           platform,
           process.arch,
           app.getVersion(),
@@ -225,6 +231,7 @@ export async function createServices(): Promise<Services> {
         capability = "manual";
       }
     }
+
     const updates = new UpdateService({
       capability,
       reason:
@@ -237,7 +244,11 @@ export async function createServices(): Promise<Services> {
       arch: process.arch,
       currentVersion: app.getVersion(),
       automaticChecks: () => preferences.resolve("automaticUpdateChecks").value,
-      createDriver: () => installedUpdater!,
+      includePrereleases: () => preferences.resolve("includePrereleaseUpdates").value,
+      createDriver: (url) =>
+        url === initialFeedUrl
+          ? installedUpdater!
+          : createVelopackUpdater(url, platform, process.arch, app.getVersion(), () => app.quit()),
       prepareInstall: async () => {
         const release = beginUpdateInstall();
         const rollback = () => {

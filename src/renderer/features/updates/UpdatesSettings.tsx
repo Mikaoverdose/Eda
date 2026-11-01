@@ -126,7 +126,12 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
 export function UpdatesSettings() {
   const { state, error } = useUpdates();
   const automatic = useScopedSetting("automaticUpdateChecks", "application");
+  const prereleases = useScopedSetting("includePrereleaseUpdates", "application");
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const updateInProgress =
+    state !== null && ["checking", "downloading", "installing"].includes(state.phase);
+
   const run = async (action: keyof UpdateActions) => {
     setActionError(null);
     try {
@@ -179,6 +184,16 @@ export function UpdatesSettings() {
       </Checkbox>
       <p className="text-xs text-text-tertiary">
         {t("settings.updatesSettings.installedBuildsCheckAfterStartupAndEverySix")}
+      </p>
+      <Checkbox
+        checked={prereleases.resolved.value}
+        disabled={prereleases.reading || updateInProgress}
+        onChange={(event) => void prereleases.set(event.currentTarget.checked)}
+      >
+        {t("settings.updatesSettings.includePrereleaseUpdates")}
+      </Checkbox>
+      <p className="text-xs text-text-tertiary">
+        {t("settings.updatesSettings.prereleaseUpdatesDescription")}
       </p>
     </section>
   );

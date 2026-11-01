@@ -4,6 +4,7 @@ import {
   UPDATE_CHECK_INTERVAL,
   UPDATE_STARTUP_DELAY,
   newerRelease,
+  updateError,
   type UpdateDriver,
   type UpdateOptions,
 } from "@main/application/update-service";
@@ -36,6 +37,7 @@ function fixture(overrides: Partial<UpdateOptions> = {}) {
     arch: "x64",
     currentVersion: "0.0.1",
     automaticChecks: () => true,
+    includePrereleases: () => true,
     createDriver: vi.fn(() => driver),
     prepareInstall: vi.fn(async () => rollback),
     ...overrides,
@@ -66,7 +68,7 @@ it("deduplicates checks and requires separate verified download and installation
   expect(service.snapshot().phase).toBe("available");
   expect(driver.download).not.toHaveBeenCalled();
   expect(options.createDriver).toHaveBeenCalledWith(
-    "https://eda.kirameki.cafe/api/updates/v1/stable/win/x64/",
+    "https://eda.kirameki.cafe/api/updates/v1/preview/win/x64/",
   );
 
   await service.download();
@@ -92,8 +94,7 @@ it("discards download results, rejects unverified installers, and preserves a re
   });
   vi.mocked(driver.discardDownload).mockImplementation(() => fail(new Error("Cancelled")));
   const downloading = service.download();
-  await Promise.resolve();
-  expect(service.snapshot().progress?.percent).toBe(25);
+  await vi.waitFor(() => expect(service.snapshot().progress?.percent).toBe(25));
   expect(service.download()).toBe(downloading);
   await service.discardDownload();
   expect(service.snapshot()).toMatchObject({ phase: "available", error: null, progress: null });
@@ -124,9 +125,78 @@ it("retries absent feeds and synchronous setup failures without claiming up-to-d
     new Error("404 ERR_UPDATER_LATEST_VERSION_NOT_FOUND"),
   );
   await service.check();
-  expect(service.snapshot().error).toMatch(/not available yet/);
+  expect(service.snapshot().error).toMatch(/update feed or package could not be found/);
   await service.check();
   expect(service.snapshot().phase).toBe("available");
+});
+
+it("switches audiences without restarting and discards offers and verified downloads from the previous audience", async () => {
+  let includePrereleases = true;
+  const { service, driver, options } = fixture({ includePrereleases: () => includePrereleases });
+
+  await service.check();
+  await service.download();
+  expect(service.snapshot().phase).toBe("ready");
+
+  includePrereleases = false;
+  service.refreshSchedule();
+
+  expect(driver.discardDownload).toHaveBeenCalledOnce();
+  expect(service.snapshot()).toMatchObject({
+    phase: "idle",
+    feedUrl: "https://eda.kirameki.cafe/api/updates/v1/stable/win/x64/",
+    release: null,
+    error: null,
+    checkedAt: null,
+  });
+
+  await expect(service.install()).rejects.toThrow(/before installing/);
+  await service.check();
+
+  expect(options.createDriver).toHaveBeenLastCalledWith(
+    "https://eda.kirameki.cafe/api/updates/v1/stable/win/x64/",
+  );
+
+  includePrereleases = true;
+  service.refreshSchedule();
+  expect(service.snapshot().release).toBeNull();
+
+  await service.check();
+
+  expect(options.createDriver).toHaveBeenLastCalledWith(
+    "https://eda.kirameki.cafe/api/updates/v1/preview/win/x64/",
+  );
+});
+
+it("defers an audience switch until an in-flight check finishes and returns the new state", async () => {
+  let includePrereleases = true;
+  const { service, driver } = fixture({ includePrereleases: () => includePrereleases });
+
+  let finish!: (value: { available: boolean; release: typeof release }) => void;
+  vi.mocked(driver.check).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+
+  const pending = service.check();
+  await vi.waitFor(() => expect(driver.check).toHaveBeenCalledOnce());
+
+  includePrereleases = false;
+  service.refreshSchedule();
+  expect(service.snapshot().phase).toBe("checking");
+
+  finish({ available: true, release });
+
+  expect(await pending).toMatchObject({ phase: "idle", release: null });
+  expect(service.snapshot().feedUrl).toContain("/stable/");
+});
+
+it("treats DNS failures as connectivity errors rather than an undeployed service", () => {
+  expect(updateError(new Error("getaddrinfo ENOTFOUND eda.kirameki.cafe"), "check")).toMatch(
+    /Could not reach the update service/,
+  );
 });
 
 it("compares numeric stable releases, refuses same-version rebuilds and discovers later offers", async () => {

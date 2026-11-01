@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { AboutSettings } from "@renderer/features/settings/application/AboutSettings";
-import { builtInSetting } from "@shared/preferences/settings";
+import { builtInSetting, type SettingKey } from "@shared/preferences/settings";
 
 it("keeps build identity and maintainer contact available when Gravatar is unavailable", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -33,7 +33,7 @@ it("keeps build identity and maintainer contact available when Gravatar is unava
   };
   const events = { onUpdateChanged: vi.fn(() => () => {}) };
   const settings = {
-    resolve: vi.fn(async () => ({ ok: true, value: builtInSetting("automaticUpdateChecks") })),
+    resolve: vi.fn(async (key: SettingKey) => ({ ok: true, value: builtInSetting(key) })),
   };
   vi.stubGlobal("eda", { app: { version, copyText }, avatars: { get }, updates, events, settings });
 

@@ -1,8 +1,17 @@
 export const UPDATE_FEED_BASE = "https://eda.kirameki.cafe/api/updates/v1/stable/";
+export const UPDATE_PRERELEASE_FEED_BASE = "https://eda.kirameki.cafe/api/updates/v1/preview/";
 export const UPDATE_DOWNLOAD_PAGE = "https://eda.kirameki.cafe/download";
 export const UPDATE_PACKAGE_ID = "Eda";
 
 export type UpdatePlatform = "win" | "osx" | "linux";
+
+export function updateFeedUrl(
+  platform: UpdatePlatform,
+  arch: string,
+  includePrereleases: boolean,
+): string {
+  return `${includePrereleases ? UPDATE_PRERELEASE_FEED_BASE : UPDATE_FEED_BASE}${platform}/${arch}/`;
+}
 
 export function updateChannel(platform: UpdatePlatform, arch: string): string {
   return `${platform}-${arch}-stable`;

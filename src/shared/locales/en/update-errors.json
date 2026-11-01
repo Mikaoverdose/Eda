@@ -1,4 +1,5 @@
 {
+  "updates.api.noRelease": "No release has been published for this update channel yet. Try again later.",
   "updates.api.noStableRelease": "No stable release has been published yet. Try again later.",
   "updates.api.releaseTargetNotFound": "No update is available for your platform and architecture yet.",
   "updates.api.unsupportedUpdateTarget": "Updates are not supported for this platform and architecture.",

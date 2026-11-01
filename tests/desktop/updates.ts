@@ -63,6 +63,16 @@ try {
     await page.getByRole("button", { name: "Check for updates", exact: true }).count(),
     0,
   );
+  const prereleases = page.getByRole("checkbox", {
+    name: "Include pre-release updates",
+    exact: true,
+  });
+  assert.equal(await prereleases.isChecked(), true);
+  await prereleases.click();
+  await page.waitForFunction(async () => {
+    const result = await window.eda.settings.resolve("includePrereleaseUpdates", {});
+    return result.ok && result.value.value === false;
+  });
   await page
     .getByRole("checkbox", { name: "Check for updates automatically", exact: true })
     .click();
@@ -91,6 +101,7 @@ try {
       .isChecked(),
     false,
   );
+  assert.equal(await prereleases.isChecked(), false);
 
   await page.getByRole("button", { name: "Components", exact: true }).click();
   const preview = page.locator("#gallery-states");

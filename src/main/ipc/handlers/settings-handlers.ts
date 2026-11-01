@@ -182,7 +182,8 @@ export function registerSettingsHandlers(services: Services): void {
   });
 
   const changed = (key: ReturnType<typeof requireSettingKey>, target: SettingScope) => {
-    if (key === "automaticUpdateChecks") services.updates.refreshSchedule();
+    if (key === "automaticUpdateChecks" || key === "includePrereleaseUpdates")
+      services.updates.refreshSchedule();
     if (key === "uiZoom" || key === "windowTransparency") applyZoom();
     broadcast(IPC_EVENTS.settingChanged, { key, scope: target });
   };

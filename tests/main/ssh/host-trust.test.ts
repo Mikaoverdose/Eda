@@ -1,7 +1,8 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ssh2, { type Connection, type Server } from "ssh2";
+import { createServer, type Server, type Socket } from "node:net";
+import ssh2 from "ssh2";
 import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 import { buildGitEnvironment } from "@main/git/execution/environment";
 import { GitService } from "@main/git/git-service";
@@ -52,6 +53,56 @@ it("releases askpass on cancellation before waiting for the process to close", a
   ).resolves.toMatchObject({ cancelled: true });
 });
 
+it("cancels a queued request without waiting for another operation's modal", async () => {
+  const directories: string[] = [];
+  const confirm = vi.fn(async () => new Promise<boolean>(() => {}));
+  const runner = new SshHostTrustRunner(
+    {
+      run: async (request) => {
+        const directory = request.env["EDA_SSH_TRUST_DIR"]!;
+        const path = join(directory, "request.12345678");
+        await mkdir(path);
+        await writeFile(join(path, "prompt"), prompt);
+        await writeFile(join(path, "ready"), "");
+        directories.push(directory);
+
+        const signal = request.signal!;
+
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        await vi.waitFor(() => expect(access(directory)).rejects.toMatchObject({ code: "ENOENT" }));
+
+        return { exitCode: 130, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), cancelled: true };
+      },
+    },
+    confirm,
+  );
+  const first = new AbortController();
+  const second = new AbortController();
+  const request = { executable: "ssh", args: [], env: { EDA_SSH_HOST_TRUST: "1" } };
+  const pendingFirst = runner.run({ ...request, signal: first.signal });
+  let pendingSecond: ReturnType<typeof runner.run> | undefined;
+
+  try {
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    pendingSecond = runner.run({ ...request, signal: second.signal });
+    await vi.waitFor(() => expect(directories).toHaveLength(2));
+
+    second.abort();
+
+    expect(await pendingSecond).toMatchObject({ cancelled: true });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(first.signal.aborted).toBe(false);
+    await access(directories[0]!);
+  } finally {
+    first.abort();
+    second.abort();
+    await Promise.all([pendingFirst, pendingSecond]);
+  }
+});
+
 it("extracts only the first-contact host and its complete SHA256 fingerprint", () => {
   expect(parseSshHostPrompt(prompt)).toEqual({
     host: "[localhost]:2222 (127.0.0.1)",
@@ -82,7 +133,7 @@ describe("host trust during real SSH connections", () => {
   let wrongHostKey: string;
   let configuredRunner: ProcessRunner;
   let authenticated: number;
-  const clients = new Set<Connection>();
+  const sockets = new Set<Socket>();
 
   beforeEach(async () => {
     home = await mkdtemp(join(tmpdir(), "eda host trust-"));
@@ -125,9 +176,7 @@ describe("host trust during real SSH connections", () => {
         }),
     };
     authenticated = 0;
-    server = new ssh2.Server({ hostKeys: [await readFile(hostKey)] }, (client) => {
-      clients.add(client);
-      client.on("close", () => clients.delete(client));
+    const sshServer = new ssh2.Server({ hostKeys: [await readFile(hostKey)] }, (client) => {
       client.on("error", () => {});
       client.on("authentication", (context) => {
         if (context.method === "publickey") context.accept();
@@ -161,12 +210,18 @@ describe("host trust during real SSH connections", () => {
         });
       });
     });
+
+    server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      sshServer.injectSocket(socket);
+    });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     port = (server.address() as { port: number }).port;
   });
 
   afterEach(async () => {
-    for (const client of clients) client.end();
+    for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     await rm(home, { recursive: true, force: true });
   });
@@ -263,32 +318,5 @@ describe("host trust during real SSH connections", () => {
     expect(await pending).toMatchObject({ cancelled: true });
     expect(promptSignal?.aborted).toBe(true);
     expect(await readFile(knownHosts, "utf8").catch(() => "")).toBe("");
-  });
-
-  it("cancels a queued request without waiting for another operation's modal", async () => {
-    const confirm = vi.fn(async () => new Promise<boolean>(() => {}));
-    const runner = new SshHostTrustRunner(configuredRunner, confirm);
-    const first = new AbortController();
-    const second = new AbortController();
-    const request = {
-      executable: "ssh",
-      args: ["-T", "-o", "StrictHostKeyChecking=ask", "-p", String(port), "git@127.0.0.1"],
-      env: buildGitEnvironment({ overrides: { EDA_SSH_HOST_TRUST: "1" } }),
-    };
-    const pendingFirst = runner.run({ ...request, signal: first.signal });
-    let pendingSecond: ReturnType<typeof runner.run> | undefined;
-    try {
-      await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce(), { timeout: 10_000 });
-      pendingSecond = runner.run({ ...request, signal: second.signal });
-      await vi.waitFor(() => expect(clients.size).toBe(2), { timeout: 10_000 });
-      second.abort();
-      expect(await pendingSecond).toMatchObject({ cancelled: true });
-      expect(confirm).toHaveBeenCalledOnce();
-      expect(first.signal.aborted).toBe(false);
-    } finally {
-      first.abort();
-      second.abort();
-      await Promise.all([pendingFirst, pendingSecond]);
-    }
   });
 });

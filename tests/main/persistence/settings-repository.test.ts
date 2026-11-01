@@ -51,6 +51,19 @@ function setup() {
 }
 
 describe("preference scopes", () => {
+  it("includes pre-release updates by default and persists the application opt-out", () => {
+    const { db, store, work } = setup();
+    const scope = { kind: "application" } as const;
+    expect(store.resolve("includePrereleaseUpdates").value).toBe(true);
+    store.set("includePrereleaseUpdates", scope, false);
+    expect(new SettingsRepository(db).resolve("includePrereleaseUpdates").value).toBe(false);
+    expect(() => store.set("includePrereleaseUpdates", scope, "false")).toThrow();
+    expect(() =>
+      store.set("includePrereleaseUpdates", { kind: "profile", profileId: work.id }, true),
+    ).toThrow();
+    store.reset("includePrereleaseUpdates", scope);
+    expect(store.resolve("includePrereleaseUpdates").value).toBe(true);
+  });
   it("requires explicit, valid repository commit overrides and isolates them by owner", () => {
     const { store, work, home } = setup();
     const context = { profileId: work.id, repositoryId: "repo" };

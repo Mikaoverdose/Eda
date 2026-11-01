@@ -1,6 +1,6 @@
 import { errorFixture } from "../helpers/error";
-import type * as fs from "node:fs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type * as FileSystem from "node:fs";
 
 const startup = vi.hoisted(() => ({
   createServices: vi.fn(),
@@ -14,7 +14,7 @@ const startup = vi.hoisted(() => ({
 }));
 
 vi.mock("node:fs", async (importOriginal) => ({
-  ...(await importOriginal<typeof fs>()),
+  ...(await importOriginal<typeof FileSystem>()),
   existsSync: startup.existsSync,
   mkdirSync: startup.mkdirSync,
   renameSync: startup.renameSync,

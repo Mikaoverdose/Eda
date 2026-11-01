@@ -38,6 +38,20 @@ it("refuses updater commands from a subframe without entering the native service
   expect(mocks.updates.install).not.toHaveBeenCalled();
 });
 
+it("refreshes the update audience after changing or resetting the pre-release preference", async () => {
+  const mocks = setup();
+  const scope = { kind: "application" };
+  expect(
+    await invoke(IPC_CHANNELS.settingsSet, "includePrereleaseUpdates", scope, false),
+  ).toMatchObject({ ok: true });
+  expect(mocks.preferences.set).toHaveBeenCalledWith("includePrereleaseUpdates", scope, false);
+  expect(mocks.updates.refreshSchedule).toHaveBeenCalledOnce();
+  expect(await invoke(IPC_CHANNELS.settingsReset, "includePrereleaseUpdates", scope)).toMatchObject(
+    { ok: true },
+  );
+  expect(mocks.updates.refreshSchedule).toHaveBeenCalledTimes(2);
+});
+
 const electron = vi.hoisted(() => ({
   handle: vi.fn(),
   on: vi.fn(),

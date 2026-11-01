@@ -843,7 +843,7 @@
   "main.updateService.invalidStableReleaseVersion": "Invalid stable release version.",
   "main.updateService.theUpdateCouldNotBeDownloadedTryAgainOrUseTheDownloadPage": "The update could not be downloaded. Try again or use the download page.",
   "main.updateService.theUpdateCouldNotBeVerifiedNothingWas": "The update could not be verified. Nothing was installed. Try checking again later.",
-  "main.updateService.theUpdateServiceIsNotAvailableYetTryAgainLater": "The update service is not available yet. Try again later.",
+  "main.updateService.theUpdateServiceIsNotAvailableYetTryAgainLater": "The update feed or package could not be found. Check the published release files.",
   "main.updateService.useTheDownloadPageToUpdateEda": "Use the download page to update Eda.",
   "main.validate.chooseAFolderUsingTheFolderPicker": "Choose a folder using the folder picker.",
   "main.validate.containsANullByte": "{field} contains a null byte.",

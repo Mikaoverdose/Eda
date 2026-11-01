@@ -1,7 +1,7 @@
 import { t, type MessageKey } from "./i18n";
 
-// Keep these codes in sync with Eda-Website's apps/api/src/errors.ts.
 export const UPDATE_API_ERROR = {
+  NO_RELEASE: "NO_RELEASE",
   NO_STABLE_RELEASE: "NO_STABLE_RELEASE",
   RELEASE_TARGET_NOT_FOUND: "RELEASE_TARGET_NOT_FOUND",
   UNSUPPORTED_UPDATE_TARGET: "UNSUPPORTED_UPDATE_TARGET",
@@ -19,7 +19,9 @@ export const UPDATE_API_ERROR = {
   ROUTE_NOT_FOUND: "ROUTE_NOT_FOUND",
   INVALID_PORT: "INVALID_PORT",
 } as const;
+
 export const UPDATE_API_ERROR_KEYS = {
+  [UPDATE_API_ERROR.NO_RELEASE]: "updates.api.noRelease",
   [UPDATE_API_ERROR.NO_STABLE_RELEASE]: "updates.api.noStableRelease",
   [UPDATE_API_ERROR.RELEASE_TARGET_NOT_FOUND]: "updates.api.releaseTargetNotFound",
   [UPDATE_API_ERROR.UNSUPPORTED_UPDATE_TARGET]: "updates.api.unsupportedUpdateTarget",
