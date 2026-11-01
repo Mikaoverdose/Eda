@@ -173,3 +173,18 @@ it("refetches a missing image", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it("cancels an unread missing-avatar response body", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "eda-avatar-response-"));
+  const cancel = vi.fn();
+  const fetchImage = vi.fn<typeof fetch>(
+    async () => new Response(new ReadableStream({ cancel }), { status: 404 }),
+  );
+  try {
+    const cache = new AvatarCache(join(directory, "avatars"), fetchImage);
+    expect((await cache.getGitHub("7")).dataUrl).toBeNull();
+    expect(cancel).toHaveBeenCalledOnce();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

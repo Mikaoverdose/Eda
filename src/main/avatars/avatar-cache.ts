@@ -187,7 +187,10 @@ export class AvatarCache {
         credentials: "omit",
       });
 
-      if (response.status === 404) return { dataUrl: null, expiresAt: this.now() + 60 * 60_000 };
+      if (response.status === 404) {
+        await response.body?.cancel();
+        return { dataUrl: null, expiresAt: this.now() + 60 * 60_000 };
+      }
 
       const type = response.headers.get("content-type")?.split(";")[0]?.trim();
 
