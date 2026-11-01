@@ -97,7 +97,6 @@ jobs:
           path: |
             release/velopack/*.exe
             release/velopack/*.dmg
-            release/velopack/*.zip
             release/velopack/*.AppImage
             release/velopack/*.nupkg
             release/velopack/releases.*.json

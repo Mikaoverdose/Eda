@@ -101,7 +101,7 @@ if (!args.includes("--dir")) {
     );
   } else if (platform === "win") {
     // Electron's bootstrap lives in JS/N-API rather than the stock Electron executable.
-    packArgs.push("--mainExe", "Eda.exe", "--skipVeloAppCheck");
+    packArgs.push("--mainExe", "Eda.exe", "--skipVeloAppCheck", "--noPortable");
   } else {
     packArgs.push(
       "--noInst",
@@ -204,6 +204,7 @@ if (!args.includes("--dir")) {
     );
 
     await rm(staging, { recursive: true, force: true });
+    await rm(join(output, `Eda-${buildInfo.version}-${channel}-Portable.zip`));
   }
 
   console.log(`Velopack ${sdkVersion}: verified ${channel} packages are in ${output}`);
