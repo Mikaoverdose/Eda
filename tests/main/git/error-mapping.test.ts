@@ -6,6 +6,21 @@ const map = (stderr: string, overrides: Partial<Parameters<typeof mapGitError>[0
   mapGitError({ operation: "push", exitCode: 128, stderr, ...overrides });
 
 describe("mapGitError", () => {
+  it.each([
+    "error: The branch 'feature/new' is not fully merged.",
+    "error: the branch 'feature/new' is not fully merged\nhint: If you are sure you want to delete it, run 'git branch -D feature/new'",
+  ])("explains unmerged branch deletion without exposing Git output: %s", (stderr) => {
+    const error = map(stderr, { operation: "delete branch" });
+
+    expect(error).toMatchObject({
+      kind: "invalid-input",
+      message: "This branch is not fully merged.",
+      suggestedAction: "Merge the branch or review its commits before deleting it.",
+    });
+    expect(error.toData().text?.key).toBe("main.git.errorMapping.thisBranchIsNotFullyMerged");
+    expect(error.toData()).not.toHaveProperty("rawStderr");
+  });
+
   it("explains signing failures without exposing raw signing output", () => {
     expect(map("error: gpg failed to sign the data", { operation: "commit" })).toMatchObject({
       message: "Git could not sign this change with the selected key.",

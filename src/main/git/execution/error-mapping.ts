@@ -94,6 +94,13 @@ const PATTERNS: readonly Pattern[] = [
     suggestedAction: () => errorText("main.git.errorMapping.commitOrStashYourChangesFirst"),
   },
   {
+    kind: "invalid-input",
+    test: /not fully merged/i,
+    message: () => errorText("main.git.errorMapping.thisBranchIsNotFullyMerged"),
+    suggestedAction: () =>
+      errorText("main.git.errorMapping.mergeTheBranchOrReviewItsCommitsBeforeDeletingIt"),
+  },
+  {
     kind: "no-upstream",
     test: /no upstream (branch|configured)|there is no tracking information|no configured push destination|does not appear to be a git repository.*\n.*please make sure/i,
     message: () => errorText("main.git.errorMapping.thisBranchIsNotTrackingARemoteBranch"),

@@ -81,7 +81,14 @@ describe("branches against real Git", () => {
     await repo.commit("on branch");
     await repo.git.checkoutBranch(repo.path, "main");
 
-    await expect(repo.git.deleteBranch(repo.path, "unmerged")).rejects.toBeInstanceOf(GitError);
+    await expect(repo.git.deleteBranch(repo.path, "unmerged")).rejects.toMatchObject({
+      kind: "invalid-input",
+      message: "This branch is not fully merged.",
+    });
+    expect((await repo.git.listBranches(repo.path)).map((branch) => branch.name)).toContain(
+      "unmerged",
+    );
+
     await expect(
       repo.git.deleteBranch(repo.path, "unmerged", { force: true }),
     ).resolves.toBeUndefined();
