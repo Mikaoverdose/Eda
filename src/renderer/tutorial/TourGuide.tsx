@@ -1,6 +1,8 @@
 import { t } from "@shared/i18n";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Coachmark, Spotlight } from "../components/ui/overlays/Spotlight";
+import { POPOVER_SURFACE_STYLE } from "../components/ui/overlays/PopoverSurface";
 import { placeGuide } from "./placement";
 import { Button, TextButton } from "../components/ui/index";
 import type { TourStep } from "./steps";
@@ -26,6 +28,7 @@ export function TourGuide({
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
   const [bounds, setBounds] = useState<DOMRect | null>(null);
+  const [hintBounds, setHintBounds] = useState<DOMRect | null>(null);
   const [done, setDone] = useState(false);
   const announcedReady = useRef(false);
   const previous = useRef<TourStep>(undefined);
@@ -85,6 +88,12 @@ export function TourGuide({
         }
       }
       const rect = target?.getBoundingClientRect();
+      const hintRect = step.hintTarget
+        ? document
+            .querySelector<HTMLElement>(`[data-tour="${step.hintTarget}"]`)
+            ?.getBoundingClientRect()
+        : rect;
+      setHintBounds(hintRect && hintRect.width > 0 && hintRect.height > 0 ? hintRect : null);
       const completed = complete(step);
       if (rect && rect.width > 0 && rect.height > 0) setBounds(rect);
       else if (!completed) setBounds(null);
@@ -136,9 +145,42 @@ export function TourGuide({
   }, [autoPending, index, step, steps.length, onFinish]);
 
   const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const hintCenter = hintBounds ? hintBounds.left + hintBounds.width / 2 : 0;
+  const hintLeft = Math.max(120, Math.min(hintCenter, viewport.width - 120));
+  const arrowStyle = { marginLeft: (hintCenter - hintLeft) * 2 };
   return (
     <>
       <Spotlight bounds={bounds} viewport={viewport} />
+      {ready && step.task && !done && hintBounds && (
+        <div
+          className="pointer-events-none fixed z-[105] flex flex-col items-center gap-1 text-accent"
+          style={{
+            left: hintLeft,
+            top:
+              hintBounds.top >= 64
+                ? hintBounds.top - 60
+                : Math.min(hintBounds.bottom - 8, viewport.height - 64),
+            transform: "translateX(-50%)",
+          }}
+        >
+          <div
+            className="ui-tour-click-hint flex w-56 flex-col items-center gap-1 font-ui text-xs leading-normal tracking-tight"
+            data-direction={hintBounds.top < 64 ? "up" : "down"}
+          >
+            {hintBounds.top < 64 && (
+              <ArrowUp style={arrowStyle} aria-hidden="true" size={28} strokeWidth={2} />
+            )}
+            <span
+              className={`${POPOVER_SURFACE_STYLE} max-w-[calc(100vw-2rem)] px-3 py-1 text-center font-medium`}
+            >
+              {t(step.hintLabel ?? "tutorial.tourGuide.clickHighlightedArea")}
+            </span>
+            {hintBounds.top >= 64 && (
+              <ArrowDown style={arrowStyle} aria-hidden="true" size={28} strokeWidth={2} />
+            )}
+          </div>
+        </div>
+      )}
       <Coachmark
         ref={card}
         label={t("tutorial.tourGuide.guidedTour")}

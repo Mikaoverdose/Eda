@@ -31,6 +31,7 @@ export function CommitRow({
 
   return (
     <ButtonBase
+      data-tour="history-commit"
       aria-pressed={selected}
       title={t("history.commitRow.parents", {
         subject: row.commit.subject,

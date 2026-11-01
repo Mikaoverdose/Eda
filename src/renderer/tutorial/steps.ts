@@ -1,8 +1,10 @@
-import { t } from "@shared/i18n";
+import { t, type MessageKey } from "@shared/i18n";
 export type TourScene = "empty" | "home" | "repository" | "commit" | "diff";
 export interface TourStep {
   id: string;
   target: string;
+  hintTarget?: string;
+  hintLabel?: MessageKey;
   title: string;
   description: string;
   scene: TourScene;
@@ -46,6 +48,8 @@ export const welcomeTour: readonly TourStep[] = [
     id: "stage",
     setup: "reset-changes",
     target: "changes",
+    hintTarget: "stage-all",
+    hintLabel: "tutorial.tourGuide.clickStageAll",
     title: t("tutorial.steps.chooseWhatGoesIntoACommit"),
     description: t("tutorial.steps.selectFilesThenStageThemOrChooseStageAll"),
     scene: "repository",
@@ -62,6 +66,8 @@ export const welcomeTour: readonly TourStep[] = [
   {
     id: "inspect",
     target: "history",
+    hintTarget: "history-commit",
+    hintLabel: "tutorial.tourGuide.clickCommit",
     title: t("tutorial.steps.lookInsideACommit"),
     description: t("tutorial.steps.eachRowIsACommitSelectOneToSeeItsChangedFiles"),
     scene: "repository",
@@ -71,6 +77,8 @@ export const welcomeTour: readonly TourStep[] = [
   {
     id: "files",
     target: "commit-files",
+    hintTarget: "commit-file-readme",
+    hintLabel: "tutorial.tourGuide.clickReadme",
     title: t("tutorial.steps.pickAChangedFile"),
     description: t("tutorial.steps.selectReadmeMdToSeeWhatChanged"),
     scene: "commit",

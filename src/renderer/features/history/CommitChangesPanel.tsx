@@ -164,6 +164,7 @@ export function CommitChangesPanel() {
             return (
               <ButtonBase
                 key={path}
+                data-tour={path === "README.md" ? "commit-file-readme" : undefined}
                 aria-label={t("commitChangesPanel.viewCommitDiffFor", { path: path })}
                 aria-pressed={selectedPath === path}
                 title={`${stateLabel(file.status)}: ${renamed ? t("commitChangesPanel.to", { oldPath: file.oldPath, path: path }) : path}`}

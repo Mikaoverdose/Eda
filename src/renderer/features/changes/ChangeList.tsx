@@ -85,6 +85,7 @@ export function ChangeList({
                     size="sm"
                     variant="secondary"
                     disabled={writing}
+                    data-tour={row.area === "unstaged" ? "stage-all" : undefined}
                     onClick={() =>
                       void (row.area === "staged"
                         ? onUnstage(categories.staged.map((c) => c.path))

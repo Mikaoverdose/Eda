@@ -704,3 +704,29 @@ html[data-reduced-motion="true"] .welcome-commit-popup {
   opacity: 1;
   pointer-events: auto;
 }
+
+.ui-tour-click-hint {
+  --tour-hint-travel: 6px;
+  animation: ui-tour-click-hint-bounce 1.2s ease-in-out infinite;
+}
+
+.ui-tour-click-hint[data-direction="up"] {
+  --tour-hint-travel: -6px;
+}
+
+@keyframes ui-tour-click-hint-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(var(--tour-hint-travel));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-tour-click-hint {
+    animation: none;
+  }
+}
