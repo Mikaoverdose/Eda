@@ -1,6 +1,7 @@
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { isOneOf, isRecord } from "@shared/validation";
 import {
   isGitHubHttps,
   type GitHubAccountProfile,
@@ -200,29 +201,32 @@ export class GitHubAuth {
       if (
         !Array.isArray(installations) ||
         installations.length > 10 ||
+        typeof total !== "number" ||
         !Number.isSafeInteger(total) ||
-        (total as number) < installations.length
+        total < installations.length
       )
         throw fail(
           errorText("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"),
         );
       for (const value of installations) {
-        if (!value || typeof value !== "object")
+        if (!isRecord(value))
           throw fail(
             errorText("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"),
           );
-        const installation = value as Record<string, unknown>;
-        const owner = installation["account"] as Record<string, unknown> | null;
-        const permissions = installation["permissions"] as Record<string, unknown> | null;
+        const installation = value;
+        const owner = installation["account"];
+        const permissions = installation["permissions"];
         if (
           installation["suspended_at"] === null &&
-          ["read", "write"].includes(String(permissions?.["contents"])) &&
-          typeof owner?.["login"] === "string" &&
+          isRecord(permissions) &&
+          isOneOf(permissions["contents"], ["read", "write"]) &&
+          isRecord(owner) &&
+          typeof owner["login"] === "string" &&
           /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner["login"])
         )
           accounts.add(owner["login"]);
       }
-      if (page * 10 >= (total as number)) {
+      if (page * 10 >= total) {
         if (authorized && accounts.size) await this.commit(authorized);
         return {
           accountId: authorized?.accountId ?? account!.accountId,
@@ -549,17 +553,28 @@ export class GitHubAuth {
     const raw = await this.secrets.get(account.credentialRef);
     try {
       const value: unknown = raw ? JSON.parse(raw) : null;
-      if (value && typeof value === "object") {
-        const token = value as Record<string, unknown>;
+      if (isRecord(value)) {
+        const accessToken = text(value["accessToken"]);
+        const clientId = text(value["clientId"]);
+        const expiresAt = value["expiresAt"];
+        const refreshToken = text(value["refreshToken"]);
+        const refreshExpiresAt = value["refreshExpiresAt"];
         if (
-          text(token["accessToken"]) &&
-          text(token["clientId"]) &&
-          (token["expiresAt"] === undefined || Number.isSafeInteger(token["expiresAt"])) &&
-          (token["refreshToken"] === undefined || text(token["refreshToken"])) &&
-          (token["refreshExpiresAt"] === undefined ||
-            Number.isSafeInteger(token["refreshExpiresAt"]))
+          accessToken &&
+          clientId &&
+          (expiresAt === undefined ||
+            (typeof expiresAt === "number" && Number.isSafeInteger(expiresAt))) &&
+          (value["refreshToken"] === undefined || refreshToken !== undefined) &&
+          (refreshExpiresAt === undefined ||
+            (typeof refreshExpiresAt === "number" && Number.isSafeInteger(refreshExpiresAt)))
         )
-          return token as unknown as Tokens;
+          return {
+            accessToken,
+            clientId,
+            ...(expiresAt !== undefined ? { expiresAt } : {}),
+            ...(refreshToken !== undefined ? { refreshToken } : {}),
+            ...(refreshExpiresAt !== undefined ? { refreshExpiresAt } : {}),
+          };
       }
     } catch {}
     return this.expired(account);
@@ -662,9 +677,7 @@ export class GitHubAuth {
           Accept: "application/json",
           "User-Agent": "Eda",
           ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
-          ...(accessToken
-            ? { Authorization: t("main.providers.githubAuth.bearer", { accessToken: accessToken }) }
-            : {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         ...(form ? { body: new URLSearchParams(form).toString() } : {}),
       });
@@ -695,9 +708,9 @@ export class GitHubAuth {
         await reader.cancel();
       }
       const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      if (!value || typeof value !== "object" || Array.isArray(value))
+      if (!isRecord(value))
         throw fail(errorText("main.providers.githubAuth.gitHubReturnedAnInvalidResponse"));
-      return value as Record<string, unknown>;
+      return value;
     } catch (error) {
       if (error instanceof GitError) throw error;
       throw fail(

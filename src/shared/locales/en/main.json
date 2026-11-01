@@ -438,7 +438,6 @@
   "main.profileHandlers.invalidDuplicateOptions": "Invalid duplicate options.",
   "main.profileHandlers.invalidGitSynchronizationPreference": "Invalid Git synchronization preference.",
   "main.profileHandlers.selectAnAvailableGpgSigningKey": "Select an available GPG signing key.",
-  "main.providers.githubAuth.bearer": "Bearer {accessToken}",
   "main.providers.githubAuth.connectAGitHubAccountFirst": "Connect a GitHub account first.",
   "main.providers.githubAuth.couldNotReachGitHubCheckYourConnectionAndTrySigningInAgain": "Could not reach GitHub. Check your connection and try signing in again.",
   "main.providers.githubAuth.edaSGitHubAppClientIdIsInvalidCheckTheAppRegistrationAndRebuild": "Eda’s GitHub App Client ID is invalid. Check the app registration and rebuild.",

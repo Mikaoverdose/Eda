@@ -582,3 +582,22 @@ describe("GitHub device OAuth", () => {
     expect(ctx.service.status(ctx.profile.id).account?.state).toBe("expired");
   });
 });
+
+it("does not treat an array permission as repository read access", async () => {
+  const ctx = setup();
+  await ctx.authorize();
+  ctx.fetch.mockResolvedValueOnce(
+    json({
+      total_count: 1,
+      installations: [
+        {
+          account: { login: "team" },
+          permissions: { contents: ["read"] },
+          suspended_at: null,
+        },
+      ],
+    }),
+  );
+  expect((await ctx.service.repositoryAccess(ctx.profile.id)).accounts).toEqual([]);
+  expect(ctx.accounts.find(ctx.profile.id)).toBeUndefined();
+});
