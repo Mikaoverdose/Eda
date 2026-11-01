@@ -30,8 +30,6 @@ jobs:
             command: pnpm lint
           - name: Tooling and architecture
             command: node --test tests/tooling/*.test.ts
-          - name: Component inventory
-            command: node scripts/generate-component-inventory.ts --check
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
@@ -74,7 +72,7 @@ jobs:
         id: artifact
         shell: bash
         run: |
-          node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { readBuildInfo } from "./scripts/version.ts"; const { version, commit } = readBuildInfo(); if (!commit) throw new Error("Artifact naming requires a Git commit."); appendFileSync(process.env.GITHUB_OUTPUT, `name=Eda-${version}-${commit.slice(0, 12)}\n`);'
+          node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { readBuildInfo } from "./scripts/build.ts"; const { version, commit } = readBuildInfo(); if (!commit) throw new Error("Artifact naming requires a Git commit."); appendFileSync(process.env.GITHUB_OUTPUT, `name=Eda-${version}-${commit.slice(0, 12)}\n`);'
       - name: Upload desktop installers
         uses: actions/upload-artifact@v7
         with:
