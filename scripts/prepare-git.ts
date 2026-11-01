@@ -46,7 +46,11 @@ export async function pruneCredentialManager(root: string): Promise<void> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   const directories = new Set(
     entries
-      .filter((entry) => /^git-credential-manager(?:\.exe|\.deps\.json)?$/.test(entry.name))
+      .filter(
+        (entry) =>
+          (entry.isFile() || entry.isSymbolicLink()) &&
+          /^git-credential-manager(?:\.exe|\.deps\.json)?$/.test(entry.name),
+      )
       .map((entry) => entry.parentPath),
   );
 

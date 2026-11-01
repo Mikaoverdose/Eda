@@ -97,3 +97,26 @@ test("prunes the Linux single-file GCM without a .NET manifest", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("keeps Windows documentation directories named git-credential-manager", async () => {
+  const root = await mkdtemp(join(tmpdir(), "eda-gcm-windows-test-"));
+  const binaries = join(root, "ucrt64/bin");
+  const documentation = join(root, "ucrt64/doc/git-credential-manager");
+
+  try {
+    await mkdir(binaries, { recursive: true });
+    await mkdir(documentation, { recursive: true });
+    await writeFile(join(binaries, "git-credential-manager.exe"), "fixture");
+    await writeFile(join(binaries, "git.exe"), "fixture");
+    await writeFile(join(documentation, "README.md"), "fixture");
+
+    await pruneCredentialManager(root);
+
+    await assert.rejects(access(join(binaries, "git-credential-manager.exe")), { code: "ENOENT" });
+    await access(join(binaries, "git.exe"));
+    await access(join(documentation, "README.md"));
+    await pruneCredentialManager(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
