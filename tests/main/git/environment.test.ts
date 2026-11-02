@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { delimiter } from "node:path";
 import { buildGitEnvironment, buildSshCommand } from "@main/git/execution/environment";
 
+const searchPath = process.platform === "win32" ? "C:\\Windows\\System32" : "/usr/bin";
 const source = {
-  PATH: "/usr/bin",
+  PATH: searchPath,
   HOME: "/home/dev",
   SSH_AUTH_SOCK: "/run/agent.sock",
   GIT_AUTHOR_NAME: "Leaked Author",
@@ -16,9 +18,18 @@ const source = {
 describe("buildGitEnvironment", () => {
   it("passes through only the allow-listed variables", () => {
     const env = buildGitEnvironment({}, source);
-    expect(env["PATH"]).toBe("/usr/bin");
+    expect(env["PATH"]).toBe(searchPath);
     expect(env["HOME"]).toBe("/home/dev");
     expect(env["SSH_AUTH_SOCK"]).toBe("/run/agent.sock");
+  });
+
+  it.each(["source", "overrides"] as const)("removes relative PATH entries from %s", (input) => {
+    const path = ["", ".", "relative", searchPath].join(delimiter);
+    const env =
+      input === "source"
+        ? buildGitEnvironment({}, { ...source, PATH: path })
+        : buildGitEnvironment({ overrides: { PATH: path } }, source);
+    expect(env["PATH"]).toBe(searchPath);
   });
 
   it("retains the machine data root required by Windows OpenSSH signing", () => {
@@ -94,7 +105,7 @@ describe("buildGitEnvironment", () => {
   });
 
   it("sets DISPLAY alongside SSH_ASKPASS, which OpenSSH requires to use the helper", () => {
-    const env = buildGitEnvironment({ askpassPath: "/tmp/askpass.sh" }, { PATH: "/usr/bin" });
+    const env = buildGitEnvironment({ askpassPath: "/tmp/askpass.sh" }, { PATH: searchPath });
     expect(env["SSH_ASKPASS"]).toBe("/tmp/askpass.sh");
     expect(env["SSH_ASKPASS_REQUIRE"]).toBe("force");
     expect(env["DISPLAY"]).toBe(":0");
@@ -118,7 +129,7 @@ describe("buildGitEnvironment", () => {
   });
 
   it("omits allow-listed keys that are absent from the source", () => {
-    const env = buildGitEnvironment({}, { PATH: "/usr/bin" });
+    const env = buildGitEnvironment({}, { PATH: searchPath });
     expect("HOME" in env).toBe(false);
   });
 });
