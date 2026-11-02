@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, Menu, session, shell } from "electron";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { restoreShellPath } from "./git/execution/shell-path";
 import { configureGraphics } from "./application/graphics";
 import { registerWindowRecovery } from "./application/window-recovery";
 import { registerIpcHandlers } from "./ipc/register";
@@ -153,6 +154,7 @@ async function start(): Promise<void> {
       });
     });
 
+    await restoreShellPath();
     const services = await createServices();
 
     navigation = services.navigation;
