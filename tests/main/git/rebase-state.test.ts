@@ -19,7 +19,7 @@ it("refuses saved shell instructions even when Git's sequence editor is disabled
   await repo.git.exec(["rebase", "--interactive", base], {
     cwd: repo.path,
     operation: "pause rebase",
-    env: { overrides: { GIT_SEQUENCE_EDITOR: "sed -i '1s/^pick/edit/'", GIT_EDITOR: "true" } },
+    env: { overrides: { GIT_SEQUENCE_EDITOR: "sed -i.bak '1s/^pick/edit/'", GIT_EDITOR: "true" } },
   });
   const todo = join(repo.path, ".git/rebase-merge/git-rebase-todo");
   const marker = join(repo.home, "executed");
