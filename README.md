@@ -25,6 +25,12 @@ Follow a project through its visual commit history, then move straight into revi
 > [!WARNING]
 > Eda is in active development. Expect bugs, incomplete features, and breaking changes. Please report any issues you encounter. Feedback is welcome!
 
+### Download
+
+[Download Eda](https://eda.kirameki.cafe/download) for Windows, macOS, and Linux. See [GitHub Releases](https://github.com/YuzuZensai/Eda/releases) for release notes.
+
+### Run from source
+
 To run from source, install [Node.js 24+](https://nodejs.org/) and [pnpm](https://pnpm.io/), then:
 
 ```sh
