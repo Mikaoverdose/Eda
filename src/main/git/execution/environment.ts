@@ -88,7 +88,13 @@ export function buildGitEnvironment(
   }
 
   Object.assign(env, options.overrides ?? {});
-  if (env["PATH"] !== undefined) env["PATH"] = absoluteSearchPath(env["PATH"]);
+  if (env["PATH"] !== undefined) {
+    env["PATH"] =
+      absoluteSearchPath(env["PATH"]) ||
+      (process.platform === "win32"
+        ? `${env["SystemRoot"] ?? "C:\\Windows"}\\System32`
+        : "/usr/bin:/bin");
+  }
 
   return env;
 }

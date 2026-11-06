@@ -99,7 +99,11 @@ export async function prepareGit(platform: string = process.platform, arch: stri
   try {
     const installed = JSON.parse(await readFile(join(destination, "eda-bundle.json"), "utf8"));
     await access(join(destination, target.executable));
-    if (installed.sha256 === target.sha256 && installed.bundleLayout === bundleLayout)
+    if (
+      process.env["EDA_RELEASE"] !== "1" &&
+      installed.sha256 === target.sha256 &&
+      installed.bundleLayout === bundleLayout
+    )
       return destination;
   } catch {}
 
@@ -123,7 +127,7 @@ export async function prepareGit(platform: string = process.platform, arch: stri
       if (!response.ok || !response.body)
         throw new Error(`Git download failed: HTTP ${response.status}`);
 
-      await pipeline(response.body, createWriteStream(partial));
+      await pipeline(response.body, createWriteStream(partial, { flags: "wx", mode: 0o600 }));
       await verifyArchive(partial, target.sha256);
       await rename(partial, archive);
     } finally {

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { userInfo } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { isAbsolute } from "node:path";
 import { absoluteSearchPath } from "./executable";
 
@@ -19,7 +19,7 @@ export async function restoreShellPath(
       execFile(
         shell,
         ["-ilc", `printf '\\n${marker}\\n'; /usr/bin/printenv PATH; printf '${marker}\\n'`],
-        { env, encoding: "utf8", timeout: 5_000, maxBuffer: 1024 * 1024 },
+        { env, cwd: homedir(), encoding: "utf8", timeout: 5_000, maxBuffer: 1024 * 1024 },
         (error, stdout) => (error ? reject(error) : resolve(stdout)),
       );
     });

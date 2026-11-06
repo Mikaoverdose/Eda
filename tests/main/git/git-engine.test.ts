@@ -41,8 +41,8 @@ describe("resolving the Git engine", () => {
     const apple = await resolveGitEngine(version("git version 2.44.5 (Apple Git-154)\n"));
     expect(apple.versionParts).toMatchObject({ major: 2, minor: 44, patch: 5 });
 
-    const windows = await resolveGitEngine(version("git version 2.47.3.windows.1\n"));
-    expect(windows.versionParts).toMatchObject({ major: 2, minor: 47, patch: 3 });
+    const windows = await resolveGitEngine(version("git version 2.56.0.windows.4\n"));
+    expect(windows.versionParts).toMatchObject({ major: 2, minor: 56, patch: 0 });
   });
 
   it("probes with an isolated config so a user gitconfig cannot change the answer", async () => {
@@ -124,14 +124,22 @@ describe("engine preference", () => {
 });
 
 describe("when no engine works", () => {
-  it.each(["2.44.0", "2.44.3", "2.45.3", "2.46.3", "2.47.2", "2.48.1", "2.49.0", "2.50.0"])(
-    "rejects unpatched Git %s",
-    async (release) => {
-      await expect(resolveGitEngine(version(`git version ${release}`))).rejects.toMatchObject({
-        kind: "git-not-found",
-      });
-    },
-  );
+  it.each([
+    "2.56.0.windows.3",
+    "2.55.0.windows.1",
+    "2.44.0",
+    "2.44.3",
+    "2.45.3",
+    "2.46.3",
+    "2.47.2",
+    "2.48.1",
+    "2.49.0",
+    "2.50.0",
+  ])("rejects unpatched Git %s", async (release) => {
+    await expect(resolveGitEngine(version(`git version ${release}`))).rejects.toMatchObject({
+      kind: "git-not-found",
+    });
+  });
 
   it.each(["2.44.4", "2.45.4", "2.46.4", "2.47.3", "2.48.2", "2.49.1", "2.50.1", "2.56.0"])(
     "accepts patched Git %s",

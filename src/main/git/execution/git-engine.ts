@@ -19,6 +19,7 @@ export interface ResolveEngineOptions {
   bundledEnvironment?: Readonly<Record<string, string>>;
 }
 
+const MINIMUM_WINDOWS_BUILD = 4;
 const MINIMUM_VERSION = { major: 2, minor: 44, patch: 4 };
 const SECURITY_PATCHES: Readonly<Record<number, number>> = {
   44: 4,
@@ -139,13 +140,23 @@ async function probeVersion(
     patch: Number(match[3] ?? 0),
   };
 
-  if (isOlderThanMinimum(versionParts)) {
+  const windowsBuild = /\.windows\.(\d+)/.exec(stdout);
+  const oldWindows =
+    windowsBuild &&
+    versionParts.major === 2 &&
+    (versionParts.minor < 56 ||
+      (versionParts.minor === 56 &&
+        versionParts.patch === 0 &&
+        Number(windowsBuild[1]) < MINIMUM_WINDOWS_BUILD));
+  if (oldWindows || isOlderThanMinimum(versionParts)) {
     const minimum = minimumFor(versionParts);
     throw new AppError(
       errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.GIT_VERSION_UNSUPPORTED], {
         major: versionParts.major,
         minor: versionParts.minor,
-        minimumVersion: `${minimum.major}.${minimum.minor}.${minimum.patch}`,
+        minimumVersion: oldWindows
+          ? [2, 56, 0, "windows", MINIMUM_WINDOWS_BUILD].join(".")
+          : `${minimum.major}.${minimum.minor}.${minimum.patch}`,
       }),
     );
   }
