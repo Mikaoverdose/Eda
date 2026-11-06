@@ -26,6 +26,7 @@ export function registerApplicationHandlers(services: Services): void {
   });
 
   handle(IPC_CHANNELS.appGraphicsStatus, async () => ok(graphicsStatus()));
+  handle(IPC_CHANNELS.appInstallation, async () => ok(services.installation));
 
   handle(IPC_CHANNELS.appDebug, async (event, action) => {
     if (

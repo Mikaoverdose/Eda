@@ -43,6 +43,12 @@ export async function assertCompositorMotion(page: Page): Promise<void> {
               continue;
             if (rule.selectorText === ".welcome-route" && property === "stroke-dashoffset")
               continue;
+            if (
+              (rule.selectorText === ".ui-spotlight-motion" &&
+                ["left", "top", "width", "height"].includes(property)) ||
+              (rule.selectorText === ".ui-coachmark-motion" && ["left", "top"].includes(property))
+            )
+              continue;
 
             if (discrete.has(property) && behaviors[index % behaviors.length] === "allow-discrete")
               continue;
@@ -65,6 +71,6 @@ export async function assertCompositorMotion(page: Page): Promise<void> {
   assert.deepEqual(
     audit.violations,
     [],
-    "Motion must use shared presets; only disclosures and decorative SVG routes may interpolate layout or paint.",
+    "Motion must use shared presets; only disclosures, tour positioning and decorative SVG routes may interpolate layout or paint.",
   );
 }

@@ -1,13 +1,20 @@
+import { PACKAGE_MANAGER_NAMES } from "@shared/application";
 import { t } from "@shared/i18n";
 import type { UpdatePhase } from "@shared/updates";
-import { Button, NoticeBanner, RangeField, Select } from "../../../components/ui/index";
-import { useSimulationStore, type GitIdentitySimulation } from "../../../stores/simulation-store";
+import { Button, RangeField, Select } from "../../../components/ui/index";
+import { openSettings } from "../../../commands/open-settings";
+import {
+  useSimulationStore,
+  type GitIdentitySimulation,
+  type UpdateInstallationSimulation,
+} from "../../../stores/simulation-store";
 import { useAppStore } from "../../../stores/app-store";
-import { UpdateStatus } from "../../updates/UpdatesSettings";
 
 export function StateSimulations() {
   const state = useSimulationStore((simulation) => simulation.update);
   const setPhase = useSimulationStore((simulation) => simulation.setUpdatePhase);
+  const installation = useSimulationStore((simulation) => simulation.updateInstallation);
+  const setInstallation = useSimulationStore((simulation) => simulation.setUpdateInstallation);
   const gitIdentity = useSimulationStore((simulation) => simulation.gitIdentity);
   const setGitIdentity = useSimulationStore((simulation) => simulation.setGitIdentity);
   const profile = useAppStore((state) => state.activeIdentity);
@@ -24,70 +31,87 @@ export function StateSimulations() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      {(state || gitIdentity) && (
-        <Button onClick={() => useSimulationStore.getState().reset()}>
-          {t("settings.stateSimulations.resetAll")}
-        </Button>
-      )}
-
       <section aria-labelledby="update-simulation-heading" className="space-y-4">
-        <h2 id="update-simulation-heading" className="text-sm font-medium">
-          {t("settings.stateSimulations.appUpdates")}
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="update-simulation-heading" className="text-sm font-medium">
+            {t("settings.stateSimulations.appUpdates")}
+          </h2>
+
+          {(state || gitIdentity) && (
+            <Button size="sm" variant="quiet" onClick={() => useSimulationStore.getState().reset()}>
+              {t("settings.stateSimulations.resetAll")}
+            </Button>
+          )}
+        </div>
 
         <p className="text-sm text-text-secondary">{t("settings.stateSimulations.description")}</p>
 
-        <label className="block space-y-2 text-sm">
-          {t("settings.stateSimulations.updateState")}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block space-y-2 text-sm">
+            {t("settings.stateSimulations.updateState")}
 
-          <Select
-            aria-label={t("settings.stateSimulations.updateState")}
-            className="w-full"
-            value={state?.phase ?? "live"}
-            onValueChange={(value) => setPhase(value === "live" ? null : (value as UpdatePhase))}
-          >
-            <option value="live">{t("settings.stateSimulations.useLiveStatus")}</option>
+            <Select
+              aria-label={t("settings.stateSimulations.updateState")}
+              className="w-full"
+              value={state?.phase ?? "live"}
+              onValueChange={(value) => setPhase(value === "live" ? null : (value as UpdatePhase))}
+            >
+              <option value="live">{t("settings.stateSimulations.useLiveStatus")}</option>
 
-            {phases.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </label>
+              {phases
+                .filter(
+                  ({ value }) =>
+                    installation === "direct" ||
+                    !["downloading", "ready", "installing"].includes(value),
+                )
+                .map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+            </Select>
+          </label>
 
-        {state && (
-          <div className="space-y-4 rounded-md border border-border-subtle bg-bg-surface p-4">
-            <UpdateStatus
-              state={state}
-              actions={{
-                check: async () => useSimulationStore.getState().runUpdateAction("check"),
-                download: async () => useSimulationStore.getState().runUpdateAction("download"),
-                install: async () => useSimulationStore.getState().runUpdateAction("install"),
-              }}
+          <label className="block space-y-2 text-sm">
+            {t("settings.stateSimulations.installationMethod")}
+
+            <Select
+              aria-label={t("settings.stateSimulations.installationMethod")}
+              className="w-full"
+              disabled={!state}
+              value={installation}
+              onValueChange={(value) => setInstallation(value as UpdateInstallationSimulation)}
+            >
+              <option value="direct">{t("settings.aboutSettings.installationDirect")}</option>
+
+              {Object.entries(PACKAGE_MANAGER_NAMES).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+
+        {state?.phase === "downloading" && (
+          <div className="space-y-3">
+            <RangeField
+              label={t("settings.stateSimulations.downloadProgress")}
+              value={state.progress?.percent ?? 0}
+              onPreview={(percent) => useSimulationStore.getState().setDownloadProgress(percent)}
+              onCommit={(percent) => useSimulationStore.getState().setDownloadProgress(percent)}
             />
 
-            {state.phase === "downloading" && (
-              <div className="space-y-3">
-                <RangeField
-                  label={t("settings.stateSimulations.downloadProgress")}
-                  value={state.progress?.percent ?? 0}
-                  onPreview={(percent) =>
-                    useSimulationStore.getState().setDownloadProgress(percent)
-                  }
-                  onCommit={(percent) => useSimulationStore.getState().setDownloadProgress(percent)}
-                />
-
-                <Button onClick={() => setPhase("ready")}>
-                  {t("settings.componentPreviews.previewCompletedDownload")}
-                </Button>
-              </div>
-            )}
-
-            <Button onClick={() => setPhase(null)}>
-              {t("settings.stateSimulations.resetPreview")}
+            <Button size="sm" onClick={() => setPhase("ready")}>
+              {t("settings.componentPreviews.previewCompletedDownload")}
             </Button>
           </div>
+        )}
+
+        {state && (
+          <Button size="sm" variant="secondary" onClick={() => openSettings("about")}>
+            {t("appUpdateNotice.viewUpdate")}
+          </Button>
         )}
       </section>
 
@@ -129,19 +153,13 @@ export function StateSimulations() {
         )}
 
         {gitIdentity && (
-          <div className="space-y-4 rounded-md border border-border-subtle bg-bg-surface p-4">
-            {gitIdentity === "matched" ? (
-              <NoticeBanner>{t("settings.stateSimulations.identityMatches")}</NoticeBanner>
-            ) : (
-              <p role="status" className="text-sm text-text-secondary">
-                {t("settings.stateSimulations.gitWarningInTopBar")}
-              </p>
+          <p role="status" className="text-sm text-text-secondary">
+            {t(
+              gitIdentity === "matched"
+                ? "settings.stateSimulations.identityMatches"
+                : "settings.stateSimulations.gitWarningInTopBar",
             )}
-
-            <Button onClick={() => setGitIdentity(null)}>
-              {t("settings.stateSimulations.resetPreview")}
-            </Button>
-          </div>
+          </p>
         )}
       </section>
     </div>

@@ -1,4 +1,4 @@
-import type { DesktopPlatform, GraphicsStatus } from "./application";
+import type { DesktopPlatform, GraphicsStatus, InstallationInfo } from "./application";
 import type { GitEngineInfo } from "./integrations/git-engine";
 import type { AvatarImage } from "./identity/avatar";
 import type { BuildInfo } from "./version";
@@ -283,6 +283,7 @@ export interface EdaApi {
   };
   app: {
     readonly version: BuildInfo;
+    installation(): Promise<Result<InstallationInfo>>;
     copyText(value: string): Promise<Result<void>>;
     debug(
       action: "open-dev-tools" | "ipc-error" | "renderer-crash" | "reset-data",
@@ -526,6 +527,7 @@ export const IPC_CHANNELS = {
   appDetectMergeTools: "app:detect-merge-tools",
   appChooseMergeTool: "app:choose-merge-tool",
   appGraphicsStatus: "app:graphics-status",
+  appInstallation: "app:installation",
   appDetectEditors: "app:detect-editors",
   appChooseEditor: "app:choose-editor",
   repositoryOpenEditor: "repository:open-editor",

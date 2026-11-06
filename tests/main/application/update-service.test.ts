@@ -54,6 +54,54 @@ function fixture(overrides: Partial<UpdateOptions> = {}) {
 
 afterEach(() => vi.useRealTimers());
 
+it("checks managed releases on schedule, preserves ownership, and rejects all in-app replacements", async () => {
+  vi.useFakeTimers();
+  let enabled = true;
+  let preview = false;
+  const checkRelease = vi.fn(async () => ({ available: true, release }));
+  const { service, driver, options } = fixture({
+    capability: "managed",
+    reason: "Managed by Homebrew.",
+    automaticChecks: () => enabled,
+    includePrereleases: () => preview,
+    checkRelease,
+  });
+
+  service.start();
+  await vi.advanceTimersByTimeAsync(UPDATE_STARTUP_DELAY);
+  expect(service.snapshot()).toMatchObject({
+    phase: "available",
+    reason: "Managed by Homebrew.",
+    release,
+  });
+  expect(checkRelease).toHaveBeenLastCalledWith(expect.stringContaining("/stable/"));
+  expect(() => service.download()).toThrow("Managed by Homebrew.");
+  await expect(service.install()).rejects.toThrow("Managed by Homebrew.");
+  expect(options.createDriver).not.toHaveBeenCalled();
+  expect(driver.download).not.toHaveBeenCalled();
+  expect(driver.install).not.toHaveBeenCalled();
+  expect(options.prepareInstall).not.toHaveBeenCalled();
+
+  await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL);
+  expect(checkRelease).toHaveBeenCalledTimes(2);
+  preview = true;
+  service.refreshSchedule();
+  expect(service.snapshot()).toMatchObject({ phase: "idle", reason: "Managed by Homebrew." });
+  await service.check();
+  expect(checkRelease).toHaveBeenLastCalledWith(expect.stringContaining("/preview/"));
+
+  enabled = false;
+  service.refreshSchedule();
+  await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL);
+  expect(checkRelease).toHaveBeenCalledTimes(3);
+  checkRelease.mockRejectedValueOnce(new Error("network failure"));
+  await service.check();
+  expect(service.snapshot()).toMatchObject({ phase: "error", reason: "Managed by Homebrew." });
+  await service.check();
+  expect(service.snapshot().phase).toBe("available");
+  service.stop();
+});
+
 it("deduplicates checks and requires separate verified download and installation actions", async () => {
   const { service, driver, options } = fixture();
   const revisions: number[] = [];

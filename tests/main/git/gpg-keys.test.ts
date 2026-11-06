@@ -5,8 +5,8 @@ import {
   type ProcessRunner,
 } from "@main/git/execution/process-runner";
 
-const primary = "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013";
-const subkey = "CF8BCC4B18DE08FCD8A1615906AD222CADF6A6E1";
+const primary = "0123456789ABCDEF0123456789ABCDEF01234567";
+const subkey = "89ABCDEF89ABCDEF89ABCDEF89ABCDEF89ABCDEF";
 const now = 1_800_000_000;
 
 // GnuPG's doc/DETAILS defines these indexes; field 15 marks secret-key availability.

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { AboutSettings } from "@renderer/features/settings/application/AboutSettings";
 import { builtInSetting, type SettingKey } from "@shared/preferences/settings";
 import { usePreferencesStore } from "@renderer/stores/preferences-store";
+import { useSimulationStore } from "@renderer/stores/simulation-store";
 
 it.each([
   null,
@@ -24,6 +25,10 @@ it.each([
       commit: "abcdef123456".padEnd(40, "0"),
       dirty: true,
     };
+    const installation = vi.fn(async () => ({
+      ok: true,
+      value: { method: publicProfile ? "homebrew" : "development" },
+    }));
     const copyText = vi.fn(async () => ({ ok: true, value: undefined }));
     const get = vi.fn(async () => {
       throw new Error("Offline");
@@ -73,7 +78,7 @@ it.each([
       ),
     };
     vi.stubGlobal("eda", {
-      app: { version, copyText },
+      app: { version, copyText, installation },
       avatars: { get },
       updates,
       events,
@@ -122,6 +127,7 @@ it.each([
         version.commit.slice(0, 12),
       );
       expect(container.textContent).toContain("Local changes (dirty)");
+      expect(container.textContent).toContain(publicProfile ? "Homebrew" : "Development");
       expect(container.querySelector(".profile-avatar")?.textContent).toBe("Y");
       expect(container.querySelector("img")).toBeNull();
       expect(github.maintainerProfile).toHaveBeenCalledOnce();
@@ -157,10 +163,40 @@ it.each([
 
       expect(copyText).toHaveBeenCalledWith(version.commit);
 
+      developerSettingsEnabled = true;
+      await act(async () => {
+        await usePreferencesStore.getState().load({});
+        useSimulationStore.getState().setUpdatePhase("available");
+      });
+
+      const installationLabel = () =>
+        [...container.querySelectorAll("dt")]
+          .find((label) => label.textContent === "Installation")!
+          .parentElement!.querySelector("dd")!.textContent;
+
+      for (const [method, label] of [
+        ["direct", "Direct download"],
+        ["homebrew", "Homebrew"],
+        ["dpkg", "System package (APT / dpkg)"],
+        ["rpm", "System package (RPM)"],
+        ["pacman", "System package (Pacman)"],
+      ] as const) {
+        await act(async () => useSimulationStore.getState().setUpdateInstallation(method));
+
+        expect(installationLabel()).toBe(label);
+        expect(container.textContent).not.toContain("Update preview is active");
+      }
+
+      await act(async () => useSimulationStore.getState().setUpdatePhase(null));
+
+      expect(installationLabel()).toBe(publicProfile ? "Homebrew" : "Development");
+      expect(installation).toHaveBeenCalledOnce();
+
       vi.stubGlobal("eda", {
         app: {
           version: { ...version, commit: null, dirty: null, displayVersion: "0.0.1-unknown" },
           copyText,
+          installation,
         },
         avatars: { get },
         updates,
@@ -177,6 +213,7 @@ it.each([
     } finally {
       await act(async () => root.unmount());
       container.remove();
+      useSimulationStore.getState().reset();
       usePreferencesStore.setState(previous);
       vi.unstubAllGlobals();
     }

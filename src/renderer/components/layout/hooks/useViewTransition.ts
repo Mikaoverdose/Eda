@@ -10,6 +10,11 @@ const traceNavigation = import.meta.env.DEV && import.meta.env["VITE_EDA_TRACE_N
 type RunningTransition = { transition: globalThis.ViewTransition; cleanup: () => void };
 
 let running: RunningTransition | undefined;
+let updating = false;
+
+export function hasActiveViewTransition(): boolean {
+  return running !== undefined;
+}
 
 export function afterViewTransition(effect: () => void): void {
   const job = running;
@@ -35,6 +40,11 @@ export function useViewTransition() {
     target.current = element;
   }, []);
   const transition = useCallback((update: () => void, motion: ViewMotion = "section") => {
+    if (updating) {
+      update();
+      return;
+    }
+
     running?.transition.skipTransition();
     running?.cleanup();
     running = undefined;
@@ -62,6 +72,12 @@ export function useViewTransition() {
     }
 
     const started = performance.now();
+    for (const region of [
+      element,
+      ...element.querySelectorAll<HTMLElement>("[data-navigation-fallback]"),
+    ])
+      delete region.dataset["navigationFallback"];
+
     let updateMs = 0;
     let readyAt: number | undefined;
     let captureError: string | undefined;
@@ -107,7 +123,14 @@ export function useViewTransition() {
     };
     const native = document.startViewTransition(() => {
       const beforeUpdate = performance.now();
-      flushSync(update);
+      updating = true;
+
+      try {
+        flushSync(update);
+      } finally {
+        updating = false;
+      }
+
       updateMs = performance.now() - beforeUpdate;
     });
     const job = { transition: native, cleanup };

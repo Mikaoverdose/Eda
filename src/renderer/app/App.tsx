@@ -58,6 +58,7 @@ export function App() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [view, updateView] = useState<"repositories" | "settings">("repositories");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("profiles");
   const requestedView = useRef(view);
   const navigation = useViewTransition();
   const onboardingTransition = useViewTransition();
@@ -73,11 +74,22 @@ export function App() {
         | "repositories"
         | "settings"
         | ((current: "repositories" | "settings") => "repositories" | "settings"),
+      section?: SettingsSection,
     ) => {
       const target = typeof next === "function" ? next(requestedView.current) : next;
-      if (target === requestedView.current) return;
+      if (target === requestedView.current) {
+        if (section !== undefined) setSettingsSection(section);
+        return;
+      }
+
       requestedView.current = target;
-      navigation.transition(() => updateView(target), target === "settings" ? "forward" : "back");
+      navigation.transition(
+        () => {
+          if (section !== undefined) setSettingsSection(section);
+          updateView(target);
+        },
+        target === "settings" ? "forward" : "back",
+      );
     },
     [navigation.transition],
   );
@@ -86,13 +98,11 @@ export function App() {
 
   useRepositoryNavigation(loading || switching ? undefined : activeProfileId, showWorkspace);
 
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("profiles");
   const shellRequest = useShellStore((state) => state.request);
   useEffect(() => {
     if (!shellRequest) return;
     if (shellRequest.kind === "settings") {
-      setSettingsSection(shellRequest.section);
-      setView("settings");
+      setView("settings", shellRequest.section);
     } else setTour(true);
     useShellStore.getState().consume(shellRequest);
   }, [shellRequest, setView]);
@@ -108,8 +118,7 @@ export function App() {
       setPickerOpen(true);
     },
     profiles: () => {
-      setSettingsSection("profiles");
-      setView("settings");
+      setView("settings", "profiles");
     },
     createProfile: () => setDialogOpen(true),
     toggleSettings: () =>
@@ -205,8 +214,7 @@ export function App() {
         <AppNotices
           aboutOpen={view === "settings" && settingsSection === "about"}
           onReviewGitSettings={() => {
-            setSettingsSection("global-git");
-            setView("settings");
+            setView("settings", "global-git");
           }}
         />
 

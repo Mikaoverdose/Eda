@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { CollapsiblePanel } from "../components/layout/CollapsiblePanel";
 import { usePanel } from "../components/layout/hooks/usePanel";
 import { Split } from "../components/layout/Split";
-import { LayoutTransition } from "../components/layout/ViewTransition";
+import { LayoutTransition, ViewTransition } from "../components/layout/ViewTransition";
 import { Button, Dialog } from "../components/ui/index";
 import { ChangesPanel } from "../features/changes/ChangesPanel";
 import { CommitBox } from "../features/changes/CommitBox";
@@ -32,9 +32,14 @@ import { useRepositoryStore } from "../stores/repository-store";
 const PANELS: readonly PanelId[] = ["graph", "diff", "rail"];
 
 export function Workspace() {
+  const profileId = useAppStore((state) => state.activeIdentity?.id);
+  const repositoryId = useAppStore((state) => state.selectedRepositoryId);
+
   return (
     <LayoutTransition className="h-full min-h-0">
-      <WorkspaceContent />
+      <ViewTransition viewKey={`${profileId}:${repositoryId}`} className="h-full min-h-0">
+        <WorkspaceContent />
+      </ViewTransition>
     </LayoutTransition>
   );
 }
@@ -226,12 +231,19 @@ function WorkspaceContent() {
                   name={showingDiff ? t("workspace.diffViewer") : t("workspace.history")}
                   onExpand={contentPanel.toggleCollapse}
                 >
-                  <div className="h-full w-full" hidden={showingDiff} inert={showingDiff}>
-                    <CommitGraph key={owner} pending={loading} />
-                  </div>
-                  <div className="h-full w-full" hidden={!showingDiff} inert={!showingDiff}>
-                    {showingDiff && <DiffViewer key={owner} />}
-                  </div>
+                  <ViewTransition
+                    key={owner}
+                    viewKey={showingDiff ? "diff" : "history"}
+                    motion={showingDiff ? "forward" : "back"}
+                    className="h-full w-full"
+                  >
+                    <div className="h-full w-full" hidden={showingDiff} inert={showingDiff}>
+                      <CommitGraph key={owner} pending={loading} />
+                    </div>
+                    <div className="h-full w-full" hidden={!showingDiff} inert={!showingDiff}>
+                      {showingDiff && <DiffViewer key={owner} />}
+                    </div>
+                  </ViewTransition>
                 </CollapsiblePanel>
               }
               second={
@@ -241,7 +253,11 @@ function WorkspaceContent() {
                   onExpand={railPanel.toggleCollapse}
                   badge={changeCount ? String(changeCount) : undefined}
                 >
-                  <div className="app-canvas flex h-full min-h-0 w-full flex-col border-l border-border-subtle bg-bg-surface">
+                  <ViewTransition
+                    key={owner}
+                    viewKey={inspectingCommit ? "commit" : "working"}
+                    className="app-canvas flex h-full min-h-0 w-full flex-col border-l border-border-subtle bg-bg-surface"
+                  >
                     {inspectingCommit ? (
                       <CommitChangesPanel key={owner} />
                     ) : (
@@ -252,7 +268,7 @@ function WorkspaceContent() {
                         <CommitBox key={owner} pending={loading} />
                       </>
                     )}
-                  </div>
+                  </ViewTransition>
                 </CollapsiblePanel>
               }
             />

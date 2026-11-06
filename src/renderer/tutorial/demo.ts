@@ -180,6 +180,7 @@ export function createDemo() {
         ok({ intervalMinutes: 0, online: true, suspended: true, fetching: false, remotes: [] }),
     },
     app: {
+      installation: async () => ok({ method: "development" as const }),
       get platform() {
         return platform;
       },

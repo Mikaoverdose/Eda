@@ -120,6 +120,7 @@ it("uses the actual warning and comparison dialog while simulating repair withou
   expect(container.querySelectorAll("aside")).toHaveLength(1);
   expect(container.querySelector("main aside")).toBeNull();
   expect(container.querySelector("aside")?.textContent).not.toContain("Simulation");
+  expect(container.textContent).not.toContain("Reset preview");
 
   await click("Review global Git settings");
 
@@ -137,6 +138,11 @@ it("uses the actual warning and comparison dialog while simulating repair withou
   expect(container.textContent).toContain("Identity matches the profile");
   expect(inspect).not.toHaveBeenCalled();
   expect(apply).not.toHaveBeenCalled();
+
+  await choose("Use live status");
+
+  expect(useSimulationStore.getState().gitIdentity).toBeNull();
+  expect(container.querySelector("aside")).toBeNull();
 });
 
 it("simulates repair failure, follows the active profile, and cancels queued simulated actions on reset", async () => {
@@ -240,8 +246,8 @@ it("keeps application simulations active while a different profile's preferences
 });
 
 it("explains identity versus exact subkey selection without hiding the global configuration difference", async () => {
-  const primary = "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013";
-  const subkey = "CF8BCC4B18DE08FCD8A1615906AD222CADF6A6E1";
+  const primary = "0123456789ABCDEF0123456789ABCDEF01234567";
+  const subkey = "89ABCDEF89ABCDEF89ABCDEF89ABCDEF89ABCDEF";
   const signingProfile: Identity = {
     ...profile,
     signing: { format: "gpg", keyRef: `${subkey}!`, signCommits: true },

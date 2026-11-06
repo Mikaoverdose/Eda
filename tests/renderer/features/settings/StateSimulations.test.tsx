@@ -70,10 +70,10 @@ it("previews update banners and actions throughout the app, then restores the la
 
     await act(async () => button!.click());
   };
-  const choose = async (label: string) => {
+  const choose = async (label: string, control = "Update state") => {
     await act(async () => {
       debug()
-        .querySelector<HTMLElement>('[role="combobox"]')!
+        .querySelector<HTMLElement>(`[aria-label="${control}"]`)!
         .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     });
 
@@ -110,9 +110,16 @@ it("previews update banners and actions throughout the app, then restores the la
     await choose("Update available");
 
     expect(banner().textContent).toContain("Eda 0.0.3 is available");
-    expect(banner().textContent).toContain("Installed: 0.0.2-abcdef-dirty");
+    expect(banner().textContent).not.toContain("Installed:");
+    expect(about().textContent).toContain("Installed: 0.0.2-abcdef-dirty");
     expect(banner().textContent).not.toContain("Preview");
-    expect(about().textContent).toContain("Update preview is active");
+    expect(about().textContent).not.toContain("Update preview is active");
+    expect(container.textContent).not.toContain("Reset preview");
+    expect(debug().querySelector('[aria-label="Download update"]')).toBeNull();
+
+    await click(debug(), "View update");
+
+    expect(useShellStore.getState().request).toEqual({ kind: "settings", section: "about" });
 
     await click(banner(), "View update");
 
@@ -135,9 +142,48 @@ it("previews update banners and actions throughout the app, then restores the la
 
     await click(debug(), "Preview completed download");
 
-    expect(banner().textContent).toContain("Eda 0.0.3 is ready to install");
-    expect(banner().textContent).toContain("Downloaded and verified. Restart to install.");
+    expect(banner().textContent).toContain("Eda 0.0.3 is available");
+    expect(banner().textContent).not.toContain("Downloaded and verified");
+    expect(about().textContent).toContain("Downloaded and verified. Restart to install.");
 
+    await choose("Homebrew", "Installation method");
+
+    expect(useSimulationStore.getState().update?.phase).toBe("available");
+    expect(about().querySelector("progress")).toBeNull();
+
+    for (const manager of ["Homebrew", "APT / dpkg", "RPM", "Pacman"]) {
+      await choose(manager, "Installation method");
+
+      expect(banner().textContent).not.toContain("Managed by");
+      expect(banner().querySelectorAll("button")).toHaveLength(2);
+      await click(banner(), "View update");
+
+      expect(useShellStore.getState().request).toEqual({ kind: "settings", section: "about" });
+      expect(about().textContent).toContain(`Managed by ${manager}.`);
+      expect(about().textContent).not.toMatch(
+        /Download update|Restart and install|brew upgrade|sudo /,
+      );
+      expect(useSimulationStore.getState().runUpdateAction("download")).toBe(false);
+      expect(useSimulationStore.getState().runUpdateAction("install")).toBe(false);
+
+      await click(banner(), "Dismiss App update");
+
+      expect(banner().textContent).toBe("");
+    }
+
+    await choose("Update check failed.");
+    await click(about(), "Check for updates");
+
+    expect(useSimulationStore.getState().update?.phase).toBe("current");
+    expect(about().textContent).toContain("Managed by Pacman.");
+
+    await choose("Update available");
+    await choose("Direct download", "Installation method");
+
+    expect(banner().textContent).not.toContain("Managed by");
+    expect(about().querySelector('[aria-label="Download update"]')).not.toBeNull();
+
+    await choose("Ready to install");
     await click(about(), "Restart and install");
 
     expect(useSimulationStore.getState().update?.phase).toBe("installing");
@@ -164,8 +210,9 @@ it("previews update banners and actions throughout the app, then restores the la
 
     expect(banner().textContent).toContain("Eda 0.0.3 is available");
 
-    await click(about(), "Reset preview");
+    await choose("Use live status");
 
+    expect(useSimulationStore.getState().updateInstallation).toBe("direct");
     expect(about().textContent).toContain("Latest live status");
     expect(banner().textContent).toBe("");
 
@@ -179,9 +226,11 @@ it("previews update banners and actions throughout the app, then restores the la
     expect(download).not.toHaveBeenCalled();
 
     await choose("Ready to install");
+    await choose("Homebrew", "Installation method");
     await act(async () => usePreferencesStore.setState({ values: previous.values }));
 
     expect(useSimulationStore.getState().update).toBeNull();
+    expect(useSimulationStore.getState().updateInstallation).toBe("direct");
     expect(banner().textContent).toBe("");
     expect(about().textContent).toContain("Latest live status");
     expect(check).not.toHaveBeenCalled();

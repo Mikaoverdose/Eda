@@ -7,6 +7,41 @@ import type { Identity } from "@shared/identity/identity";
 import type { Services } from "@main/services";
 import { registerIpcHandlers } from "@main/ipc/register";
 import { beginUpdateInstall } from "@main/ipc/transport";
+import { UpdateService } from "@main/application/update-service";
+
+it("allows managed update notifications but refuses download and installation over IPC", async () => {
+  const mocks = setup();
+  const native = vi.fn();
+  const service = new UpdateService({
+    capability: "managed",
+    reason: "Managed by Homebrew.",
+    platform: "osx",
+    arch: "arm64",
+    currentVersion: "0.0.1",
+    automaticChecks: () => true,
+    includePrereleases: () => false,
+    createDriver: native,
+    prepareInstall: native,
+    checkRelease: async () => ({
+      available: true,
+      release: { version: "0.0.2", name: "Eda 0.0.2", notes: null, releasedAt: null },
+    }),
+  });
+  mocks.updates.check.mockImplementation(() => service.check());
+  mocks.updates.download.mockImplementation(() => service.download());
+  mocks.updates.install.mockImplementation(() => service.install());
+
+  expect(await invoke(IPC_CHANNELS.updatesCheck)).toMatchObject({
+    ok: true,
+    value: { phase: "available", capability: "managed", reason: "Managed by Homebrew." },
+  });
+  for (const channel of [IPC_CHANNELS.updatesDownload, IPC_CHANNELS.updatesInstall])
+    expect(await invoke(channel)).toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining("Managed by Homebrew.") },
+    });
+  expect(native).not.toHaveBeenCalled();
+});
 
 it("blocks new work during update installation while allowing the draft-save handshake", async () => {
   const mocks = setup();
@@ -36,6 +71,14 @@ it("refuses updater commands from a subframe without entering the native service
   const response = await handler({ ...event, senderFrame: {} } as Electron.IpcMainInvokeEvent);
   expect(response).toMatchObject({ ok: false, error: { kind: "invalid-input" } });
   expect(mocks.updates.install).not.toHaveBeenCalled();
+});
+
+it("reports the running installation through the application bridge", async () => {
+  setup();
+  expect(await invoke(IPC_CHANNELS.appInstallation)).toEqual({
+    ok: true,
+    value: { method: "development" },
+  });
 });
 
 it("refreshes the update audience after changing or resetting the pre-release preference", async () => {
@@ -76,7 +119,7 @@ const electron = vi.hoisted(() => ({
 }));
 
 vi.mock("electron", () => ({
-  app: { on: electron.on },
+  app: { on: electron.on, isPackaged: false },
   ipcMain: { handle: electron.handle },
   BrowserWindow: {
     getAllWindows: () => [
@@ -130,6 +173,7 @@ let handlers: Map<IpcChannel, Handler>;
 
 function setup() {
   const mocks = {
+    installation: { method: "development" },
     updates: {
       onChange: vi.fn(),
       refreshSchedule: vi.fn(),

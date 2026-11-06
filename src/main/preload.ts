@@ -127,6 +127,7 @@ const api: EdaApi = {
   },
   app: {
     version: __EDA_BUILD_INFO__,
+    installation: () => ipcRenderer.invoke(IPC_CHANNELS.appInstallation),
     copyText: (value) => ipcRenderer.invoke(IPC_CHANNELS.appCopyText, value),
     debug: (action) => ipcRenderer.invoke(IPC_CHANNELS.appDebug, action),
     detectMergeTools: () => ipcRenderer.invoke(IPC_CHANNELS.appDetectMergeTools),

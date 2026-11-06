@@ -11,8 +11,13 @@ import type {
 } from "@shared/updates";
 import { updateFeedUrl } from "@shared/updates";
 
+export interface UpdateCheckResult {
+  available: boolean;
+  release: UpdateRelease;
+}
+
 export interface UpdateDriver {
-  check(): Promise<{ available: boolean; release: UpdateRelease }>;
+  check(): Promise<UpdateCheckResult>;
   download(progress: (value: UpdateProgress) => void): Promise<void>;
   discardDownload(): void;
   install(): void | Promise<void>;
@@ -27,6 +32,7 @@ export interface UpdateOptions {
   automaticChecks: () => boolean;
   includePrereleases: () => boolean;
   createDriver: (url: string) => UpdateDriver | Promise<UpdateDriver>;
+  checkRelease?: (url: string) => Promise<UpdateCheckResult>;
   prepareInstall: () => Promise<() => void>;
   now?: () => number;
 }
@@ -56,7 +62,7 @@ export class UpdateService {
       progress: null,
       error: null,
       feedUrl:
-        options.capability === "automatic"
+        options.capability === "automatic" || options.capability === "managed"
           ? updateFeedUrl(options.platform, options.arch, options.includePrereleases())
           : null,
     };
@@ -86,8 +92,7 @@ export class UpdateService {
     clearTimeout(this.timer);
     this.refreshFeed();
 
-    if (!this.running || this.state.capability !== "automatic" || !this.options.automaticChecks())
-      return;
+    if (!this.running || !this.canCheck() || !this.options.automaticChecks()) return;
 
     const pending = ["available", "downloading", "ready", "installing"].includes(this.state.phase);
     const delay = pending
@@ -117,10 +122,7 @@ export class UpdateService {
   }
 
   private refreshFeed(): void {
-    if (
-      this.state.capability !== "automatic" ||
-      ["checking", "downloading", "installing"].includes(this.state.phase)
-    )
+    if (!this.canCheck() || ["checking", "downloading", "installing"].includes(this.state.phase))
       return;
 
     const feedUrl = updateFeedUrl(
@@ -137,7 +139,7 @@ export class UpdateService {
     this.publish({
       feedUrl,
       phase: "idle",
-      reason: null,
+      reason: this.state.capability === "managed" ? this.options.reason : null,
       checkedAt: null,
       release: null,
       progress: null,
@@ -160,8 +162,12 @@ export class UpdateService {
       );
   }
 
+  private canCheck(): boolean {
+    return this.state.capability === "automatic" || this.state.capability === "managed";
+  }
+
   check(): Promise<UpdateState> {
-    this.requireAutomatic();
+    if (!this.canCheck()) this.requireAutomatic();
     this.refreshFeed();
 
     if (this.checking) return this.checking;
@@ -173,8 +179,13 @@ export class UpdateService {
 
     this.checking = Promise.resolve().then(async () => {
       try {
-        const driver = await this.native();
-        const result = await driver.check();
+        const result =
+          this.state.capability === "managed"
+            ? await this.options.checkRelease?.(this.state.feedUrl!)
+            : await (await this.native()).check();
+
+        if (!result) throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
+
         const newer = newerRelease(result.release.version, this.options.currentVersion);
         const available = result.available && newer;
 
@@ -182,9 +193,11 @@ export class UpdateService {
           phase: available ? "available" : "current",
           release: available ? result.release : null,
           reason:
-            newer && !result.available
-              ? t("main.updateService.aNewerReleaseExistsButIsNotOffered")
-              : null,
+            this.state.capability === "managed"
+              ? this.options.reason
+              : newer && !result.available
+                ? t("main.updateService.aNewerReleaseExistsButIsNotOffered")
+                : null,
           checkedAt: new Date((this.options.now ?? Date.now)()).toISOString(),
         });
       } catch (error) {

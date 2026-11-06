@@ -17,10 +17,13 @@ type Probe = {
   error?: string;
 };
 
+type EntryProbe = { motion: string; duration: number; finished: boolean };
+
 declare global {
   interface Window {
     __navigationProbes: Probe[];
     __navigationWatchChanges: number;
+    __navigationEntries: EntryProbe[];
   }
 }
 
@@ -58,11 +61,72 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Navigation fixture/ }).waitFor();
+  await page.evaluate(() => {
+    window.__navigationEntries = [];
+    document.addEventListener("animationstart", (event) => {
+      const target = event.target;
+
+      if (!(target instanceof HTMLElement) || event.animationName !== "ui-navigation-in") return;
+
+      const motion = target.dataset["navigationFallback"];
+
+      if (!motion) return;
+
+      const probe = {
+        motion,
+        duration: parseFloat(getComputedStyle(target).animationDuration) * 1000,
+        finished: false,
+      };
+
+      window.__navigationEntries.push(probe);
+      void Promise.allSettled(target.getAnimations().map((animation) => animation.finished)).then(
+        () => {
+          probe.finished = true;
+        },
+      );
+    });
+  });
+
+  const entrySettled = async (index: number, motion: string) => {
+    await page.waitForFunction((index) => window.__navigationEntries[index]?.finished, index);
+
+    const entries = await page.evaluate((index) => window.__navigationEntries.slice(index), index);
+
+    assert.equal(entries.length, 1, "One view change should animate once.");
+    assert.equal(entries[0]?.motion, motion);
+    assert.ok(entries[0].duration > 100);
+  };
+  const expectEntry = async (action: () => Promise<unknown>, motion: string) => {
+    const before = await page.evaluate(() => window.__navigationEntries.length);
+
+    await action();
+    await entrySettled(before, motion);
+  };
 
   const repositoryPath = join(root, "navigation-repository");
 
   await mkdir(repositoryPath);
   execFileSync("git", ["init", "-b", "main", repositoryPath], { stdio: "pipe" });
+  await writeFile(join(repositoryPath, "file.txt"), "initial\n");
+  execFileSync("git", ["-C", repositoryPath, "add", "."], { stdio: "pipe" });
+  execFileSync(
+    "git",
+    [
+      "-C",
+      repositoryPath,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "Navigation fixture",
+    ],
+    { stdio: "pipe" },
+  );
+  await writeFile(join(repositoryPath, "file.txt"), "working change\n");
 
   const repositoryId = await page.evaluate(async (path) => {
     const opened = await window.eda.repository.open(path);
@@ -70,8 +134,35 @@ try {
     return opened.value.id;
   }, repositoryPath);
 
-  await page.getByRole("button", { name: "Open navigation-repository", exact: true }).click();
+  await expectEntry(
+    () => page.getByRole("button", { name: "Open navigation-repository", exact: true }).click(),
+    "section",
+  );
   await page.getByRole("searchbox", { name: "Filter changed files", exact: true }).waitFor();
+  await expectEntry(
+    () => page.getByRole("button", { name: "Unstaged file.txt, status M", exact: true }).click(),
+    "forward",
+  );
+  await expectEntry(
+    () => page.getByRole("button", { name: "Back to history", exact: true }).click(),
+    "back",
+  );
+  await expectEntry(
+    () => page.getByRole("button", { name: "Inspect branch main", exact: true }).click(),
+    "section",
+  );
+  await expectEntry(
+    () => page.getByRole("button", { name: "View changes", exact: true }).click(),
+    "section",
+  );
+  await expectEntry(
+    () => page.getByRole("button", { name: "Close navigation-repository", exact: true }).click(),
+    "section",
+  );
+  await expectEntry(
+    () => page.getByRole("button", { name: "Reopen closed repository", exact: true }).click(),
+    "section",
+  );
 
   const backgroundBytes = await readFile(
     new URL("../fixtures/backgrounds/sakura.jpg", import.meta.url),
@@ -167,11 +258,25 @@ try {
     "Expand Working tree",
     "Hide branches and tags",
     "Show branches and tags",
-    "Activity",
-    "Activity",
   ]) {
+    const before = await page.evaluate(() => window.__navigationProbes.length);
+
     await page.getByRole("button", { name, exact: true }).click();
+    await page.waitForFunction((index) => window.__navigationProbes.length > index, before);
     await settled("layout");
+  }
+
+  for (const expanded of [true, false]) {
+    await page.getByRole("button", { name: "Activity", exact: true }).click();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Activity", exact: true })
+        .getAttribute("aria-expanded"),
+      String(expanded),
+    );
+    await page.locator(".activity-content").evaluate(async (element) => {
+      await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+    });
   }
 
   assert.equal(await draft.inputValue(), "Keep this draft through layout changes");
@@ -179,12 +284,16 @@ try {
   await page.emulateMedia({ reducedMotion: "reduce" });
 
   const beforeReduced = await page.evaluate(() => window.__navigationProbes.length);
+  const entriesBeforeReduced = await page.evaluate(() => window.__navigationEntries.length);
 
   await page.getByRole("button", { name: "Collapse working tree", exact: true }).click();
   await page.getByRole("button", { name: "Expand Working tree", exact: true }).click();
   await page.getByRole("button", { name: "Activity", exact: true }).click();
   await page.getByRole("button", { name: "Activity", exact: true }).click();
   assert.equal(await page.evaluate(() => window.__navigationProbes.length), beforeReduced);
+  await page.getByRole("button", { name: "Unstaged file.txt, status M", exact: true }).click();
+  await page.getByRole("button", { name: "Back to history", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__navigationEntries.length), entriesBeforeReduced);
   await page.emulateMedia({ reducedMotion: "no-preference" });
 
   await settings.click();
@@ -225,7 +334,7 @@ try {
   const layouts = probes.filter((probe) => probe.motion === "layout");
   const section = probes.find((probe) => probe.motion === "section");
 
-  assert.equal(layouts.length, 8);
+  assert.equal(layouts.length, 6);
   assert.ok(section?.duration);
   for (const layout of layouts) {
     assert.equal(layout.duration, section.duration, "Pane resizing reuses the shared motion pace.");
@@ -276,7 +385,7 @@ try {
   );
 
   console.log(
-    "Shared pane resizing and navigation motion passed: maximize, collapse, reference sidebar, retained drafts, reduced motion, pointer interruption, watching and scale restoration.",
+    "Shared navigation motion passed: repository close/reopen, history/diff and commit/working-tree changes, pane resizing, Activity disclosure, retained drafts, reduced motion, pointer interruption, watching and scale restoration.",
   );
 } finally {
   await app?.close();

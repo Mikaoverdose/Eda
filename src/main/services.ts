@@ -1,4 +1,5 @@
 import { errorText } from "@shared/error-codes";
+import { PACKAGE_MANAGER_NAMES, type InstallationInfo } from "@shared/application";
 import { GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { IPC_EVENTS } from "@shared/ipc";
@@ -8,6 +9,8 @@ import { rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVelopackUpdater, type VelopackUpdater } from "./application/velopack-updater";
+import { detectInstallation } from "./application/installation";
+import { checkReleaseFeed } from "./application/release-feed";
 import { clearDatabase } from "./application/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
 import { UpdateService } from "./application/update-service";
@@ -63,6 +66,7 @@ declare const __EDA_GITHUB_CLIENT_ID__: string;
 declare const __EDA_GITHUB_APP_SLUG__: string;
 
 export interface Services {
+  installation: InstallationInfo;
   updates: UpdateService;
   resetData(): Promise<void>;
   github: GitHubAuth;
@@ -209,7 +213,19 @@ export async function createServices(): Promise<Services> {
     const platform: UpdatePlatform =
       process.platform === "win32" ? "win" : process.platform === "darwin" ? "osx" : "linux";
     const supportedArch = ["x64", "arm64"].includes(process.arch);
-    let capability: UpdateCapability = app.isPackaged ? "manual" : "development";
+    const installation = await detectInstallation({
+      packaged: app.isPackaged,
+      executablePath: process.execPath,
+      resourcesPath: process.resourcesPath,
+    });
+    const manager =
+      installation.method === "homebrew"
+        ? PACKAGE_MANAGER_NAMES.homebrew
+        : installation.method === "system-package"
+          ? PACKAGE_MANAGER_NAMES[installation.manager]
+          : null;
+    let capability: UpdateCapability =
+      installation.method === "development" ? "development" : manager ? "managed" : "manual";
     let installedUpdater: VelopackUpdater | undefined;
     const initialFeedUrl = updateFeedUrl(
       platform,
@@ -217,7 +233,7 @@ export async function createServices(): Promise<Services> {
       preferences.resolve("includePrereleaseUpdates").value,
     );
 
-    if (app.isPackaged && supportedArch) {
+    if (installation.method === "direct" && supportedArch) {
       try {
         installedUpdater = await createVelopackUpdater(
           initialFeedUrl,
@@ -234,17 +250,24 @@ export async function createServices(): Promise<Services> {
 
     const updates = new UpdateService({
       capability,
-      reason:
-        capability === "development"
-          ? t("main.services.developmentBuildsAreNeverReplacedUseAnInstalled")
-          : capability === "manual"
-            ? t("main.services.useTheDownloadPageOrYourPackageManager")
-            : null,
+      reason: manager
+        ? t("updates.managedBy", { manager })
+        : installation.method === "unknown"
+          ? t("main.services.installationMethodUnknown")
+          : capability === "development"
+            ? t("main.services.developmentBuildsAreNeverReplacedUseAnInstalled")
+            : capability === "manual"
+              ? t("main.services.useTheDownloadPageOrYourPackageManager")
+              : null,
       platform,
       arch: process.arch,
       currentVersion: app.getVersion(),
       automaticChecks: () => preferences.resolve("automaticUpdateChecks").value,
       includePrereleases: () => preferences.resolve("includePrereleaseUpdates").value,
+      checkRelease: (url) =>
+        checkReleaseFeed(url, platform, process.arch, (input, init) =>
+          net.fetch(input instanceof URL ? input.href : input, init),
+        ),
       createDriver: (url) =>
         url === initialFeedUrl
           ? installedUpdater!
@@ -275,6 +298,7 @@ export async function createServices(): Promise<Services> {
     });
 
     return {
+      installation,
       updates,
       github,
       historyReversal: new HistoryReversalService(

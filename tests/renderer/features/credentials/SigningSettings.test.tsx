@@ -19,10 +19,10 @@ const identity: Identity = {
 };
 
 const key: GpgSigningKey = {
-  fingerprint: "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013",
-  keyId: "6C7EE1B8621CC013",
+  fingerprint: "0123456789ABCDEF0123456789ABCDEF01234567",
+  keyId: "89ABCDEF01234567",
   userIds: ["Author <work@example.com>"],
-  signingKeys: [{ fingerprint: "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013", expiresAt: null }],
+  signingKeys: [{ fingerprint: "0123456789ABCDEF0123456789ABCDEF01234567", expiresAt: null }],
   expiresAt: null,
 };
 

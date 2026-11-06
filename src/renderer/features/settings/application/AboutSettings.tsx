@@ -1,4 +1,5 @@
-import { t } from "@shared/i18n";
+import { PACKAGE_MANAGER_NAMES, type InstallationInfo } from "@shared/application";
+import { t, type MessageKey } from "@shared/i18n";
 import { MAINTAINER_GITHUB_LOGIN, type GitHubAccountProfile } from "@shared/integrations/github";
 import { UPDATE_DOWNLOAD_PAGE } from "@shared/updates";
 import { ExternalLink, Heart, Mail, Star } from "lucide-react";
@@ -11,6 +12,7 @@ import {
   Skeleton,
 } from "../../../components/ui/index";
 import { usePreferencesStore } from "../../../stores/preferences-store";
+import { useSimulationStore } from "../../../stores/simulation-store";
 import { GitHubProfile } from "../../connections/GitHubProfile";
 import { ProviderIcon } from "../../connections/ProviderIcon";
 import { UpdatesSettings } from "../../updates/UpdatesSettings";
@@ -20,6 +22,12 @@ const emailUser = "yuzu";
 const emailBase = "kirameki.cafe";
 const maintainerEmail = [emailUser, emailBase].join("@");
 const repositoryUrl = `https://github.com/${maintainer}/Eda`;
+const installationKeys = {
+  development: "settings.aboutSettings.installationDevelopment",
+  direct: "settings.aboutSettings.installationDirect",
+  homebrew: "settings.aboutSettings.installationHomebrew",
+  unknown: "aboutSettings.unknown",
+} as const satisfies Record<Exclude<InstallationInfo["method"], "system-package">, MessageKey>;
 
 export function AboutSettings() {
   const developerSettingsEnabled = usePreferencesStore(
@@ -27,11 +35,29 @@ export function AboutSettings() {
   );
   const busy = usePreferencesStore((state) => state.loading || state.saving);
   const build = window.eda.app.version;
+  const simulatedInstallation = useSimulationStore((state) =>
+    state.update ? state.updateInstallation : null,
+  );
+  const [detectedInstallation, setInstallation] = useState<InstallationInfo | null>(null);
   const [profile, setProfile] = useState<GitHubAccountProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const installation: InstallationInfo | null = simulatedInstallation
+    ? simulatedInstallation === "direct" || simulatedInstallation === "homebrew"
+      ? { method: simulatedInstallation }
+      : { method: "system-package", manager: simulatedInstallation }
+    : detectedInstallation;
 
   useEffect(() => {
     let active = true;
+
+    void window.eda.app
+      .installation()
+      .then((result) => {
+        if (active) setInstallation(result.ok ? result.value : { method: "unknown" });
+      })
+      .catch(() => {
+        if (active) setInstallation({ method: "unknown" });
+      });
 
     void window.eda.github
       .maintainerProfile()
@@ -61,7 +87,7 @@ export function AboutSettings() {
           </p>
         </div>
 
-        <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-md border border-border-subtle bg-bg-surface px-3 py-2.5 text-xs">
+        <dl className="flex flex-wrap gap-x-6 gap-y-3 rounded-md border border-border-subtle bg-bg-surface px-3 py-2.5 text-xs">
           <div className="min-w-0">
             <dt className="text-text-tertiary">{t("settings.aboutSettings.version")}</dt>
             <dd className="flex min-h-8 items-center gap-1">
@@ -113,6 +139,19 @@ export function AboutSettings() {
                     ? t("aboutSettings.localChangesDirty")
                     : t("aboutSettings.clean")}
               </span>
+            </dd>
+          </div>
+
+          <div className="min-w-0">
+            <dt className="text-text-tertiary">{t("settings.aboutSettings.installation")}</dt>
+            <dd className="flex min-h-8 items-center" aria-busy={installation === null}>
+              {installation
+                ? installation.method === "system-package"
+                  ? t("settings.aboutSettings.installationSystemPackage", {
+                      manager: PACKAGE_MANAGER_NAMES[installation.manager],
+                    })
+                  : t(installationKeys[installation.method])
+                : t("settings.aboutSettings.detectingInstallation")}
             </dd>
           </div>
         </dl>

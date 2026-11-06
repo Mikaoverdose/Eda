@@ -4,11 +4,13 @@ import { AppError } from "@shared/errors";
 import { ERROR_CODE } from "@shared/error-codes";
 import { UPDATE_PACKAGE_ID } from "@shared/updates";
 
-export function releaseFromManifest(info: VelopackAsset): UpdateRelease {
+export function releaseFromManifest(
+  info: Pick<VelopackAsset, "PackageId" | "Type" | "Version" | "NotesMarkdown">,
+): UpdateRelease {
   if (
     info.PackageId !== UPDATE_PACKAGE_ID ||
     info.Type !== "Full" ||
-    !/^\d+\.\d+\.\d+$/.test(info.Version)
+    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(info.Version)
   )
     throw new AppError(ERROR_CODE.INVALID_STABLE_VERSION);
 

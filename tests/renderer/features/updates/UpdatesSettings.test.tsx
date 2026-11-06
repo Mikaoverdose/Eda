@@ -24,6 +24,7 @@ it("defaults to pre-release updates, saves an opt-out and prevents changes durin
   };
 
   vi.stubGlobal("eda", {
+    app: { version: { displayVersion: "0.0.2-abcdef" } },
     settings: {
       resolve: vi.fn(async (key: SettingKey) => ({
         ok: true,

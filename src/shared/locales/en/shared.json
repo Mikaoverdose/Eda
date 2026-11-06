@@ -90,5 +90,7 @@
   "labels.action.stash": "stash",
   "labels.action.cherryPick": "cherry-pick",
   "labels.action.revert": "revert",
-  "labels.action.merge": "merge"
+  "labels.action.merge": "merge",
+  "updates.managedBy": "Managed by {manager}.",
+  "updates.managedExternally": "Managed by your package manager."
 }

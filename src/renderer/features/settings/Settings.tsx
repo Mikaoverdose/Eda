@@ -15,7 +15,7 @@ import {
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ViewTransition } from "../../components/layout/ViewTransition";
 import { useViewTransition } from "../../components/layout/hooks/useViewTransition";
 import {
@@ -228,21 +228,22 @@ export function Settings({
   selected: SettingsSection;
   onSelect: (section: SettingsSection) => void;
 }) {
+  const [displayedSection, setDisplayedSection] = useState(requestedSection);
   const developerSettingsEnabled = usePreferencesStore(
     (state) => state.values.developerSettingsEnabled.value,
   );
   const loading = usePreferencesStore((state) => state.loading);
   const debugSection = SECTIONS.some(
-    (section) => section.id === requestedSection && section.group === "debug",
+    (section) => section.id === displayedSection && section.group === "debug",
   );
   const selected =
     debugSection && !developerSettingsEnabled
       ? "about"
-      : requestedSection === "repository-fetch" ||
-          requestedSection === "repository-pull" ||
-          requestedSection === "repository-remotes"
+      : displayedSection === "repository-fetch" ||
+          displayedSection === "repository-pull" ||
+          displayedSection === "repository-remotes"
         ? "repository-sync"
-        : requestedSection;
+        : displayedSection;
   const profile = useAppStore((s) => s.activeIdentity);
   const profileId = profile?.id;
   const repository = useAppStore((state) =>
@@ -270,18 +271,23 @@ export function Settings({
     matchesQuery(`${section.group} ${section.title} ${section.description} ${section.keywords}`),
   );
 
+  useLayoutEffect(() => {
+    if (requestedSection !== displayedSection)
+      navigation.transition(() => setDisplayedSection(requestedSection), "section");
+  }, [requestedSection, displayedSection, navigation.transition]);
+
   useEffect(() => {
     if (debugSection && !developerSettingsEnabled && !loading) onSelect("about");
   }, [debugSection, developerSettingsEnabled, loading, onSelect]);
 
   useEffect(() => {
     content.current?.scrollTo(0, 0);
-    if (requestedSection !== selected)
-      syncAnchors.current[requestedSection]?.scrollIntoView({ block: "start" });
-  }, [selected, requestedSection]);
+    if (displayedSection !== selected)
+      syncAnchors.current[displayedSection]?.scrollIntoView({ block: "start" });
+  }, [selected, displayedSection]);
 
   const selectSection = (section: SettingsSection) => {
-    if (section !== requestedSection) navigation.transition(() => onSelect(section));
+    if (section !== requestedSection) onSelect(section);
     setQuery("");
   };
 
@@ -358,7 +364,11 @@ export function Settings({
         )}
       </aside>
       <div ref={content} className="app-surface-content min-w-0 flex-1 overflow-y-auto">
-        <ViewTransition ref={navigation.ref} className="mx-auto max-w-[68rem] px-6 py-8 lg:px-10">
+        <ViewTransition
+          ref={navigation.ref}
+          viewKey={`${profileId}:${repository?.id}`}
+          className="mx-auto max-w-[68rem] px-6 py-8 lg:px-10"
+        >
           {error && (
             <ErrorDialog onDismiss={() => usePreferencesStore.setState({ error: null })}>
               {errorMessage(error)}
