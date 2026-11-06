@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { GitService } from "@main/git/git-service";
+import { buildGitEnvironment } from "@main/git/execution/environment";
+import { resolveExecutable } from "@main/git/execution/executable";
 import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 import { resolveGitEngine } from "@main/git/execution/git-engine";
 import {
@@ -14,6 +16,29 @@ import { createTempRepo } from "../../helpers/temp-repo";
 const fingerprint = "A".repeat(40);
 const valid = `[GNUPG:] VALIDSIG ${fingerprint} 2026-11-06 1793923200 0 4 0 22 8 00 ${fingerprint}`;
 const good = `[GNUPG:] GOODSIG ${fingerprint.slice(-16)} Sample%20Author <sample@example.test>`;
+
+function gpgFixturePath(path: string, executable: string, platform = process.platform): string {
+  if (platform !== "win32" || !/\/usr\/bin\//i.test(executable.replaceAll("\\", "/"))) return path;
+
+  return path
+    .replaceAll("\\", "/")
+    .replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
+}
+
+it.each([
+  [
+    "win32",
+    "C:\\Program Files\\Git\\usr\\bin\\gpg.exe",
+    "C:\\Users\\Runner\\gpg home",
+    "/c/Users/Runner/gpg home",
+  ],
+  ["win32", "D:/Tools/Git/usr/bin/gpg.exe", "D:\\Temp\\public.asc", "/d/Temp/public.asc"],
+  ["win32", "C:/Program Files/GnuPG/bin/gpg.exe", "C:\\Temp\\keyring", "C:\\Temp\\keyring"],
+  ["linux", "/usr/bin/gpg", "/tmp/keyring", "/tmp/keyring"],
+  ["darwin", "/opt/homebrew/bin/gpg", "/tmp/keyring", "/tmp/keyring"],
+] as const)("uses paths understood by %s GPG at %s", (platform, executable, path, expected) => {
+  expect(gpgFixturePath(path, executable, platform)).toBe(expected);
+});
 
 it("detects only signature headers, including alternate hash headers and supported formats", () => {
   expect(commitSignatureFormat("tree abc\n\ngpgsig -----BEGIN SSH SIGNATURE-----")).toBeNull();
@@ -171,13 +196,17 @@ it("verifies real GPG signatures and distinguishes missing and untrusted public 
   const trusted = join(repo.home, "gpg-trusted");
   const other = join(repo.home, "gpg-other");
   const homes = [trusted, other];
-  const gpg = (home: string, args: string[]) =>
-    execFileSync("gpg", ["--homedir", home, "--batch", ...args], {
-      encoding: "utf8",
-      stdio: "pipe",
-    });
+  let gpgExecutable: string | undefined;
 
   try {
+    gpgExecutable = await resolveExecutable(process.env["EDA_GPG"] ?? "gpg", buildGitEnvironment());
+    const toolPath = (path: string) => gpgFixturePath(path, gpgExecutable!);
+    const gpg = (home: string, args: string[]) =>
+      execFileSync(gpgExecutable!, ["--homedir", toolPath(home), "--batch", ...args], {
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+
     for (const home of homes) await mkdir(home, { mode: 0o700 });
     gpg(trusted, [
       "--pinentry-mode",
@@ -198,11 +227,12 @@ it("verifies real GPG signatures and distinguishes missing and untrusted public 
     const engine = await resolveGitEngine(runner);
     const service = (home: string) =>
       new GitService(runner, engine, {
-        GNUPGHOME: home,
+        GNUPGHOME: toolPath(home),
         GIT_CONFIG_GLOBAL: join(repo.home, ".gitconfig"),
         GIT_CONFIG_NOSYSTEM: "1",
       });
     const git = service(trusted);
+    await repo.run(["config", "gpg.openpgp.program", gpgExecutable.replaceAll("\\", "/")]);
     await repo.writeFile("file.txt", "base\n");
     await repo.commit("Initial");
     await git.exec(
@@ -234,7 +264,7 @@ it("verifies real GPG signatures and distinguishes missing and untrusted public 
     });
     const publicKey = join(repo.home, "public.asc");
     await writeFile(publicKey, gpg(trusted, ["--armor", "--export", key]));
-    gpg(other, ["--import", publicKey]);
+    gpg(other, ["--import", toolPath(publicKey)]);
     expect((await unknown.inspectCommit(repo.path, oid)).signature).toMatchObject({
       status: "unverified",
       reasonCode: "untrusted-key",
@@ -252,7 +282,16 @@ it("verifies real GPG signatures and distinguishes missing and untrusted public 
   } finally {
     for (const home of homes) {
       try {
-        execFileSync("gpgconf", ["--homedir", home, "--kill", "gpg-agent"], { stdio: "pipe" });
+        if (!gpgExecutable) continue;
+        const gpgconf = join(
+          dirname(gpgExecutable),
+          process.platform === "win32" ? "gpgconf.exe" : "gpgconf",
+        );
+        execFileSync(
+          gpgconf,
+          ["--homedir", gpgFixturePath(home, gpgExecutable), "--kill", "gpg-agent"],
+          { stdio: "pipe" },
+        );
       } catch {}
     }
     await repo.cleanup();
