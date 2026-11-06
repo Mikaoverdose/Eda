@@ -10,6 +10,7 @@ import {
   CheckboxControl,
   Dialog,
   Field,
+  Fingerprint,
   HuePicker,
   IconButton,
   ErrorDialog,
@@ -992,6 +993,18 @@ export function ComponentGallery() {
       <Sample id="gallery-code" title={t("settings.componentGallery.codeBlocksAndOutput")}>
         <CodePreview />
         <Name>{t("settings.componentGallery.codeBlockCopyButton")}</Name>
+        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+          <Fingerprint
+            value="0123456789ABCDEF0123456789ABCDEF01234567"
+            shortValue="89ABCDEF01234567"
+            label={t("settings.componentGallery.gpgFingerprint")}
+          />
+          <Fingerprint
+            value="SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            label={t("settings.componentGallery.sshFingerprint")}
+          />
+        </div>
+        <Name>{t("settings.componentGallery.fingerprint")}</Name>
       </Sample>
       <Sample id="gallery-diff" title={t("settings.componentGallery.diffViewer")}>
         <DiffPreview />

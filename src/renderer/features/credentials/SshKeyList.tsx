@@ -4,6 +4,7 @@ import {
   DefinitionList,
   Disclosure,
   Field,
+  Fingerprint,
   RefreshButton,
   Select,
 } from "../../components/ui/index";
@@ -69,13 +70,16 @@ export function SshKeyList({
       {assignedPath && (
         <>
           {selected && (
-            <p className="text-xs text-text-secondary">
-              {!selected.encrypted
-                ? t("credentials.sshKeyList.keyAvailableNoPassphraseNeeded")
-                : selected.loadedInAgent
-                  ? t("credentials.sshKeyList.keyUnlockedInTheSshAgent")
-                  : t("credentials.sshKeyList.passphraseRequiredUnlockThisKeyBelowToConnect")}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <p className="text-xs text-text-secondary">
+                {!selected.encrypted
+                  ? t("credentials.sshKeyList.keyAvailableNoPassphraseNeeded")
+                  : selected.loadedInAgent
+                    ? t("credentials.sshKeyList.keyUnlockedInTheSshAgent")
+                    : t("credentials.sshKeyList.passphraseRequiredUnlockThisKeyBelowToConnect")}
+              </p>
+              <Fingerprint value={selected.fingerprint} />
+            </div>
           )}
           <Disclosure key={assignedPath} title={t("credentials.sshKeyList.selectedKeyDetails")}>
             <div className="mt-3">
@@ -98,10 +102,6 @@ export function SshKeyList({
                     : []),
                   ...(selected
                     ? [
-                        {
-                          label: t("credentials.sshKeyList.fingerprint"),
-                          value: <span className="font-mono text-xs">{selected.fingerprint}</span>,
-                        },
                         {
                           label: t("credentials.sshKeyList.protection"),
                           value: selected.encrypted

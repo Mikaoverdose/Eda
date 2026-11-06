@@ -95,7 +95,7 @@ export function parseGpgSigningKeys(output: string, now = Date.now() / 1000): Gp
       fingerprint: primary.fingerprint,
       keyId: primary.keyId,
       userIds: [...new Set(userIds)],
-      signingFingerprints: signing.map((key) => key.fingerprint),
+      signingKeys: signing.map(({ fingerprint, expiresAt }) => ({ fingerprint, expiresAt })),
       expiresAt: primary.expiresAt,
     });
   };

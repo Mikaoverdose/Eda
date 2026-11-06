@@ -20,6 +20,7 @@ export { Radio, type RadioProps } from "./forms/Radio";
 export { ErrorDialog } from "./overlays/ErrorDialog";
 export { CodeBlock } from "./display/CodeBlock";
 export { CopyButton } from "./actions/CopyButton";
+export { Fingerprint } from "./display/Fingerprint";
 export { StateMessage } from "./feedback/StateMessage";
 export { ReviewActions, type ReviewActionsProps } from "./actions/ReviewActions";
 export { HuePicker, IDENTITY_HUES, swatchColor, type HuePickerProps } from "./forms/HuePicker";

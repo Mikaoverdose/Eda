@@ -22,7 +22,7 @@ const key: GpgSigningKey = {
   fingerprint: "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013",
   keyId: "6C7EE1B8621CC013",
   userIds: ["Author <work@example.com>"],
-  signingFingerprints: ["ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013"],
+  signingKeys: [{ fingerprint: "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013", expiresAt: null }],
   expiresAt: null,
 };
 
@@ -44,7 +44,6 @@ afterEach(async () => {
 
 const button = () =>
   [...document.querySelectorAll("button")].find((item) => item.textContent === "Retry saving")!;
-const picker = () => container.querySelectorAll('[role="combobox"]')[1]!;
 
 it("keeps the selected key after a failed save and only persists an explicit choice for its profile", async () => {
   const configureSigning = vi.fn().mockResolvedValue(
@@ -69,27 +68,16 @@ it("keeps the selected key after a failed save and only persists an explicit cho
   expect(configureSigning).not.toHaveBeenCalled();
   expect(button()).toBeUndefined();
 
-  await act(async () => {
-    const manualKey = container.querySelector<HTMLInputElement>("input:not([type])")!;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-      manualKey,
-      key.fingerprint,
-    );
-    manualKey.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () =>
-    container
-      .querySelector<HTMLInputElement>("input:not([type])")!
-      .dispatchEvent(new FocusEvent("focusout", { bubbles: true })),
-  );
+  const option = container.querySelector<HTMLInputElement>(`input[value="${key.fingerprint}!"]`)!;
+  await act(async () => option.click());
   expect(configureSigning).toHaveBeenCalledWith(
-    { format: "gpg", keyRef: key.fingerprint, signCommits: true },
+    { format: "gpg", keyRef: `${key.fingerprint}!`, signCommits: true },
     identity.id,
   );
   expect(document.querySelector('[role="alert"]')?.textContent).toContain(
     "Could not update Git configuration",
   );
-  expect(container.textContent).toContain(`Primary key fingerprint: ${key.fingerprint}`);
+  expect(option.checked).toBe(true);
   expect(onSaved).not.toHaveBeenCalled();
 
   configureSigning.mockResolvedValue(ok(identity));
@@ -122,19 +110,24 @@ it("discards a late key query after switching profiles and preserves an undetect
     root.render(<SigningSettings key={home.id} identity={home} sshKeys={[]} onSaved={onSaved} />),
   );
   await act(async () => finish(ok([key])));
-  expect(picker().textContent).toContain("ABCDEF12");
-  expect(picker().textContent).not.toContain(key.keyId);
+  expect(container.textContent).toContain("ABCDEF12");
+  expect(container.textContent).not.toContain(key.keyId);
   expect(container.textContent).toContain("No usable GPG signing keys found");
-  expect(container.textContent).toContain("Your saved key is retained");
+  expect(container.textContent).toContain("Saved key unavailable");
 });
 
-it("preserves a legacy key reference until the user selects an exact signer", async () => {
+it("preserves automatic selection until the user explicitly chooses a signer or identity", async () => {
   const subkey = "AB".repeat(20);
   const configureSigning = vi.fn().mockResolvedValue(ok(identity));
   vi.stubGlobal("eda", {
     identity: {
       listGpgSigningKeys: async () =>
-        ok([{ ...key, signingFingerprints: [key.fingerprint, subkey] }]),
+        ok([
+          {
+            ...key,
+            signingKeys: [...key.signingKeys, { fingerprint: subkey, expiresAt: 1_890_000_000 }],
+          },
+        ]),
       configureSigning,
     },
   });
@@ -142,21 +135,49 @@ it("preserves a legacy key reference until the user selects an exact signer", as
   await act(async () =>
     root.render(<SigningSettings identity={profile} sshKeys={[]} onSaved={async () => {}} />),
   );
-  expect(container.textContent).toContain("Your saved setting lets GnuPG choose the signer");
+  const automatic = container.querySelector<HTMLInputElement>(`input[value="${key.fingerprint}"]`)!;
+  expect(automatic.checked).toBe(true);
   expect(configureSigning).not.toHaveBeenCalled();
-  await act(async () =>
-    picker().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
-  );
-  expect(
-    document.querySelector(`[data-eda-select-value="${key.fingerprint}!"]`)?.textContent,
-  ).toContain("Primary key");
-  expect(document.querySelector(`[data-eda-select-value="${key.fingerprint}"]`)).toBeNull();
-  const option = document.querySelector<HTMLElement>(`[data-eda-select-value="${subkey}!"]`)!;
-  expect(option.textContent).toContain("Signing subkey");
+  const option = container.querySelector<HTMLInputElement>(`input[value="${subkey}!"]`)!;
+  expect(option.closest("label")?.textContent).toContain("Signing subkey");
+  expect(option.closest("label")?.textContent).toContain("Expires");
   await act(async () => option.click());
   expect(configureSigning).toHaveBeenCalledWith(
     { ...identity.signing, keyRef: subkey + "!" },
     identity.id,
   );
-  expect(container.textContent).toContain(`Signing subkey fingerprint: ${subkey}`);
+  expect(option.checked).toBe(true);
+
+  await act(async () => automatic.click());
+  expect(configureSigning).toHaveBeenLastCalledWith(
+    { ...identity.signing, keyRef: key.fingerprint },
+    identity.id,
+  );
+});
+
+it("groups the available signing subkey under its identity when the primary private key is offline", async () => {
+  const subkey = "AB".repeat(20);
+  const configureSigning = vi.fn();
+  vi.stubGlobal("eda", {
+    identity: {
+      listGpgSigningKeys: async () =>
+        ok([{ ...key, signingKeys: [{ fingerprint: subkey, expiresAt: 1_890_000_000 }] }]),
+      configureSigning,
+    },
+  });
+  const profile = { ...identity, signing: { ...identity.signing, keyRef: `${subkey}!` } };
+  await act(async () =>
+    root.render(<SigningSettings identity={profile} sshKeys={[]} onSaved={async () => {}} />),
+  );
+  const group = container.querySelector('[role="radiogroup"]')!;
+  const card = group.querySelector('section[aria-label="Author <work@example.com>"]')!;
+  expect(card.textContent).toContain("Primary key");
+  expect(card.textContent).toContain(key.keyId);
+  expect(card.querySelector(`input[value="${key.fingerprint}!"]`)).toBeNull();
+  expect(card.querySelector<HTMLInputElement>(`input[value="${subkey}!"]`)!.checked).toBe(true);
+  expect(card.querySelector<HTMLInputElement>(`input[value="${key.fingerprint}"]`)!.checked).toBe(
+    false,
+  );
+  expect(card.textContent).toContain("Let GnuPG choose the signing key.");
+  expect(configureSigning).not.toHaveBeenCalled();
 });

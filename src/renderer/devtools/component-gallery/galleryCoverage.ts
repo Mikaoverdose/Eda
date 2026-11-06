@@ -7,6 +7,7 @@ export const PREVIEW_ANCHORS: Record<string, string> = {
   "components/ui/forms/Checkbox.tsx": "gallery-choices",
   "components/ui/display/CodeBlock.tsx": "gallery-code",
   "components/ui/actions/CopyButton.tsx": "gallery-code",
+  "components/ui/display/Fingerprint.tsx": "gallery-code",
   "components/ui/display/ComparisonTable.tsx": "gallery-feedback",
   "components/ui/overlays/Dialog.tsx": "gallery-surfaces",
   "components/ui/display/Disclosure.tsx": "gallery-surfaces",

@@ -238,3 +238,56 @@ it("keeps application simulations active while a different profile's preferences
   expect(useSimulationStore.getState().gitIdentity).toBe("mismatch");
   expect(useSimulationStore.getState().update?.phase).toBe("available");
 });
+
+it("explains identity versus exact subkey selection without hiding the global configuration difference", async () => {
+  const primary = "ECAF7590EB3443B5C7CF3ACB6C7EE1B8621CC013";
+  const subkey = "CF8BCC4B18DE08FCD8A1615906AD222CADF6A6E1";
+  const signingProfile: Identity = {
+    ...profile,
+    signing: { format: "gpg", keyRef: `${subkey}!`, signCommits: true },
+  };
+  useAppStore.setState({ activeIdentity: signingProfile });
+  usePreferencesStore.setState({
+    values: {
+      ...usePreferencesStore.getState().values,
+      syncGlobalGitConfig: builtInSetting("syncGlobalGitConfig"),
+    },
+  });
+  inspect.mockResolvedValue({
+    ok: true,
+    value: {
+      profileId: profile.id,
+      global: Object.entries(profileGitConfig(signingProfile)).map(([key, value]) => ({
+        key,
+        value: key === "user.signingkey" ? primary : value,
+      })),
+    },
+  });
+  const listKeys = vi.fn(async () => ({
+    ok: true,
+    value: [
+      {
+        fingerprint: primary,
+        keyId: primary.slice(-16),
+        userIds: ["Work Author <work@example.com>"],
+        signingKeys: [{ fingerprint: subkey, expiresAt: null }],
+        expiresAt: null,
+      },
+    ],
+  }));
+  vi.stubGlobal("eda", {
+    identity: { inspectGit: inspect, reapplyGlobal: apply, listGpgSigningKeys: listKeys },
+  });
+  await act(async () => root.render(<GlobalGitWarning onReview={() => {}} />));
+  expect(container.textContent).toContain("Global Git settings differ");
+  expect(listKeys).not.toHaveBeenCalled();
+  await click("Review global Git settings");
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const cells = dialog.querySelectorAll("td");
+  expect(cells[0]?.textContent).toContain("Automatic selection");
+  expect(cells[0]?.textContent).toContain(primary);
+  expect(cells[1]?.textContent).toContain("Signing subkey · exact selection");
+  expect(cells[1]?.textContent).toContain(`${subkey}!`);
+  expect(dialog.textContent).toContain("Same GPG identity, different signing-key selection.");
+  expect(apply).not.toHaveBeenCalled();
+});

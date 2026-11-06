@@ -15,6 +15,9 @@ import {
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { simulatedGitConfig } from "../../devtools/git-identity-simulation";
+import { resolveGpgSelection } from "@shared/identity/signing";
+import { GpgKeyReference } from "../credentials/GpgKeyReference";
+import { useGpgKeys } from "../credentials/hooks/useGpgKeys";
 import { usePreferencesStore } from "../../stores/preferences-store";
 import { useSimulationStore, type GitIdentitySimulation } from "../../stores/simulation-store";
 
@@ -239,6 +242,25 @@ function GlobalGitStatusView({
   const [open, setOpen] = useState(false);
   const expected = profileGitConfig(profile);
   const differences = entries?.filter((entry) => entry.value !== expected[entry.key]) ?? [];
+  const gpgComparison =
+    profile.signing.format === "gpg" &&
+    (entries?.find((entry) => entry.key === "gpg.format")?.value ?? "openpgp") === "openpgp" &&
+    differences.some((entry) => entry.key === "user.signingkey");
+  const gpg = useGpgKeys(profile.id, open && !simulated && gpgComparison);
+  const currentKey = entries?.find((entry) => entry.key === "user.signingkey")?.value ?? "";
+  const currentSelection = resolveGpgSelection(currentKey, gpg.keys);
+  const profileSelection = resolveGpgSelection(profile.signing.keyRef ?? "", gpg.keys);
+  const sameGpgIdentity =
+    gpgComparison &&
+    currentSelection &&
+    profileSelection &&
+    currentSelection.identity.fingerprint === profileSelection.identity.fingerprint;
+  const displayValue = (key: string, value: string | undefined) =>
+    key === "user.signingkey" && gpgComparison && value ? (
+      <GpgKeyReference value={value} keys={gpg.keys} />
+    ) : (
+      settingValue(key, value)
+    );
 
   if (!differences.length && !error && !applyError) return null;
 
@@ -339,10 +361,15 @@ function GlobalGitStatusView({
                   rows={differences.map((entry) => ({
                     id: entry.key,
                     label: settingLabel(entry.key),
-                    before: settingValue(entry.key, entry.value),
-                    after: settingValue(entry.key, expected[entry.key]),
+                    before: displayValue(entry.key, entry.value),
+                    after: displayValue(entry.key, expected[entry.key]),
                   }))}
                 />
+                {sameGpgIdentity && (
+                  <p className="text-xs leading-relaxed text-text-secondary">
+                    {t("globalGitWarning.sameGpgIdentity")}
+                  </p>
+                )}
               </section>
             )}
 

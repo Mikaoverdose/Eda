@@ -1,14 +1,8 @@
+import { useId } from "react";
 import { t, getLocale } from "@shared/i18n";
-import { Localized } from "@renderer/i18n/Localized";
-import type { GpgSigningKey } from "@shared/identity/signing";
-import {
-  RefreshButton,
-  Field,
-  ErrorDialog,
-  Input,
-  Select,
-  Disclosure,
-} from "../../components/ui/index";
+import { resolveGpgSelection, type GpgSigningKey } from "@shared/identity/signing";
+import { RefreshButton, ErrorDialog, RadioCard, Fingerprint } from "../../components/ui/index";
+import { GpgKeyReference } from "./GpgKeyReference";
 
 export function GpgKeyPicker({
   value,
@@ -29,73 +23,115 @@ export function GpgKeyPicker({
   onRefresh: () => Promise<boolean>;
   onCommit?: (value: string) => void;
 }) {
-  const configured = value.replace(/^0x/i, "").replace(/!$/, "").toUpperCase();
-  const exact = value.endsWith("!");
-  const matches = /^[\dA-F]{8,64}$/.test(configured)
-    ? keys.filter((key) =>
-        [key.fingerprint, ...key.signingFingerprints].some((fingerprint) =>
-          fingerprint.endsWith(configured),
-        ),
-      )
-    : [];
-
-  const certificate = matches.length === 1 ? matches[0] : undefined;
-  const signers = certificate?.signingFingerprints.filter((fp) => fp.endsWith(configured)) ?? [];
-  const signer = exact && signers.length === 1 ? signers[0] : undefined;
-  const selectedGpg = exact && !signer ? undefined : certificate;
-  const selectedValue = signer ? `${signer}!` : selectedGpg ? "" : value;
+  const name = useId();
+  const selection = resolveGpgSelection(value, keys);
+  const choose = (next: string) => {
+    onChange(next);
+    onCommit?.(next);
+  };
 
   return (
     <>
-      <Field
-        label={t("credentials.gpgKeyPicker.gpgSigningKey")}
-        hint={t("credentials.gpgKeyPicker.chooseASigningKeyFromYourLocalGnuPgKeyring")}
-      >
-        {(props) => (
-          <div className="flex items-center gap-2">
-            <Select
-              {...props}
-              className="min-w-0 flex-1"
-              disabled={loading && keys.length === 0}
-              value={selectedValue}
-              onValueChange={(value) => {
-                onChange(value);
-                onCommit?.(value);
-              }}
-            >
-              <option value="" disabled>
-                {t("credentials.gpgKeyPicker.chooseSigningKey")}
-              </option>
-              {value && !selectedGpg && (
-                <option value={value}>
-                  {t("credentials.gpgKeyPicker.configuredKey", { value: value })}
-                </option>
-              )}
-              {keys.flatMap((key) => {
-                const owner =
-                  key.userIds.find((uid) => uid.includes(email)) ||
-                  key.userIds[0] ||
-                  t("credentials.gpgKeyPicker.gpgKey");
-                return key.signingFingerprints.map((fp) => (
-                  <option key={fp + "!"} value={fp + "!"}>
-                    {t(
-                      fp === key.fingerprint
-                        ? "credentials.gpgKeyPicker.primary"
-                        : "credentials.gpgKeyPicker.subkey",
-                      { owner, id: fp.slice(-16) },
-                    )}
-                  </option>
-                ));
-              })}
-            </Select>
-            <RefreshButton
-              label={t("credentials.gpgKeyPicker.refreshGpgKeys")}
-              disabled={loading}
-              onRefresh={onRefresh}
-            />
-          </div>
-        )}
-      </Field>
+      <div className="flex items-center justify-between gap-3">
+        <h3 id={`${name}-label`} className="text-sm font-medium">
+          {t("credentials.gpgKeyPicker.gpgSigningKey")}
+        </h3>
+        <RefreshButton
+          label={t("credentials.gpgKeyPicker.refreshGpgKeys")}
+          disabled={loading}
+          onRefresh={onRefresh}
+        />
+      </div>
+      {!!keys.length && (
+        <div
+          role="radiogroup"
+          aria-labelledby={`${name}-label`}
+          aria-busy={loading}
+          className="grid min-w-0 gap-3"
+        >
+          {keys.map((identity) => {
+            const owner =
+              identity.userIds.find((uid) => email && uid.includes(`<${email}>`)) ||
+              identity.userIds[0] ||
+              t("credentials.gpgKeyPicker.gpgKey");
+            return (
+              <section
+                key={identity.fingerprint}
+                aria-label={owner}
+                className="min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-surface"
+              >
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border-subtle px-3 py-2.5 [overflow-wrap:anywhere]">
+                  <h4 className="text-sm font-medium">{owner}</h4>
+                  <span className="inline-flex items-center gap-2 text-xs text-text-secondary">
+                    {t("credentials.gpgKeyPicker.primaryKey")}
+                    <Fingerprint value={identity.fingerprint} shortValue={identity.keyId} />
+                  </span>
+                </div>
+                <div className="divide-y divide-border-subtle">
+                  <RadioCard
+                    variant="row"
+                    name={name}
+                    value={identity.fingerprint}
+                    checked={selection?.identity === identity && !selection.signer}
+                    onChange={choose}
+                  >
+                    <span
+                      className="radio-control shrink-0"
+                      data-checked={selection?.identity === identity && !selection.signer}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 space-y-1">
+                      <span className="block text-sm font-medium">
+                        {t("credentials.gpgKeyPicker.automatic")}
+                      </span>
+                      <span className="block text-xs leading-relaxed text-text-secondary">
+                        {t("credentials.gpgKeyPicker.automaticDescription")}
+                      </span>
+                    </span>
+                  </RadioCard>
+                  {identity.signingKeys.map((signer) => {
+                    const checked = selection?.identity === identity && selection.signer === signer;
+                    return (
+                      <RadioCard
+                        variant="row"
+                        key={signer.fingerprint}
+                        name={name}
+                        value={`${signer.fingerprint}!`}
+                        checked={checked}
+                        onChange={choose}
+                        actions={
+                          <Fingerprint
+                            value={signer.fingerprint}
+                            shortValue={signer.fingerprint.slice(-16)}
+                          />
+                        }
+                      >
+                        <span
+                          className="radio-control shrink-0"
+                          data-checked={checked}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
+                          <span className="block text-sm font-medium">
+                            {t(
+                              signer.fingerprint === identity.fingerprint
+                                ? "credentials.gpgKeyPicker.exactPrimary"
+                                : "credentials.gpgKeyPicker.exactSubkey",
+                            )}
+                          </span>
+                          <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-secondary">
+                            <span>{expiry(signer.expiresAt)}</span>
+                          </span>
+                        </span>
+                      </RadioCard>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
       {loading && keys.length === 0 ? (
         <p role="status" className="text-xs text-text-secondary">
           {t("credentials.gpgKeyPicker.lookingForGpgSigningKeys")}
@@ -108,66 +144,29 @@ export function GpgKeyPicker({
               {t("credentials.gpgKeyPicker.noUsableGpgSigningKeysFoundCreateOr")}
             </p>
           )}
-          {value && !selectedGpg && (
+          {value && !selection && (
             <p className="text-xs text-git-modified">
               {t("credentials.gpgKeyPicker.theConfiguredKeyWasNotDetectedAsA")}
             </p>
           )}
         </>
       )}
-      {selectedGpg && (
-        <div className="grid gap-1 break-all text-xs text-text-secondary">
-          <p>
-            <Localized
-              id="credentials.gpgKeyPicker.fingerprint"
-              values={{
-                code: <code>{selectedGpg.fingerprint}</code>,
-                value2: selectedGpg.expiresAt
-                  ? t("credentials.gpgKeyPicker.expires", {
-                      value1: new Date(selectedGpg.expiresAt * 1000).toLocaleDateString(
-                        getLocale(),
-                      ),
-                    })
-                  : t("gpgKeyPicker.noExpiration"),
-              }}
-            />
+      {value && !selection && (
+        <div className="space-y-2 rounded-md border border-border-subtle p-3">
+          <p className="text-xs text-text-secondary">
+            {t("credentials.gpgKeyPicker.savedSelection")}
           </p>
-          {!exact && <p>{t("credentials.gpgKeyPicker.unspecifiedSigner")}</p>}
-          {signer && signer !== selectedGpg.fingerprint && (
-            <p>
-              <Localized
-                id="credentials.gpgKeyPicker.subkeyFingerprint"
-                values={{ code: <code>{signer}</code> }}
-              />
-            </p>
-          )}
+          <GpgKeyReference value={value} keys={keys} />
         </div>
       )}
-
-      <Disclosure title={t("credentials.gpgKeyPicker.useAKeyIdManually")} className="text-xs">
-        <div className="mt-2">
-          <Field
-            label={t("credentials.gpgKeyPicker.gpgKeyId")}
-            hint={t("credentials.gpgKeyPicker.forAKeyManagedOutsideTheDetectedKeyring")}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                mono
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                onBlur={(event) => onCommit?.(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-            )}
-          </Field>
-        </div>
-      </Disclosure>
     </>
   );
+}
+
+function expiry(expiresAt: number | null): string {
+  return expiresAt
+    ? t("credentials.gpgKeyPicker.signerExpires", {
+        date: new Date(expiresAt * 1000).toLocaleDateString(getLocale()),
+      })
+    : t("credentials.gpgKeyPicker.signerNoExpiration");
 }

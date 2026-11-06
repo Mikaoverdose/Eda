@@ -37,7 +37,7 @@ it("reads public identities and fingerprints from secret-key listings without le
       fingerprint: primary,
       keyId: primary.slice(-16),
       userIds: ["Work: René <work@example.com>", "Literal \\x3a <other@example.com>"],
-      signingFingerprints: [primary],
+      signingKeys: [{ fingerprint: primary, expiresAt: now + 1000 }],
       expiresAt: now + 1000,
     },
   ]);
@@ -48,12 +48,12 @@ it("offers a usable signing subkey even when the certification-only primary is o
     secret({ 11: "cSC", 14: "#" }),
     fingerprint(primary),
     record("uid", { 9: "Work <work@example.com>" }),
-    record("ssb", { 11: "s", 14: "card-serial" }),
+    record("ssb", { 6: String(now + 500), 11: "s", 14: "card-serial" }),
     fingerprint(subkey),
   ].join("\n");
 
   expect(parseGpgSigningKeys(output, now)).toMatchObject([
-    { fingerprint: primary, signingFingerprints: [subkey] },
+    { fingerprint: primary, signingKeys: [{ fingerprint: subkey, expiresAt: now + 500 }] },
   ]);
   expect(parseGpgSigningKeys(output.replace("card-serial", "#"), now)).toEqual([]);
 });
