@@ -170,8 +170,14 @@ it("schedules only open repositories, pauses when offline or suspended, backs of
     tabs: [client.id],
     selectedRepositoryId: client.id,
   });
+  const inspections = vi.spyOn(service, "fetchStates");
+  scheduler.configure(client.id, 0);
+  await scheduler.tick();
+  expect(inspections).not.toHaveBeenCalled();
+  scheduler.configure(client.id, 1);
   conditions = { online: false, suspended: false };
   await scheduler.tick();
+  expect(inspections).not.toHaveBeenCalled();
   expect((await scheduler.inspect(client.id)).remotes[0]!.history).toBeNull();
 
   conditions = { online: true, suspended: false };

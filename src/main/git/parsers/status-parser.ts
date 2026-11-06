@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { ERROR_CODE } from "@shared/error-codes";
 import { AppError } from "@shared/errors";
 import type {
@@ -8,7 +9,6 @@ import type {
 } from "@shared/repository/repository-read";
 
 const CHANGE_CODES = new Set<ChangeCode>([".", "M", "T", "A", "D", "R", "C", "U", "?", "!"]);
-const FULL_OID = /^[0-9a-f]{40,64}$/;
 
 export function parseStatus(output: Buffer): RepositoryStatus {
   const records = output.toString("utf8").split("\0");
@@ -174,7 +174,7 @@ function parseXy(value: string | undefined): [ChangeCode, ChangeCode] {
 }
 
 function assertOid(value: string): void {
-  if (!FULL_OID.test(value) && !/^0{40,64}$/.test(value)) malformed();
+  if (!isFullObjectId(value)) malformed();
 }
 
 function malformed(): never {

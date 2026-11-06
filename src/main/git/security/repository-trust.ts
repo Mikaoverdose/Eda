@@ -8,7 +8,10 @@ import { dirname, join, resolve } from "node:path";
 import type { Database } from "../../persistence/types";
 import { repositoryTrust } from "../../persistence/schema";
 
-const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
+const missing = (error: unknown) => {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR";
+};
 const refused = () =>
   new GitError({
     kind: "not-a-repository",
@@ -113,11 +116,13 @@ export class RepositoryTrust {
   }
 
   async checked(root: string) {
-    const record = await metadata(await realpath(root), false).catch((error) => {
+    try {
+      const record = await metadata(await realpath(root), false);
+      if (!this.approved(record)) throw refused();
+      return record;
+    } catch (error) {
       if (missing(error)) throw refused();
       throw error;
-    });
-    if (!this.approved(record)) throw refused();
-    return record;
+    }
   }
 }

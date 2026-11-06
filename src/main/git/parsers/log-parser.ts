@@ -1,24 +1,23 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { ERROR_CODE } from "@shared/error-codes";
 import { AppError } from "@shared/errors";
 import type { CommitDecoration, HistoryCommit } from "@shared/repository/repository-read";
 
-const FULL_OID = /^[0-9a-f]{40,64}$/;
+export const LOG_ARGUMENTS = [
+  "-z",
+  "--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f)",
+] as const;
 
 export function parseLog(output: Buffer): HistoryCommit[] {
-  if (output.length === 0) return [];
-  return output
-    .toString("utf8")
-    .split("\x1e")
-    .filter((record) => record.length > 0)
-    .map(parseRecord);
+  const fields = output.toString("utf8").split("\0");
+  if (fields.pop() !== "" || fields.length % 9 !== 0) malformed();
+  const commits: HistoryCommit[] = [];
+  for (let offset = 0; offset < fields.length; offset += 9)
+    commits.push(parseRecord(fields.slice(offset, offset + 9)));
+  return commits;
 }
 
-function parseRecord(record: string): HistoryCommit {
-  const fields = record.replace(/\n$/, "").split("\0");
-
-  if (fields.at(-1) === "") fields.pop();
-  if (fields.length !== 9) malformed();
-
+function parseRecord(fields: string[]): HistoryCommit {
   const [
     oid,
     parentField,
@@ -79,7 +78,7 @@ function parseTimestamp(value: string): string {
 }
 
 function assertOid(value: string): void {
-  if (!FULL_OID.test(value)) malformed();
+  if (!isFullObjectId(value)) malformed();
 }
 
 function malformed(): never {

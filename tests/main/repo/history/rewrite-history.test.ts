@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempRepo, type TempRepo } from "../../../helpers/temp-repo";
 import { openDatabase } from "@main/persistence/database";
@@ -237,3 +237,35 @@ it("reverses completed cherry-pick and revert commits", async () => {
     failure.mockRestore();
   }
 }, 60_000);
+
+it.runIf(process.platform === "linux")(
+  "keeps the recovery refs but blocks automatic Undo for ambiguous rewritten paths",
+  async () => {
+    const { replay, repository, reversal } = await setup();
+    await repo.writeFile("base", "base");
+    await repo.commit("base");
+    const base = (await repo.run(["rev-parse", "HEAD"])).trim();
+    await repo.run(["checkout", "-b", "side"]);
+    const rawPath = Buffer.concat([Buffer.from(join(repo.path, "bad")), Buffer.from([0xff])]);
+    await writeFile(rawPath, "raw");
+    await repo.writeFile("bad�", "unicode");
+    await repo.commit("unusual paths");
+    const side = (await repo.run(["rev-parse", "HEAD"])).trim();
+    await repo.run(["checkout", "main"]);
+    const review = await replay.prepare(repository.id, "cherry-pick", "start", [side]);
+    const result = await replay.execute(repository.id, review.token);
+    expect(result.state).toBe("completed");
+    const action = (await reversal.list(repository.id)).find(
+      (item) => item.kind === "cherry-pick",
+    )!;
+    expect(action).toMatchObject({
+      available: false,
+      reason: expect.stringContaining("invalid UTF-8"),
+    });
+    expect((await repo.run(["rev-parse", `refs/eda/recovery/${action.id}/head`])).trim()).toBe(
+      base,
+    );
+    expect(await readFile(rawPath, "utf8")).toBe("raw");
+    expect(await readFile(join(repo.path, "bad�"), "utf8")).toBe("unicode");
+  },
+);

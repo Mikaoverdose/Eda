@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText } from "@shared/error-codes";
 import { errorMessage, GitError } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
@@ -282,7 +283,7 @@ export class RemoteService {
           .find(([, ref]) => ref === destination);
         const remoteOid = match?.[0] ?? null;
 
-        if (remoteOid !== null && !/^[a-f0-9]{40,64}$/.test(remoteOid))
+        if (remoteOid !== null && !isFullObjectId(remoteOid))
           throw remoteError(errorText("main.remoteService.theRemoteReturnedAnInvalidObjectId"));
         if (request.mode === "delete" && remoteOid === null)
           throw remoteError(

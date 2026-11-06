@@ -1,8 +1,9 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { readRegularFile } from "../../filesystem/read-regular-file";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { GIT_FILE_MODE } from "@shared/repository/git-file-mode";
+import { GIT_FILE_MODE, isRegularFileMode } from "@shared/repository/git-file-mode";
 import type { PartialStageRequest } from "@shared/repository/partial-stage";
 import type { DiscardPreview, RecoverySummary } from "@shared/workflows/recovery";
 import { createHash, randomUUID } from "node:crypto";
@@ -57,10 +58,11 @@ export class DiscardService {
       );
 
       for (const row of result.stdout.split("\0").filter(Boolean)) {
-        const entry = /^(\d{6}) ([a-f0-9]{40,64}) ([0-3])\t([\s\S]+)$/.exec(row);
+        const entry = /^(\d{6}) (\S+) ([0-3])\t([\s\S]+)$/.exec(row);
 
         if (
           !entry ||
+          !isFullObjectId(entry[2]) ||
           entry[4] !== path ||
           (entry[1] === GIT_FILE_MODE.submodule && options.working !== false)
         )
@@ -113,6 +115,35 @@ export class DiscardService {
     return { record, index: await this.index(root, paths) };
   }
 
+  private async readRegularTree(root: string, oid: string, paths: string[]) {
+    const result = await this.git.exec(
+      ["--literal-pathspecs", "ls-tree", "-r", "-z", oid, "--", ...paths],
+      {
+        cwd: root,
+        operation: t("operations.reviewRewriteRecoveryTree"),
+        maxStdoutBytes: 1024 * 1024,
+      },
+    );
+
+    const entries = new Map<string, { mode: string; oid: string }>();
+
+    for (const row of result.stdout.split("\0").filter(Boolean)) {
+      const match = /^(\d{6}) (\w+) (\S+)\t([\s\S]+)$/.exec(row);
+      if (
+        !match ||
+        match[2] !== "blob" ||
+        !isFullObjectId(match[3]) ||
+        !isRegularFileMode(match[1]!)
+      )
+        throw invalid(
+          errorText("main.discardService.thisRewriteAffectsASymlinkSubmoduleOrAnother"),
+        );
+      entries.set(match[4]!, { mode: match[1]!, oid: match[3]! });
+    }
+
+    return entries;
+  }
+
   async prepareTreeOperation(
     root: string,
     profileId: string,
@@ -126,34 +157,10 @@ export class DiscardService {
         errorText("main.discardService.recoverySupportsBetween1And256DistinctAffectedPaths"),
       );
 
-    const readTree = async (oid: string) => {
-      const result = await this.git.exec(
-        ["--literal-pathspecs", "ls-tree", "-r", "-z", oid, "--", ...paths],
-        {
-          cwd: root,
-          operation: t("operations.reviewRewriteRecoveryTree"),
-          maxStdoutBytes: 1024 * 1024,
-        },
-      );
-
-      const entries = new Map<string, { mode: string; oid: string }>();
-
-      for (const row of result.stdout.split("\0").filter(Boolean)) {
-        const match = /^(\d{6}) (\w+) ([a-f0-9]{40,64})\t([\s\S]+)$/.exec(row);
-        if (!match || match[2] !== "blob")
-          throw invalid(
-            errorText("main.discardService.thisRewriteAffectsASymlinkSubmoduleOrAnother"),
-          );
-        entries.set(match[4]!, { mode: match[1]!, oid: match[3]! });
-      }
-
-      return entries;
-    };
-
-    const fromEntries = await readTree(fromOid);
-    const toEntries = await readTree(toOid);
+    const fromEntries = await this.readRegularTree(root, fromOid, paths);
+    const toEntries = await this.readRegularTree(root, toOid, paths);
     const files: SavedFile[] = [];
-    const after: Record<string, string> = {};
+    const after: Record<string, string> = Object.create(null);
     let bytes = 0;
 
     for (const path of paths) {
@@ -178,6 +185,7 @@ export class DiscardService {
           path,
           content: content.stdoutBytes.toString("base64"),
           mode,
+          gitMode: from.mode,
           hash: recoveryFileHash(content.stdoutBytes, mode),
           tracked: true,
         });
@@ -252,7 +260,7 @@ export class DiscardService {
   }
 
   async finishOperation(record: ContentRecoveryRecord): Promise<void> {
-    const after: Record<string, string> = {};
+    const after: Record<string, string> = Object.create(null);
     for (const file of record.files)
       after[file.path] = (await this.capture(record.root, file.path, true)).hash;
     this.store.save({ ...record, state: "completed", after });
@@ -539,7 +547,7 @@ export class DiscardService {
         }
       }
     } finally {
-      const after: Record<string, string> = {};
+      const after: Record<string, string> = Object.create(null);
       for (const file of record.files)
         after[file.path] = (await this.capture(root, file.path, file.tracked)).hash;
       this.store.save({ ...record, state: "completed", after });
@@ -571,7 +579,7 @@ export class DiscardService {
     path: string,
     stage?: number,
   ): Buffer {
-    const record = this.store.get(profileId, repositoryId, id);
+    const record = this.store.get(profileId, repositoryId, id, "inspect");
 
     if (stage !== undefined) {
       const entry = record?.savedIndex?.find((item) => item.path === path && item.stage === stage);
@@ -591,7 +599,7 @@ export class DiscardService {
   }
 
   forget(profileId: string, repositoryId: string, id: string): void {
-    if (!this.store.get(profileId, repositoryId, id))
+    if (!this.store.get(profileId, repositoryId, id, "inspect"))
       throw invalid(errorText("main.discardService.thisSnapshotIsNoLongerAvailable"));
     this.store.remove(profileId, repositoryId, id);
   }
@@ -618,6 +626,19 @@ export class DiscardService {
     expected: Record<string, string>,
     allowRestored = false,
   ) {
+    // Earlier Windows rewrite snapshots stored 0666 for both regular files and symlinks.
+    if (record.source === "rewrite-recovery") {
+      const ambiguous = record.files.filter((file) => file.mode === 0o666 && !file.gitMode);
+      if (ambiguous.length) {
+        const tree = this.store.originalRewriteTree(record);
+        const paths = ambiguous.map((file) => file.path);
+        const entries = tree && (await this.readRegularTree(record.root, tree, paths));
+        if (!entries || paths.some((path) => !entries.has(path)))
+          throw invalid(
+            errorText("main.discardService.thisSnapshotCannotBeRestoredAutomaticallyInspectIts"),
+          );
+      }
+    }
     for (const file of record.files) {
       const current = await this.capture(record.root, file.path, file.tracked);
       if (current.hash !== expected[file.path] && !(allowRestored && current.hash === file.hash))

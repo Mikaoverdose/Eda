@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import type { HistoryDirection } from "@shared/workflows/history-recovery";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Identity } from "@shared/identity/identity";
@@ -239,7 +240,7 @@ export class WorkflowJournal {
       record.profileId !== row.profileId ||
       record.repositoryId !== row.repositoryId ||
       (kind === "local" && !record.branch) ||
-      !/^[a-f0-9]{40,64}$/.test(record.head)
+      !isFullObjectId(record.head)
     )
       return undefined;
 

@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -65,7 +66,7 @@ export function assertValidObjectId(value: string, operation: string): void {
 }
 
 export function assertFullObjectId(value: string, operation: string): void {
-  if (!/^[0-9a-f]{40,64}$/.test(value)) {
+  if (!isFullObjectId(value)) {
     throw invalid(
       operation,
       errorText("main.git.validation.isNotAFullGitObjectId", { value: value }),

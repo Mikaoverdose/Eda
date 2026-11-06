@@ -18,7 +18,7 @@ describe("parseLog", () => {
   });
 
   it("rejects records with invalid object ids", () => {
-    const malformed = ["\x1enot-an-oid", "", "a", "b", "1", "1", "s", "", "", ""].join("\0");
+    const malformed = ["not-an-oid", "", "a", "b", "1", "1", "s", "", "", ""].join("\0");
     expect(() => parseLog(Buffer.from(malformed))).toThrow(/history/i);
   });
 });

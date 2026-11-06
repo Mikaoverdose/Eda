@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -101,11 +102,7 @@ export class StashService {
         string,
       ];
 
-      if (
-        !/^[a-f0-9]{40,64}$/.test(oid) ||
-        !/^stash@\{\d+\}$/.test(selector) ||
-        !/^\d+$/.test(timestamp)
-      )
+      if (!isFullObjectId(oid) || !/^stash@\{\d+\}$/.test(selector) || !/^\d+$/.test(timestamp))
         throw invalid(errorText("main.stashService.gitReturnedAnUnreadableStashEntry"));
 
       entries.push({ oid, selector, message, timestamp: Number(timestamp) });
@@ -294,7 +291,7 @@ export class StashService {
     if (
       parents.length < 2 ||
       parents.length > 3 ||
-      parents.some((parent) => !/^[a-f0-9]{40,64}$/.test(parent))
+      parents.some((parent) => !isFullObjectId(parent))
     )
       throw invalid(errorText("main.stashService.thisEntryDoesNotHaveASupportedStashStructure"));
 
@@ -385,10 +382,10 @@ export class StashService {
           },
         );
         const entry = result.stdout
-          ? /^(100644|100755) blob ([a-f0-9]{40,64})\t([^\0]+)\0$/.exec(result.stdout)
+          ? /^(100644|100755) blob (\S+)\t([^\0]+)\0$/.exec(result.stdout)
           : null;
 
-        if (result.stdout && (!entry || entry[3] !== path))
+        if (result.stdout && (!entry || !isFullObjectId(entry[2]) || entry[3] !== path))
           throw invalid(
             errorText("main.stashService.individualRestoreSupportsRegularFilesUseTheDedicated"),
           );

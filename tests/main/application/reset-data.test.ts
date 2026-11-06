@@ -1,8 +1,15 @@
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { applyMigrations } from "@main/persistence/migrate";
+import initialSql from "@main/persistence/migrations/20261030212245_initial-schema/migration.sql?raw";
+import { openDatabase } from "@main/persistence/database";
+import { clearDatabase } from "@main/application/reset-data";
 import { expect, it } from "vitest";
 
 it("wipes every user table but preserves migrations and a usable fresh database", async () => {
   const { openInMemoryDatabase } = await import("@main/persistence/database");
-  const { clearDatabase } = await import("@main/application/reset-data");
   const { SettingsRepository } = await import("@main/persistence/settings-repository");
   const { IdentityRepository } = await import("@main/persistence/identity-repository");
   const db = openInMemoryDatabase();
@@ -38,5 +45,33 @@ it("wipes every user table but preserves migrations and a usable fresh database"
     expect(profiles.getActiveId()).toBe(fresh.id);
   } finally {
     db.close();
+  }
+});
+
+it("removes generated pre-upgrade backups while preserving unrelated files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "eda-reset-"));
+  try {
+    const path = join(dir, "eda.db");
+    const old = new DatabaseSync(path);
+    try {
+      applyMigrations(old, [{ id: "20261030212245_initial-schema", sql: initialSql }]);
+    } finally {
+      old.close();
+    }
+    await writeFile(path + ".backup-personal", "user file");
+    const db = openDatabase(path);
+    try {
+      expect((await readdir(dir)).filter((name) => name.startsWith("eda.db.backup-"))).toHaveLength(
+        2,
+      );
+      clearDatabase(db);
+      expect((await readdir(dir)).filter((name) => name.startsWith("eda.db.backup-"))).toEqual([
+        "eda.db.backup-personal",
+      ]);
+    } finally {
+      db.close();
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -189,8 +190,8 @@ export class ConflictService {
     const entries: Entry[] = [];
 
     for (const row of stdout.split("\0").filter(Boolean)) {
-      const match = /^(\d{6}) ([a-f0-9]{40,64}) ([0-3])\t([\s\S]+)$/.exec(row);
-      if (!match || match[4] !== path)
+      const match = /^(\d{6}) (\S+) ([0-3])\t([\s\S]+)$/.exec(row);
+      if (!match || !isFullObjectId(match[2]) || match[4] !== path)
         throw invalid(
           errorText(
             "main.conflictService.gitReturnedUnexpectedConflictEntriesRefreshBeforeResolving",

@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -175,9 +176,10 @@ async function gitImage(
   if (!entry)
     return unavailable(path, t("main.imagePreview.theIndexHasUnresolvedConflictVersions"));
 
-  const match = /^(100644|100755) (?:blob )?([0-9a-f]{40,64})(?: 0)?\t/.exec(entry);
+  const match = /^(100644|100755) (?:blob )?(\S+)(?: 0)?\t/.exec(entry);
 
-  if (!match) return unavailable(path, t("main.imagePreview.onlyRegularImageBlobsCanBePreviewed"));
+  if (!match || !isFullObjectId(match[2]))
+    return unavailable(path, t("main.imagePreview.onlyRegularImageBlobsCanBePreviewed"));
 
   const oid = match[2]!;
   const size = await git.exec(["cat-file", "-s", oid], {

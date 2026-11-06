@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { access, mkdir, rename } from "node:fs/promises";
+import { access, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { openInMemoryDatabase } from "@main/persistence/database";
 import { RepositoryTrust } from "@main/git/security/repository-trust";
@@ -42,6 +42,11 @@ it("blocks repository-selected programs before approval, including on background
     await rename(join(repo.path, ".git"), join(repo.path, "old-metadata"));
     await mkdir(join(repo.path, ".git"));
     await expect(git.status(repo.path)).rejects.toThrow();
+    await rename(repo.path, join(repo.home, "moved"));
+    expect(await git.isRepository(repo.path)).toBe(false);
+    await writeFile(repo.path, "replaced by a regular file");
+    expect(await git.isRepository(repo.path)).toBe(false);
+    await expect(git.status(repo.path)).rejects.toMatchObject({ kind: "not-a-repository" });
     expect(confirm).toHaveBeenCalledTimes(2);
   } finally {
     db.close();

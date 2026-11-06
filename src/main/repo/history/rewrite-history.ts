@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { ERROR_CODE, errorText } from "@shared/error-codes";
 import { AppError, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -147,7 +148,9 @@ export async function finalizeRewrite(
   if (beforeFlags !== "" && beforeFlags.split("\0").some((line) => line && !line.startsWith("H ")))
     blockedReason = t("main.rewriteHistory.theOriginalIndexHasSpecialFlagsUseSaved");
 
-  if (paths.length) {
+  if (!isUtf8(changed.stdoutBytes)) {
+    blockedReason = t("main.rewriteHistory.unsupportedPathEncoding");
+  } else if (paths.length) {
     try {
       const snapshot = await recovery.prepareTreeOperation(
         root,

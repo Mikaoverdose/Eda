@@ -1,3 +1,4 @@
+import { isFullObjectId } from "../repository/object-id";
 import { isOneOf, isRecord } from "../validation";
 
 export type GraphColumnId = "author" | "date" | "sha";
@@ -37,8 +38,7 @@ export function isGraphFilter(value: unknown): value is GraphFilter {
       (list) => Array.isArray(list) && list.length <= 256 && list.every(ref),
     ) &&
     (item["pinnedRef"] === null || ref(item["pinnedRef"])) &&
-    (item["pinnedOid"] === undefined ||
-      (typeof item["pinnedOid"] === "string" && /^[a-f0-9]{40,64}$/.test(item["pinnedOid"])))
+    (item["pinnedOid"] === undefined || isFullObjectId(item["pinnedOid"]))
   );
 }
 

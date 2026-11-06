@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -98,7 +99,7 @@ export class HistoryRecoveryService {
 
       for (let i = 0; i + 2 < fields.length; i += 3) {
         const oid = fields[i]!.trim();
-        if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid))
+        if (!isFullObjectId(oid))
           throw invalid(
             errorText("main.historyRecoveryService.gitReturnedAnUnreadableReflogEntry"),
           );
@@ -143,9 +144,9 @@ export class HistoryRecoveryService {
       entries = result.stdout
         .split("\n")
         .flatMap((line) => {
-          const match = /^unreachable commit ([a-f0-9]{40}|[a-f0-9]{64})$/.exec(line.trim());
+          const match = /^unreachable commit (\S+)$/.exec(line.trim());
 
-          return match
+          return match && isFullObjectId(match[1])
             ? [
                 {
                   oid: match[1]!,

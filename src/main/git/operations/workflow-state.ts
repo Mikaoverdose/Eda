@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { constants } from "node:fs";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
@@ -78,8 +79,10 @@ async function readMarker(path: string): Promise<{ text: string; instance: strin
   }
 }
 
-const objectId = (value: string | null | undefined) =>
-  /^[a-f0-9]{40,64}$/.test(value?.trim() ?? "") ? value!.trim() : null;
+function objectId(value: string | null | undefined) {
+  const oid = value?.trim();
+  return isFullObjectId(oid) ? oid : null;
+}
 const number = (value: string | null | undefined) =>
   /^\d+$/.test(value?.trim() ?? "") ? Number(value!.trim()) : null;
 

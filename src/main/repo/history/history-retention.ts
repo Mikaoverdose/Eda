@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -46,7 +47,7 @@ export async function pruneHistoryRecords(
         ...(record.refChange!.reversal
           ? [record.refChange!.target, record.refChange!.reversal.afterIndexTree]
           : []),
-      ].every((oid) => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid))
+      ].every(isFullObjectId)
     )
       continue;
 

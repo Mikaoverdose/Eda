@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -33,7 +34,7 @@ import type { GitEngine } from "./execution/git-engine";
 import { ProcessSpawnError, type ProcessRunner } from "./execution/process-runner";
 import { readStashHistory } from "./operations/stash-history";
 import { parseUnifiedDiff } from "./parsers/diff-parser";
-import { parseLog } from "./parsers/log-parser";
+import { LOG_ARGUMENTS, parseLog } from "./parsers/log-parser";
 import { commitSignatureFormat, parseCommitVerification } from "./security/commit-signature";
 
 import { parseStatus } from "./parsers/status-parser";
@@ -179,10 +180,7 @@ export class GitService {
             "-c",
             "safe.bareRepository=explicit",
           );
-          repositoryArgs.push(
-            "-c",
-            `core.hooksPath=${env["EDA_SSH_HOST_TRUST"] ? "/dev/null" : join(repository.commonDir, "hooks")}`,
-          );
+          if (env["EDA_SSH_HOST_TRUST"]) repositoryArgs.push("-c", "core.hooksPath=/dev/null");
         }
       } else {
         env["GIT_CEILING_DIRECTORIES"] = dirname(this.trust.neutralDirectory);
@@ -371,6 +369,13 @@ export class GitService {
       },
     );
 
+    if (!isUtf8(stdoutBytes))
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.readStatus"),
+        repositoryPath: path,
+        message: errorText("main.git.gitService.unsupportedStatusEncoding"),
+      });
     return parseOutput(parseStatus, stdoutBytes, path, t("operations.readStatus"));
   }
 
@@ -406,9 +411,6 @@ export class GitService {
       });
     }
 
-    const format =
-      "%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f)%x00";
-
     for (const ref of [...(page.refs ?? []), ...(page.hiddenRefs ?? [])])
       assertValidRefName(ref, t("operations.filterHistory"));
 
@@ -433,7 +435,7 @@ export class GitService {
         "--decorate-refs-exclude=refs/eda/*",
         `--max-count=${limit + 1}`,
         `--skip=${offset}`,
-        `--format=${format}`,
+        ...LOG_ARGUMENTS,
       ],
       {
         cwd: path,
@@ -460,10 +462,8 @@ export class GitService {
   async inspectCommit(path: string, oid: string): Promise<CommitInspection> {
     assertFullObjectId(oid, t("operations.inspectCommit"));
 
-    const format =
-      "%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f)%x00";
     const [log, refs, shallow, object] = await Promise.all([
-      this.exec(["log", "-1", "--decorate=full", `--format=${format}`, oid, "--"], {
+      this.exec(["log", "-1", "--decorate=full", ...LOG_ARGUMENTS, oid, "--"], {
         cwd: path,
         operation: t("operations.inspectCommit"),
         maxStdoutBytes: 1024 * 1024,

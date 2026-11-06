@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -659,7 +660,7 @@ export class WorkflowService {
         if (autostash.stdout.trim()) {
           const oid = autostash.stdout.trim();
 
-          if (!/^[a-f0-9]{40,64}$/.test(oid))
+          if (!isFullObjectId(oid))
             throw invalid(
               errorText(
                 "main.workflowService.invalidNativeAutostashStateInspectItWithGitBeforeAborting",

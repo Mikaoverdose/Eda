@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GitError } from "@shared/errors";
 import {
   assertAllowedRemoteUrl,
+  assertFullObjectId,
   assertNotOptionLike,
   assertPlainPath,
   assertRepositoryPath,
@@ -19,6 +20,15 @@ const throwsInvalidInput = (fn: () => void) => {
     expect((error as GitError).kind).toBe("invalid-input");
   }
 };
+
+it("requires a SHA-1 or SHA-256 length for full OIDs while accepting abbreviations separately", () => {
+  for (const length of [40, 64])
+    expect(() => assertFullObjectId("a".repeat(length), "test")).not.toThrow();
+  for (const length of [4, 39, 41, 63]) {
+    expect(() => assertValidObjectId("a".repeat(length), "test")).not.toThrow();
+    throwsInvalidInput(() => assertFullObjectId("a".repeat(length), "test"));
+  }
+});
 
 describe("isValidRefName", () => {
   it.each(["main", "feature/identity-switch", "release/v0.1.0", "fix-123", "users/eda/wip"])(

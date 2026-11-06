@@ -7,7 +7,9 @@ import {
 import { isOneOf, isRecord } from "@shared/validation";
 import { createHash } from "node:crypto";
 import type { Database } from "./types";
-import { contentRecovery } from "./schema";
+import { contentRecovery, workflowJournal } from "./schema";
+import { isRegularFileMode } from "@shared/repository/git-file-mode";
+import { isFullObjectId } from "@shared/repository/object-id";
 
 export interface SavedFile {
   path: string;
@@ -15,6 +17,7 @@ export interface SavedFile {
   mode: number;
   hash: string;
   tracked: boolean;
+  gitMode?: string;
 }
 
 export interface ContentRecoveryRecord extends RecoverySummary {
@@ -75,6 +78,8 @@ function isSavedFile(value: unknown): value is SavedFile {
     !isRecord(value) ||
     typeof value["path"] !== "string" ||
     typeof value["tracked"] !== "boolean" ||
+    (value["gitMode"] !== undefined &&
+      (typeof value["gitMode"] !== "string" || !isRegularFileMode(value["gitMode"]))) ||
     typeof value["mode"] !== "number" ||
     !Number.isInteger(value["mode"]) ||
     value["mode"] < 0 ||
@@ -88,7 +93,9 @@ function isSavedFile(value: unknown): value is SavedFile {
   );
 }
 
-function isRecoveryRecord(value: unknown): value is ContentRecoveryRecord {
+type RecoveryAccess = "restore" | "inspect";
+
+function isRecoveryRecord(value: unknown, access: RecoveryAccess): value is ContentRecoveryRecord {
   if (
     !isRecord(value) ||
     !isRecoverySummary(value) ||
@@ -103,6 +110,9 @@ function isRecoveryRecord(value: unknown): value is ContentRecoveryRecord {
   if (
     paths.size !== value.paths.length ||
     value["files"].some((file: SavedFile) => !paths.has(file.path)) ||
+    (access === "restore" &&
+      value.source === "rewrite-recovery" &&
+      value["files"].some((file: SavedFile) => file.content !== null && file.mode === 0)) ||
     new Set(value["files"].map((file: SavedFile) => file.path)).size !== value["files"].length
   )
     return false;
@@ -123,12 +133,33 @@ function isRecoveryRecord(value: unknown): value is ContentRecoveryRecord {
         Object.values(after).every(
           (hash) => typeof hash === "string" && (hash === "missing" || /^[a-f0-9]{64}$/.test(hash)),
         ) &&
-        value["files"].every((file: SavedFile) => Object.hasOwn(after, file.path))))
+        value["files"].every(
+          (file: SavedFile) =>
+            Object.hasOwn(after, file.path) || (access === "inspect" && file.path === "__proto__"),
+        )))
   );
 }
 
 export class ContentRecoveryRepository {
   constructor(private readonly db: Database) {}
+
+  originalRewriteTree(record: ContentRecoveryRecord): string | undefined {
+    const row = this.db
+      .select({
+        tree: sql<unknown>`json_extract(${workflowJournal.record}, '$.refChange.indexTree')`,
+      })
+      .from(workflowJournal)
+      .where(
+        and(
+          eq(workflowJournal.profileId, record.profileId),
+          eq(workflowJournal.repositoryId, record.repositoryId),
+          eq(workflowJournal.root, record.root),
+          sql`json_extract(${workflowJournal.record}, '$.refChange.snapshotId') = ${record.id}`,
+        ),
+      )
+      .get();
+    return isFullObjectId(row?.tree) ? row.tree : undefined;
+  }
 
   remove(profileId: string, repositoryId: string, id: string): void {
     this.db
@@ -160,7 +191,12 @@ export class ContentRecoveryRepository {
       .run();
   }
 
-  get(profileId: string, repositoryId: string, id: string): ContentRecoveryRecord | undefined {
+  get(
+    profileId: string,
+    repositoryId: string,
+    id: string,
+    access: RecoveryAccess = "restore",
+  ): ContentRecoveryRecord | undefined {
     const row = this.db
       .select()
       .from(contentRecovery)
@@ -176,7 +212,7 @@ export class ContentRecoveryRepository {
     if (!row || row.version !== 1) return undefined;
     try {
       const record: unknown = JSON.parse(row.value);
-      return isRecoveryRecord(record) &&
+      return isRecoveryRecord(record, access) &&
         record.createdAt === row.createdAt &&
         record.id === row.id &&
         record.profileId === row.profileId &&

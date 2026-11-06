@@ -1,3 +1,4 @@
+import { isFullObjectId } from "../src/shared/repository/object-id.ts";
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -30,7 +31,7 @@ export function readBuildInfo(root = fileURLToPath(new URL("../", import.meta.ur
   try {
     if (realpathSync(git("rev-parse", "--show-toplevel")) === realpathSync(root)) {
       const head = git("rev-parse", "--verify", "HEAD");
-      if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head)) throw new Error("Invalid Git commit.");
+      if (!isFullObjectId(head)) throw new Error("Invalid Git commit.");
 
       commit = head;
       dirty =

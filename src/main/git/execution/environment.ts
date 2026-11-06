@@ -66,11 +66,6 @@ export function buildGitEnvironment(
   env["LC_ALL"] = "C";
   env["LANG"] = "C";
 
-  delete env["GIT_AUTHOR_NAME"];
-  delete env["GIT_AUTHOR_EMAIL"];
-  delete env["GIT_COMMITTER_NAME"];
-  delete env["GIT_COMMITTER_EMAIL"];
-
   if (options.sshKeyPath !== undefined) {
     env["GIT_SSH_COMMAND"] = buildSshCommand(options.sshKeyPath);
   }

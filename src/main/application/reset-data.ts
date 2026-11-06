@@ -1,6 +1,20 @@
+import { readdirSync, unlinkSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { Database } from "../persistence/types";
 
 export function clearDatabase(db: Database): void {
+  const path = db.raw.location();
+  if (path) {
+    const prefix = basename(path) + ".backup-";
+    for (const file of readdirSync(dirname(path), { withFileTypes: true })) {
+      if (
+        file.isFile() &&
+        file.name.startsWith(prefix) &&
+        /^\d+-[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(file.name.slice(prefix.length))
+      )
+        unlinkSync(join(dirname(path), file.name));
+    }
+  }
   const tables = db.raw
     .prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '__drizzle_migrations'",

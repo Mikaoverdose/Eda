@@ -57,21 +57,28 @@ export class BackgroundFetchService {
     );
   }
 
-  async inspect(repositoryId: string): Promise<BackgroundFetchState> {
+  private interval(repositoryId: string) {
     const repository = this.repositories.resolveActiveRepository(repositoryId);
-    const intervalMinutes = this.settings.resolve("backgroundFetchMinutes", {
+    return this.settings.resolve("backgroundFetchMinutes", {
       profileId: repository.identityId,
       repositoryId,
     }).value;
+  }
 
+  private async remoteStates(repositoryId: string, intervalMinutes: number) {
+    return (await this.remotes.fetchStates(repositoryId)).map((remote) => ({
+      ...remote,
+      nextFetch: remote.supported ? this.due(remote.history, intervalMinutes) : null,
+    }));
+  }
+
+  async inspect(repositoryId: string): Promise<BackgroundFetchState> {
+    const intervalMinutes = this.interval(repositoryId);
     return {
       intervalMinutes,
       ...this.conditions(),
       fetching: this.fetchingRepository === repositoryId,
-      remotes: (await this.remotes.fetchStates(repositoryId)).map((remote) => ({
-        ...remote,
-        nextFetch: remote.supported ? this.due(remote.history, intervalMinutes) : null,
-      })),
+      remotes: await this.remoteStates(repositoryId, intervalMinutes),
     };
   }
 
@@ -117,11 +124,12 @@ export class BackgroundFetchService {
         if (this.stopping || this.identity.getActive()?.id !== profile.id) return;
 
         try {
-          const state = await this.inspect(repositoryId);
+          const { online, suspended } = this.conditions();
+          if (!online || suspended) return;
+          const interval = this.interval(repositoryId);
+          if (!interval) continue;
 
-          if (!state.intervalMinutes || !state.online || state.suspended) continue;
-
-          for (const remote of state.remotes) {
+          for (const remote of await this.remoteStates(repositoryId, interval)) {
             if (this.stopping || this.identity.getActive()?.id !== profile.id) return;
 
             const currentConditions = this.conditions();

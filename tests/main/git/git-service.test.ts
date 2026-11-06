@@ -6,7 +6,7 @@ import { transportOptions } from "@main/git/operations/remotes";
 import { ProcessSpawnError } from "@main/git/execution/process-runner";
 import type { GitEngine } from "@main/git/execution/git-engine";
 import { assertHermetic, createTempRepo, type TempRepo } from "../../helpers/temp-repo";
-import { access } from "node:fs/promises";
+import { access, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 const FAKE_ENGINE: GitEngine = {
@@ -125,19 +125,6 @@ describe("GitService against real Git", () => {
     expect(fields.every((f) => f.length > 0)).toBe(true);
   });
 
-  it("handles a path that is not valid UTF-8 without corrupting the bytes", async () => {
-    repo = await createTempRepo();
-    await repo.writeFile("café.txt", "accented\n");
-    await repo.commit("Add an accented filename");
-
-    const { stdout } = await repo.git.exec(["log", "--format=%s", "-1"], {
-      cwd: repo.path,
-      operation: "read log",
-    });
-
-    expect(stdout.trim()).toBe("Add an accented filename");
-  });
-
   it("reads typed status including untracked files", async () => {
     repo = await createTempRepo();
     await repo.writeFile("tracked.txt", "before\n");
@@ -153,6 +140,33 @@ describe("GitService against real Git", () => {
         expect.objectContaining({ path: "untracked.txt", kind: "untracked" }),
       ]),
     );
+  });
+
+  it.runIf(process.platform === "linux")(
+    "blocks ambiguous file actions when status contains a non-UTF-8 filename",
+    async () => {
+      repo = await createTempRepo();
+      const invalid = Buffer.concat([Buffer.from(join(repo.path, "bad")), Buffer.from([0xff])]);
+      await writeFile(invalid, "raw");
+      await repo.writeFile("bad�", "unicode");
+      await expect(repo.git.status(repo.path)).rejects.toMatchObject({ kind: "invalid-input" });
+      expect(await repo.run(["ls-files", "--cached"])).toBe("");
+      await unlink(invalid);
+      expect((await repo.git.status(repo.path)).changes.map((change) => change.path)).toEqual([
+        "bad�",
+      ]);
+    },
+  );
+
+  it("reads a valid record separator inside commit text", async () => {
+    repo = await createTempRepo();
+    await repo.writeFile("test", "content");
+    await repo.commit("subject\x1econtinued\n\nbody\x1econtinued");
+    const [commit] = (await repo.git.history(repo.path)).commits;
+    expect(commit).toMatchObject({
+      subject: "subject\x1econtinued",
+      body: expect.stringContaining("body\x1econtinued"),
+    });
   });
 
   it("pages typed history and includes every merge parent", async () => {

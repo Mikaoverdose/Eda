@@ -19,6 +19,17 @@ describe("NodeProcessRunner output bounds", () => {
     expect(result.exitCode).not.toBe(0);
   });
 
+  it("returns the child's failure when it exits without consuming a large stdin", async () => {
+    const result = await new NodeProcessRunner().run({
+      executable: process.execPath,
+      args: ["-e", "process.stderr.write('rejected input'); process.exitCode = 3"],
+      env: {},
+      stdin: "x".repeat(4 * 1024 * 1024),
+    });
+    expect(result.exitCode).toBe(3);
+    expect(result.stderr.toString()).toBe("rejected input");
+  });
+
   it("retains at most the configured stdout bytes and terminates the producer", async () => {
     const result = await new NodeProcessRunner().run({
       executable: process.execPath,

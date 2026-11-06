@@ -4,8 +4,11 @@ import { afterEach, expect, it } from "vitest";
 import { createTempRepo, type TempRepo } from "../../../helpers/temp-repo";
 import { openInMemoryDatabase } from "@main/persistence/database";
 import { IdentityRepository } from "@main/persistence/identity-repository";
-import { ContentRecoveryRepository } from "@main/persistence/content-recovery-repository";
-import { repositories } from "@main/persistence/schema";
+import {
+  ContentRecoveryRepository,
+  recoveryFileHash,
+} from "@main/persistence/content-recovery-repository";
+import { repositories, workflowJournal } from "@main/persistence/schema";
 import { DiscardService } from "@main/repo/working-tree/discard-service";
 
 let repo: TempRepo;
@@ -40,7 +43,7 @@ async function setup() {
 
   const store = new ContentRecoveryRepository(db);
 
-  return { profileId: profile.id, store, service: new DiscardService(repo.git, store) };
+  return { db, profileId: profile.id, store, service: new DiscardService(repo.git, store) };
 }
 
 it("snapshots tracked and untracked bytes, preserves the index, and restores after service restart", async () => {
@@ -172,4 +175,133 @@ it("restores a tracked file without writing through a hard link outside the work
   await service.restore(repo.path, profileId, "r", service.list(profileId, "r")[0]!.id);
   expect(await readFile(external, "utf8")).toBe("base");
   expect(await readFile(join(repo.path, "file"), "utf8")).toBe("changes");
+});
+
+it("restores prototype-named files and can export verified bytes from earlier snapshots", async () => {
+  const { service, profileId, store } = await setup();
+  await repo.writeFile("__proto__", "keep me");
+  await repo.writeFile("sibling", "keep this too");
+  const preview = await service.preview(repo.path, profileId, "r", ["__proto__", "sibling"]);
+  await service.apply(repo.path, profileId, "r", preview.token);
+  const id = service.list(profileId, "r")[0]!.id;
+  const snapshot = store.get(profileId, "r", id)!;
+  expect(Object.hasOwn(snapshot.after!, "__proto__")).toBe(true);
+  await service.restore(repo.path, profileId, "r", id);
+  expect(await readFile(join(repo.path, "__proto__"), "utf8")).toBe("keep me");
+
+  delete snapshot.after!["__proto__"];
+  store.save(snapshot);
+  expect(service.savedFile(profileId, "r", id, "__proto__").toString()).toBe("keep me");
+  expect(service.savedFile(profileId, "r", id, "sibling").toString()).toBe("keep this too");
+  await expect(service.restore(repo.path, profileId, "r", id)).rejects.toThrow();
+  expect(() => service.savedFile("another-profile", "r", id, "sibling")).toThrow();
+  service.forget(profileId, "r", id);
+  expect(service.list(profileId, "r")).toEqual([]);
+});
+
+it("exports earlier rewrite snapshots that recorded a symlink as a file with zero permissions", async () => {
+  const { service, profileId, store } = await setup();
+  const content = Buffer.from("old-link-target");
+  const id = "legacy-rewrite";
+  store.save({
+    id,
+    root: repo.path,
+    profileId,
+    repositoryId: "r",
+    source: "rewrite-recovery",
+    state: "completed",
+    createdAt: new Date().toISOString(),
+    paths: ["entry"],
+    bytes: content.length,
+    files: [
+      {
+        path: "entry",
+        content: content.toString("base64"),
+        mode: 0,
+        hash: recoveryFileHash(content, 0),
+        tracked: true,
+      },
+    ],
+    after: { entry: "missing" },
+  });
+  expect(service.savedFile(profileId, "r", id, "entry")).toEqual(content);
+  await expect(service.restore(repo.path, profileId, "r", id)).rejects.toThrow();
+  await expect(readFile(join(repo.path, "entry"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("checks the original Git mode before restoring an earlier Windows rewrite snapshot", async () => {
+  const { service, profileId, store, db } = await setup();
+  await repo.writeFile("entry", "target");
+  await repo.commit("base");
+  const regularTree = (await repo.run(["write-tree"])).trim();
+  const blob = (await repo.run(["rev-parse", "HEAD:entry"])).trim();
+  await repo.run(["update-index", "--cacheinfo", `120000,${blob},entry`]);
+  const linkTree = (await repo.run(["write-tree"])).trim();
+  await unlink(join(repo.path, "entry"));
+  const content = Buffer.from("target");
+  for (const [id, tree] of [
+    ["old-symlink", linkTree],
+    ["old-regular", regularTree],
+  ] as const) {
+    const createdAt = new Date().toISOString();
+    store.save({
+      id,
+      root: repo.path,
+      profileId,
+      repositoryId: "r",
+      source: "rewrite-recovery",
+      state: "completed",
+      createdAt,
+      paths: ["entry"],
+      bytes: content.length,
+      files: [
+        {
+          path: "entry",
+          content: content.toString("base64"),
+          mode: 0o666,
+          hash: recoveryFileHash(content, 0o666),
+          tracked: true,
+        },
+      ],
+      after: { entry: "missing" },
+    });
+    expect(service.savedFile(profileId, "r", id, "entry")).toEqual(content);
+    await expect(service.restore(repo.path, profileId, "r", id)).rejects.toThrow();
+    db.insert(workflowJournal)
+      .values({
+        id,
+        profileId,
+        repositoryId: "r",
+        updatedAt: createdAt,
+        record: JSON.stringify({ root: repo.path, refChange: { snapshotId: id, indexTree: tree } }),
+      })
+      .run();
+    if (tree === linkTree) {
+      await expect(service.restore(repo.path, profileId, "r", id)).rejects.toThrow(/symlink/i);
+      await expect(readFile(join(repo.path, "entry"))).rejects.toMatchObject({ code: "ENOENT" });
+    } else {
+      await service.restore(repo.path, profileId, "r", id);
+      expect(await readFile(join(repo.path, "entry"))).toEqual(content);
+    }
+  }
+});
+
+it("rejects a rewrite snapshot with a symlink in either commit tree", async () => {
+  const { service, profileId } = await setup();
+  await repo.writeFile("entry", "target");
+  await repo.commit("regular");
+  const regular = (await repo.run(["rev-parse", "HEAD"])).trim();
+  const blob = (await repo.run(["rev-parse", "HEAD:entry"])).trim();
+  await repo.run(["update-index", "--cacheinfo", `120000,${blob},entry`]);
+  await repo.run(["commit", "-m", "symlink"]);
+  const symlink = (await repo.run(["rev-parse", "HEAD"])).trim();
+  for (const [from, to] of [
+    [regular, symlink],
+    [symlink, regular],
+  ] as const) {
+    await expect(
+      service.prepareTreeOperation(repo.path, profileId, "r", from, to, ["entry"]),
+    ).rejects.toThrow(/symlink/i);
+  }
+  expect(service.list(profileId, "r")).toEqual([]);
 });

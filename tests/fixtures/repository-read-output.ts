@@ -11,7 +11,7 @@ export const STATUS_PORCELAIN_V2_Z = Buffer.from(
 );
 
 export const LOG_MACHINE_READABLE = [
-  "\x1eaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb cccccccccccccccccccccccccccccccccccccccc",
   "Eda",
   "dev@example.com",
@@ -20,7 +20,7 @@ export const LOG_MACHINE_READABLE = [
   "Merge topic",
   "Details\n",
   "HEAD -> refs/heads/main\x1ftag: refs/tags/v1.0\x1frefs/remotes/origin/main",
-  "\x1ebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "",
   "Eda",
   "dev@example.com",

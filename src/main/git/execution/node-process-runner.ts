@@ -125,6 +125,11 @@ export class NodeProcessRunner implements ProcessRunner {
         reject(new ProcessSpawnError(request.executable, error));
       });
 
+      let inputError: Error | undefined;
+      child.stdin.on("error", (error: Error) => {
+        inputError = error;
+      });
+
       child.on("close", (code) => {
         if (settled) return;
 
@@ -133,6 +138,10 @@ export class NodeProcessRunner implements ProcessRunner {
 
         if (stderrLineBuffer.length > 0) request.onStderrLine?.(stderrLineBuffer);
 
+        if (inputError && code === 0 && !cancelled && !outputLimitExceeded) {
+          reject(inputError);
+          return;
+        }
         resolve({
           exitCode: code ?? (cancelled ? 130 : 1),
           stdout: Buffer.concat(stdoutChunks),

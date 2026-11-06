@@ -1,3 +1,4 @@
+import { isFullObjectId } from "@shared/repository/object-id";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -36,7 +37,7 @@ export async function readRebasePlan(git: GitService, root: string, onto: string
 
   for (let index = 0; index < fields.length; index += 2) {
     const oid = fields[index]!;
-    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(oid))
+    if (!isFullObjectId(oid))
       throw invalid(
         errorText("main.git.rebasePlan.gitReturnedAnInvalidRebasePlanRefreshAndReviewAgain"),
       );
