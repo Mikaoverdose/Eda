@@ -166,8 +166,10 @@ try {
   await page.getByRole("textbox", { name: "Commit title" }).fill("Preserve this draft");
   assert.equal(await page.getByRole("heading", { name: "Diff viewer", exact: true }).count(), 0);
 
+  const commitFiles = page.getByRole("region", { name: "Commit file changes", exact: true });
+
   await page.getByRole("button", { name: "Inspect tag v1.0", exact: true }).click();
-  await page.getByText(`Commit ${feature.slice(0, 8)}`, { exact: true }).waitFor();
+  await commitFiles.getByTitle(feature, { exact: true }).waitFor();
 
   const filter = page.getByLabel("Filter branches and tags", { exact: true });
 
@@ -176,8 +178,6 @@ try {
 
   await filter.fill("");
   await page.getByRole("button", { name: "Inspect branch main", exact: true }).click();
-
-  const commitFiles = page.getByRole("region", { name: "Commit file changes", exact: true });
 
   await commitFiles.waitFor();
   assert.equal(await graph.isVisible(), true, "Selecting a commit keeps history visible");
@@ -309,7 +309,7 @@ try {
   assert.equal(await page.getByText("preview line 0", { exact: true }).count(), 0);
 
   await page.getByRole("button", { name: "Unified", exact: true }).click();
-  await page.getByRole("button", { name: "Working tree", exact: true }).click();
+  await commitFiles.getByRole("button", { name: "View changes", exact: true }).click();
   await page.getByRole("button", { name: "Staged preview.png, status M", exact: true }).click();
   await verifyImages(page, [
     ["HEAD", "committed"],
@@ -348,7 +348,7 @@ try {
   assert.match((await photo.getAttribute("src")) ?? "", /^data:image\/jpeg;base64,/);
   await page.screenshot({ path: resolve("screenshots/image-preview-working.png") });
   await page.getByRole("button", { name: "Unstaged main.txt, status M", exact: true }).click();
-  await page.getByText("Working tree, main.txt", { exact: true }).waitFor();
+  await page.getByTitle("Working tree: main.txt", { exact: true }).waitFor();
   assert.equal(
     await page.getByRole("textbox", { name: "Commit title" }).inputValue(),
     "Preserve this draft",

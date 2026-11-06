@@ -337,7 +337,10 @@ try {
     ({ app }, { link, cwd }) => app.emit("second-instance", {}, ["electron", "main.js", link], cwd),
     { link, cwd: root },
   );
-  await page.getByText(`Commit ${head.slice(0, 8)}`, { exact: true }).waitFor();
+  await page
+    .getByRole("region", { name: "Commit file changes", exact: true })
+    .getByTitle(head, { exact: true })
+    .waitFor();
   assert.equal(git("rev-parse", "HEAD").trim(), head);
 
   const cdp = await page.context().newCDPSession(page);
