@@ -2,6 +2,10 @@ name: Set up Eda
 description: Install the project Node.js, pinned pnpm and locked dependencies
 
 inputs:
+  cache-desktop:
+    description: Restore Electron and packaging downloads for desktop and build jobs
+    required: false
+    default: "true"
   target-arch:
     description: Package architecture, when this job also downloads cross-platform packaging tools
     required: false
@@ -18,6 +22,7 @@ runs:
         cache: true
 
     - name: Cache Electron and packaging downloads
+      if: inputs.cache-desktop == 'true'
       uses: actions/cache@v5
       with:
         path: |

@@ -35,27 +35,50 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+        with:
+          cache-desktop: "false"
       - run: ${{ matrix.command }}
 
   test:
-    name: Tests / ${{ matrix.project }} / ${{ matrix.os }}
+    name: Tests / ${{ matrix.suite.project }} / ${{ matrix.os }} / ${{ matrix.suite.shard }} of ${{ matrix.suite.shards }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    env:
+      NODE_COMPILE_CACHE: ${{ github.workspace }}/.cache/node-compile-cache
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        project: [main, renderer]
+        suite:
+          - project: main
+            shard: 1
+            shards: 2
+          - project: main
+            shard: 2
+            shards: 2
+          - project: renderer
+            shard: 1
+            shards: 1
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+        with:
+          cache-desktop: "false"
+      - name: Cache test transforms and Node bytecode
+        uses: actions/cache@v5
+        with:
+          path: |
+            node_modules/.vite/vitest
+            node_modules/.vitest-cache
+            .cache/node-compile-cache
+          key: tests-v1-${{ runner.os }}-${{ runner.arch }}-node24-${{ matrix.suite.project }}-${{ matrix.suite.shard }}of${{ matrix.suite.shards }}-${{ hashFiles('pnpm-lock.yaml', 'vitest.config.ts') }}
       - name: Record Git version
         run: git --version
-      - run: pnpm exec vitest run --project ${{ matrix.project }}
+      - run: pnpm exec vitest run --project ${{ matrix.suite.project }} --shard ${{ matrix.suite.shard }}/${{ matrix.suite.shards }}
 
   build:
     name: Build / ${{ matrix.os }} / ${{ matrix.arch }}
-    needs: [quality, test, desktop]
+    needs: [quality, test]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
@@ -128,7 +151,6 @@ jobs:
 
   desktop-build:
     name: Prepare desktop test app
-    needs: [quality, test]
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -153,6 +175,7 @@ jobs:
             vendor/git/win-x64/
           if-no-files-found: error
           include-hidden-files: true
+          compression-level: 0
           retention-days: 1
 
   desktop:
@@ -164,10 +187,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Profiles, tabs and keyboard shortcuts
-            suites: commands workspace profiles updates
-          - name: Staging, history rendering and bundled Git
-            suites: local large-repo bundled-git
+          - name: Commands and update notifications
+            suites: commands updates
+          - name: Workspace and diffs
+            suites: workspace
+          - name: Profiles and tab persistence
+            suites: profiles
+          - name: Staging and local workflows
+            suites: local
+          - name: History rendering and bundled Git
+            suites: large-repo bundled-git
           - name: Merge, stashes and history recovery
             suites: foundations
     steps:
@@ -189,7 +218,7 @@ jobs:
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [quality, test, desktop, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
