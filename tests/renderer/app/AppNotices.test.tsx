@@ -92,7 +92,10 @@ it("stacks notices, dismisses an update independently, and resurfaces changed up
     await act(async () => useSimulationStore.getState().setUpdatePhase("ready"));
 
     expect(rows()).toHaveLength(2);
-    expect(rows()[1]!.textContent).toContain("ready to install");
+    expect(rows()[1]!.querySelector('[role="status"]')?.textContent).toBe(
+      "Eda 0.0.3 is available.",
+    );
+    expect(rows()[1]!.querySelector("button")?.textContent).toBe("View update");
 
     await dismiss();
     await act(async () => useSimulationStore.getState().setUpdatePhase(null));
