@@ -1,6 +1,7 @@
 import type { GitErrorData } from "@shared/errors";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { isGitHubHttps } from "@shared/integrations/github";
 import {
   preferredRemote,
   remoteForTrackingRef,
@@ -11,9 +12,11 @@ import {
 import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Field, Input } from "../../components/ui/index";
+import { openSettings } from "../../commands/open-settings";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { TransferProgress } from "./TransportFields";
 import { useTransportOperation } from "./hooks/useTransportOperation";
+import { ProviderIcon } from "../connections/ProviderIcon";
 
 export function DirectPush({
   repositoryId,
@@ -33,9 +36,35 @@ export function DirectPush({
     password: "",
   });
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [githubFailure, setGitHubFailure] = useState<"auth" | "access" | null>(null);
+  const [githubRemote, setGitHubRemote] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const started = useRef(false);
   const writing = useRepositoryStore((state) => state.writing);
+
+  const handleFailure = (failure: GitErrorData) => {
+    setError(errorMessage(failure));
+
+    const github =
+      failure.kind === "github-auth-required"
+        ? "auth"
+        : failure.kind === "github-access-required"
+          ? "access"
+          : null;
+
+    setGitHubFailure(github);
+    const authentication = failure.kind === "auth-failed" || github !== null;
+    setNeedsAuth(authentication);
+    if (authentication) setPreview(null);
+  };
+
+  const closeAuthentication = () => {
+    setError(null);
+    setShowError(false);
+    setNeedsAuth(false);
+    setGitHubFailure(null);
+    setCredentials({ username: "", password: "" });
+  };
 
   const runPush = async (mode: PushRequest["mode"], auth?: TransportCredentials) => {
     const operation = begin();
@@ -44,10 +73,11 @@ export function DirectPush({
     setShowError(false);
     setError(null);
     setMessage(null);
+    setGitHubFailure(null);
+    setGitHubRemote(false);
     const fail = (failure: GitErrorData) => {
       if (!current()) return;
-      setError(errorMessage(failure));
-      setNeedsAuth(failure.kind === "auth-failed");
+      handleFailure(failure);
     };
 
     try {
@@ -62,11 +92,18 @@ export function DirectPush({
       const upstreamRemote = remoteForTrackingRef(inspected.value.remotes, head.upstream);
       const remote = upstreamRemote?.name;
       const destination = remote ? head.upstream!.slice(remote.length + 1) : head.name;
-      const target = preferredRemote(inspected.value)?.name;
-      if (!target) {
+      const targetRemote = preferredRemote(inspected.value);
+      if (!targetRemote) {
         setError(t("directPush.noRemoteIsConfiguredAddOneInSettingsRepoThenRetry"));
         return;
       }
+      const target = targetRemote.name;
+      const destinations = targetRemote.pushUrls.length
+        ? targetRemote.pushUrls
+        : targetRemote.fetchUrls;
+
+      setGitHubRemote(destinations.length === 1 && isGitHubHttps(destinations[0]!));
+
       const request: PushRequest = {
         repositoryId,
         remote: target,
@@ -79,6 +116,7 @@ export function DirectPush({
       const prepared = await window.eda.remotes.preparePush(request);
       if (!current()) return;
       if (!prepared.ok) return fail(prepared.error);
+      if (prepared.value.url) setGitHubRemote(isGitHubHttps(prepared.value.url));
       if (mode === "normal") {
         const pushed = await window.eda.remotes.push(repositoryId, prepared.value.token, auth);
         if (!current()) return;
@@ -118,6 +156,7 @@ export function DirectPush({
     if (!operation) return;
     const { current } = operation;
     setError(null);
+    setGitHubFailure(null);
     try {
       const result = await window.eda.remotes.push(
         repositoryId,
@@ -126,8 +165,7 @@ export function DirectPush({
       );
       if (!current()) return;
       if (!result.ok) {
-        setError(errorMessage(result.error));
-        setNeedsAuth(result.error.kind === "auth-failed");
+        handleFailure(result.error);
         return;
       }
       setPreview(null);
@@ -163,6 +201,27 @@ export function DirectPush({
           />
         )}
       </Field>
+      {githubRemote && (
+        <div className="space-y-2 border-t border-border-subtle pt-3">
+          <p className="text-xs text-text-secondary">
+            {githubFailure === "access"
+              ? t("directPush.gitHubAccessChoice")
+              : t("directPush.gitHubAuthenticationChoice")}
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            icon={<ProviderIcon provider="GitHub" />}
+            onClick={() => {
+              closeAuthentication();
+              openSettings("integrations");
+            }}
+          >
+            {t("directPush.useGitHubIntegration")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -193,12 +252,7 @@ export function DirectPush({
           {...(needsAuth
             ? { description: t("directPush.enterYourGitUsernameAndAccessTokenToRetry") }
             : {})}
-          onClose={() => {
-            setError(null);
-            setShowError(false);
-            setNeedsAuth(false);
-            setCredentials({ username: "", password: "" });
-          }}
+          onClose={closeAuthentication}
           footer={
             needsAuth ? (
               <Button
@@ -248,7 +302,11 @@ export function DirectPush({
           }
         >
           <p className="break-all text-sm">
-            {preview.source} → {preview.url} {preview.destination}
+            {t("directPush.destinationDescription", {
+              source: preview.source,
+              url: preview.url,
+              destination: preview.destination,
+            })}
           </p>
           <p className="mt-2 text-xs text-text-secondary">
             {t("directPush.localRemote", {

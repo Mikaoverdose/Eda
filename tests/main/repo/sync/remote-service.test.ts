@@ -904,6 +904,70 @@ it("leaves local work and existing stashes untouched when fetching fails", async
   expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("unstaged work\n");
 });
 
+it.each([
+  ["preview", "https://github.com/example/repo.git", false, false, "github-auth-required"],
+  ["push", "https://github.com/example/repo.git", false, false, "github-auth-required"],
+  ["preview", "https://github.com/example/repo.git", false, true, "github-access-required"],
+  ["push", "https://github.com/example/repo.git", false, true, "github-access-required"],
+  ["push", "https://github.com/example/repo.git", true, false, "auth-failed"],
+  ["push", "https://example.com/repo.git", false, false, "auth-failed"],
+] as const)(
+  "routes %s authentication failures for %s (manual: %s, denied: %s) to %s",
+  async (phase, url, manual, denied, kind) => {
+    const ctx = await setup({ forFetch: vi.fn(async () => undefined) });
+    await ctx.run(["remote", "set-url", "--push", "origin", url]);
+    const execute = ctx.source.git.exec.bind(ctx.source.git);
+    const credentials = manual ? { username: "user", password: "manual-token" } : undefined;
+    const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
+      const preview = args[0] === "ls-remote";
+      const push = args.includes("push");
+
+      if ((phase === "preview" && preview) || (phase === "push" && push))
+        throw new GitError({
+          kind: "auth-failed",
+          operation: "push",
+          message: "Authentication failed",
+          rawStderr: denied
+            ? "fatal: unable to access repository: The requested URL returned error: 403"
+            : "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+        });
+
+      if (preview) {
+        const local = [...args];
+        local[local.indexOf("--") + 1] = ctx.server.path;
+        return execute(local, options);
+      }
+
+      return execute(args, options);
+    });
+
+    try {
+      const preparing = ctx.service.preparePush({
+        repositoryId: ctx.client.id,
+        remote: "origin",
+        branch: "main",
+        destination: "main",
+        mode: "normal",
+        setUpstream: false,
+        ...(credentials ? { credentials } : {}),
+      });
+
+      if (phase === "preview") {
+        await expect(preparing).rejects.toMatchObject({ kind });
+      } else {
+        const preview = await preparing;
+        await expect(
+          ctx.service.push(ctx.client.id, preview.token, credentials),
+        ).rejects.toMatchObject({
+          kind,
+        });
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
 it.each([false, true])(
   "authenticates push preview and execution with saved OAuth or an explicit override (manual: %s)",
   async (manual) => {

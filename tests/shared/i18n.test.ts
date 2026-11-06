@@ -65,11 +65,11 @@ describe("localization", () => {
 
   it("interpolates named values once and formats numeric values in the target locale", () => {
     const de = createTranslator("de-DE", {
-      "common.cancel": "{name} → {name}, {count}",
+      "common.cancel": "{name} to {name}, {count}",
       "common.close": "{missing} {empty}",
       "common.done": "{baseToken}",
     });
-    expect(de("common.cancel", { name: "{count}", count: 1234 })).toBe("{count} → {count}, 1.234");
+    expect(de("common.cancel", { name: "{count}", count: 1234 })).toBe("{count} to {count}, 1.234");
     expect(de("common.close", { empty: null })).toBe("{missing} ");
     expect(de("common.done", { baseToken: "{base}" })).toBe("{base}");
     expect(t("profilesSettings.profileCount", { count: 1 })).toBe("1 profile");

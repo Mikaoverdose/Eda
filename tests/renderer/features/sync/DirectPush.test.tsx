@@ -5,6 +5,7 @@ import { ok, err, type Result } from "@shared/errors";
 import { DirectPush } from "@renderer/features/sync/DirectPush";
 import { useAppStore } from "@renderer/stores/app-store";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
+import { useShellStore } from "@renderer/stores/shell-store";
 import { ACTION_FEEDBACK } from "@renderer/motion";
 
 let root: Root;
@@ -24,6 +25,30 @@ const finish = async () => {
   });
 };
 
+const useGitHubRemote = () => {
+  vi.mocked(window.eda.remotes.inspect).mockResolvedValue(
+    ok({
+      branches: [
+        {
+          name: "main",
+          isHead: true,
+          remote: false,
+          oid: "a".repeat(40),
+          upstream: "origin/main",
+          upstreamState: "",
+        },
+      ],
+      remotes: [
+        {
+          name: "origin",
+          fetchUrls: ["https://github.com/owner/repo.git"],
+          pushUrls: ["https://github.com/owner/repo.git"],
+        },
+      ],
+    }),
+  );
+};
+
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   useAppStore.setState({
@@ -36,6 +61,8 @@ beforeEach(async () => {
   push.mockReset().mockResolvedValue(ok("Push completed."));
   vi.stubGlobal("eda", {
     remotes: { inspect: vi.fn().mockResolvedValue(ok(inspected)), preparePush, push },
+    operations: { list: vi.fn(async () => ok([])) },
+    events: { onOperationsChanged: vi.fn(() => () => {}) },
   });
   container = document.createElement("div");
   document.body.append(container);
@@ -84,6 +111,119 @@ it.each(["preview", "push"])(
     expect(preparePush).toHaveBeenCalledOnce();
   },
 );
+
+it.each([
+  ["preview", "github-auth-required"],
+  ["push", "github-auth-required"],
+  ["preview", "github-access-required"],
+  ["push", "github-access-required"],
+] as const)(
+  "keeps manual HTTPS authentication available for GitHub %s failures: %s",
+  async (stage, kind) => {
+    useGitHubRemote();
+    (stage === "preview" ? preparePush : push).mockResolvedValueOnce(
+      err(errorFixture({ kind, operation: "push", message: "GitHub connection required" })),
+    );
+
+    await act(async () => button().click());
+    await finish();
+
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("HTTPS authentication");
+    expect(dialog?.textContent).toContain("This is a GitHub remote.");
+    expect(dialog?.textContent).toContain("Use GitHub integration");
+    expect(dialog?.querySelector('input[type="password"]')).not.toBeNull();
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+
+    const fields = dialog!.querySelectorAll("input");
+    const values = ["manual-user", "manual-token"];
+    for (const [index, field] of fields.entries()) {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          field,
+          values[index],
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    const retry = [...dialog!.querySelectorAll("button")].find(
+      (item) => item.textContent === "Retry push",
+    )!;
+    await act(async () => retry.click());
+    await finish();
+    expect(preparePush).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        credentials: { username: "manual-user", password: "manual-token" },
+      }),
+    );
+    expect(push).toHaveBeenLastCalledWith("repo", "preview", {
+      username: "manual-user",
+      password: "manual-token",
+    });
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Push completed.");
+  },
+);
+
+it("opens GitHub settings only when the user chooses the integration", async () => {
+  useGitHubRemote();
+  const settings = vi.spyOn(useShellStore.getState(), "openSettings").mockImplementation(() => {});
+  preparePush.mockResolvedValueOnce(
+    err(
+      errorFixture({
+        kind: "github-auth-required",
+        message: "GitHub connection required",
+      }),
+    ),
+  );
+
+  await act(async () => button().click());
+  await finish();
+  expect(settings).not.toHaveBeenCalled();
+
+  const integration = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent === "Use GitHub integration",
+  )!;
+  await act(async () => integration.click());
+  expect(settings).toHaveBeenCalledExactlyOnceWith("integrations");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(push).not.toHaveBeenCalled();
+});
+
+it("does not offer GitHub integration for other HTTPS remotes", async () => {
+  preparePush.mockResolvedValueOnce(
+    err(errorFixture({ kind: "auth-failed", message: "Authentication failed" })),
+  );
+  await act(async () => button().click());
+  await finish();
+
+  const dialog = document.querySelector('[role="dialog"]');
+  expect(dialog?.textContent).toContain("HTTPS authentication");
+  expect(dialog?.querySelector('input[type="password"]')).not.toBeNull();
+  expect(dialog?.textContent).not.toContain("GitHub");
+});
+
+it("closes a consumed force-push preview before requesting HTTPS credentials", async () => {
+  push.mockResolvedValueOnce(
+    err(errorFixture({ kind: "non-fast-forward", message: "Remote history changed" })),
+  );
+  await act(async () => button().click());
+  await finish();
+
+  push.mockResolvedValueOnce(
+    err(errorFixture({ kind: "github-auth-required", message: "GitHub connection required" })),
+  );
+  const confirm = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent === "Force with lease",
+  )!;
+
+  await act(async () => confirm.click());
+  await finish();
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("HTTPS authentication");
+  expect(document.querySelector('[role="dialog"] input[type="password"]')).not.toBeNull();
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Force with lease");
+});
 
 it("pushes to the most specific upstream remote when configured names overlap", async () => {
   vi.mocked(window.eda.remotes.inspect).mockResolvedValueOnce(

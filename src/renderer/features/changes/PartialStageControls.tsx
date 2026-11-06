@@ -231,6 +231,16 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
           </span>
         )}
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-3">
+          {!fileOnly && (
+            <TextButton
+              disabled={!context.selected.size || context.busy}
+              className="shrink-0"
+              tone="accent"
+              onClick={context.prepareSelected}
+            >
+              {t("partialStageControls.selectedLines", { verb: context.verb })}
+            </TextButton>
+          )}
           <TextButton
             disabled={context.busy || !status || status.capabilities?.write === false}
             className="flex shrink-0 items-center gap-1.5"
@@ -250,14 +260,6 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
           </TextButton>
           {!fileOnly && (
             <>
-              <TextButton
-                disabled={!context.selected.size || context.busy}
-                className="shrink-0"
-                tone="accent"
-                onClick={context.prepareSelected}
-              >
-                {t("partialStageControls.selectedLines", { verb: context.verb })}
-              </TextButton>
               {context.selected.size > 0 && (
                 <TextButton onClick={context.clearSelected}>
                   {t("partialStageControls.clear")}

@@ -56,6 +56,32 @@ export class RemoteService {
     this.remotes = new GitRemotes(git);
   }
 
+  private githubFailure(error: unknown, url: string, manual = false): unknown {
+    if (
+      manual ||
+      !this.github ||
+      !isGitHubHttps(url) ||
+      !(error instanceof GitError) ||
+      error.kind !== "auth-failed"
+    )
+      return error;
+
+    const accessDenied = /returned error: 403|write access to repository not granted/i.test(
+      error.rawStderr ?? "",
+    );
+
+    return new GitError({
+      kind: accessDenied ? "github-access-required" : "github-auth-required",
+      operation: error.operation,
+      message: accessDenied
+        ? errorText("main.remoteService.gitHubDeniedRepositoryAccessEnableEdaFor")
+        : errorText("main.remoteService.gitHubRejectedThisLoginSignInWithGitHubAgainThenRetry"),
+      suggestedAction: accessDenied
+        ? errorText("main.remoteService.openSettingsProfileIntegrationsEnableAccessOrManageAccess")
+        : errorText("main.remoteService.reconnectGitHubInTheIntegrationsSectionOfProfileSettings"),
+    });
+  }
+
   async inspect(id: string): Promise<RemoteState> {
     const { path } = this.repositories.resolveActiveRepository(id);
     const [remotes, branches, states] = await Promise.all([
@@ -191,31 +217,7 @@ export class RemoteService {
         completed.push(name);
         this.fetchHistory.record(identity.id, request.repositoryId, name, url, Date.now(), null);
       } catch (error) {
-        const accessDenied =
-          error instanceof GitError &&
-          /returned error: 403|write access to repository not granted/i.test(error.rawStderr ?? "");
-        const failure =
-          this.github &&
-          isGitHubHttps(url) &&
-          error instanceof GitError &&
-          error.kind === "auth-failed"
-            ? new GitError({
-                kind: accessDenied ? "github-access-required" : "github-auth-required",
-                operation: error.operation,
-                message: accessDenied
-                  ? errorText("main.remoteService.gitHubDeniedRepositoryAccessEnableEdaFor")
-                  : errorText(
-                      "main.remoteService.gitHubRejectedThisLoginSignInWithGitHubAgainThenRetry",
-                    ),
-                suggestedAction: accessDenied
-                  ? errorText(
-                      "main.remoteService.openSettingsProfileIntegrationsEnableAccessOrManageAccess",
-                    )
-                  : errorText(
-                      "main.remoteService.reconnectGitHubInTheIntegrationsSectionOfProfileSettings",
-                    ),
-              })
-            : error;
+        const failure = this.githubFailure(error, url);
         this.fetchHistory.record(
           identity.id,
           request.repositoryId,
@@ -264,14 +266,15 @@ export class RemoteService {
           : null;
 
         const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
-        const result = await this.git.exec(
-          ["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--", url, destination],
-          {
+        const result = await this.git
+          .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--", url, destination], {
             cwd: path,
             operation: t("operations.inspectRemoteBranch"),
             ...transportOptions(url, identity, credentials),
-          },
-        );
+          })
+          .catch((error: unknown) => {
+            throw this.githubFailure(error, url, !!request.credentials);
+          });
         const match = result.stdout
           .split("\n")
           .map((line) => line.split("\t"))
@@ -348,36 +351,40 @@ export class RemoteService {
             ),
           );
 
-        const result = await this.git.exec(
-          [
-            "-c",
-            `remote.${request.remote}.mirror=false`,
-            "push",
-            "--receive-pack=git-receive-pack",
-            "--porcelain",
-            "--progress",
-            "--no-follow-tags",
-            "--recurse-submodules=no",
-            ...(request.mode === "lease" || request.mode === "delete"
-              ? [`--force-with-lease=${preview.destination}:${preview.remoteOid ?? ""}`]
-              : request.mode === "force"
-                ? ["--force"]
-                : ["--no-force"]),
-            ...(request.setUpstream ? ["--set-upstream"] : []),
-            "--",
-            request.remote,
-            `${preview.source}:${preview.destination}`,
-          ],
-          {
-            cwd: path,
-            operation: t("operations.pushBranch"),
-            ...transportOptions(
-              url,
-              identity,
-              credentials ?? (await this.github?.forFetch(identity.id, url)),
-            ),
-          },
-        );
+        const result = await this.git
+          .exec(
+            [
+              "-c",
+              `remote.${request.remote}.mirror=false`,
+              "push",
+              "--receive-pack=git-receive-pack",
+              "--porcelain",
+              "--progress",
+              "--no-follow-tags",
+              "--recurse-submodules=no",
+              ...(request.mode === "lease" || request.mode === "delete"
+                ? [`--force-with-lease=${preview.destination}:${preview.remoteOid ?? ""}`]
+                : request.mode === "force"
+                  ? ["--force"]
+                  : ["--no-force"]),
+              ...(request.setUpstream ? ["--set-upstream"] : []),
+              "--",
+              request.remote,
+              `${preview.source}:${preview.destination}`,
+            ],
+            {
+              cwd: path,
+              operation: t("operations.pushBranch"),
+              ...transportOptions(
+                url,
+                identity,
+                credentials ?? (await this.github?.forFetch(identity.id, url)),
+              ),
+            },
+          )
+          .catch((error: unknown) => {
+            throw this.githubFailure(error, url, !!credentials);
+          });
 
         this.operations.progress(result.stdout);
 
