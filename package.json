@@ -1,6 +1,6 @@
 {
   "name": "eda",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A modern, open source Git client",
   "license": "GPL-3.0-or-later",
   "author": "Yuzu <yuzu@kirameki.cafe>",
