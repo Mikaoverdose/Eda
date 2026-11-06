@@ -38,6 +38,7 @@ type Values = {
 };
 
 const defaults = (): Values => ({
+  developerSettingsEnabled: builtInSetting("developerSettingsEnabled"),
   conventionalCommitsEnabled: builtInSetting("conventionalCommitsEnabled"),
   commitPrefixes: builtInSetting("commitPrefixes"),
   accentHue: builtInSetting("accentHue"),
@@ -175,6 +176,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
         accent,
         conventional,
         prefixes,
+        developerSettings,
       ] = await Promise.all([
         window.eda.settings.resolve("theme", context),
         window.eda.settings.resolve("syncGlobalGitConfig", context),
@@ -187,6 +189,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
         window.eda.settings.resolve("accentHue", context),
         window.eda.settings.resolve("conventionalCommitsEnabled", context),
         window.eda.settings.resolve("commitPrefixes", context),
+        window.eda.settings.resolve("developerSettingsEnabled", context),
       ]);
 
       if (request !== generation) return;
@@ -203,6 +206,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
         accent,
         conventional,
         prefixes,
+        developerSettings,
       ].find((result) => !result.ok);
 
       if (failure && !failure.ok) {
@@ -221,11 +225,13 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
         !transparency.ok ||
         !accent.ok ||
         !conventional.ok ||
-        !prefixes.ok
+        !prefixes.ok ||
+        !developerSettings.ok
       )
         return;
 
       const values = {
+        developerSettingsEnabled: developerSettings.value,
         conventionalCommitsEnabled: conventional.value,
         commitPrefixes: prefixes.value,
         accentHue: accent.value,

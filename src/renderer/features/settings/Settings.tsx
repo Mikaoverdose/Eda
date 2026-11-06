@@ -114,7 +114,7 @@ const SECTIONS: {
   },
   {
     id: "about",
-    keywords: t("settings.versionBuildCommitHashDirtyMaintainerYuzuZensai"),
+    keywords: `${t("settings.versionBuildCommitHashDirtyMaintainerYuzuZensai")} ${t("settings.aboutSettings.developerSettings")}`,
     title: t("settings.about"),
     description: t("settings.versionInformationThePeopleBehindEdaAndItsLicense"),
     icon: Info,
@@ -217,12 +217,21 @@ export function Settings({
   selected: SettingsSection;
   onSelect: (section: SettingsSection) => void;
 }) {
+  const developerSettingsEnabled = usePreferencesStore(
+    (state) => state.values.developerSettingsEnabled.value,
+  );
+  const loading = usePreferencesStore((state) => state.loading);
+  const debugSection = SECTIONS.some(
+    (section) => section.id === requestedSection && section.group === "debug",
+  );
   const selected =
-    requestedSection === "repository-fetch" ||
-    requestedSection === "repository-pull" ||
-    requestedSection === "repository-remotes"
-      ? "repository-sync"
-      : requestedSection;
+    debugSection && !developerSettingsEnabled
+      ? "about"
+      : requestedSection === "repository-fetch" ||
+          requestedSection === "repository-pull" ||
+          requestedSection === "repository-remotes"
+        ? "repository-sync"
+        : requestedSection;
   const profile = useAppStore((s) => s.activeIdentity);
   const profileId = profile?.id;
   const repository = useAppStore((state) =>
@@ -242,11 +251,17 @@ export function Settings({
       : t("settings.repository"),
     debug: t("settings.debug"),
   };
-  const sections = SECTIONS.map((section) => ({ ...section, group: groups[section.group] }));
+  const sections = SECTIONS.filter(
+    (section) => section.group !== "debug" || developerSettingsEnabled,
+  ).map((section) => ({ ...section, group: groups[section.group] }));
   const activeSections = sections.filter((section) => section.id === selected);
   const matches = sections.filter((section) =>
     matchesQuery(`${section.group} ${section.title} ${section.description} ${section.keywords}`),
   );
+
+  useEffect(() => {
+    if (debugSection && !developerSettingsEnabled && !loading) onSelect("about");
+  }, [debugSection, developerSettingsEnabled, loading, onSelect]);
 
   useEffect(() => {
     content.current?.scrollTo(0, 0);

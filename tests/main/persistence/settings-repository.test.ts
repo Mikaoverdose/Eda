@@ -51,6 +51,23 @@ function setup() {
 }
 
 describe("preference scopes", () => {
+  it("keeps developer settings disabled by default and persists the application opt-in", () => {
+    const { db, store, work, home } = setup();
+    const scope = { kind: "application" } as const;
+    expect(store.resolve("developerSettingsEnabled").value).toBe(false);
+    store.set("developerSettingsEnabled", scope, true);
+    const reloaded = new SettingsRepository(db);
+    for (const profile of [work, home])
+      expect(reloaded.resolve("developerSettingsEnabled", { profileId: profile.id }).value).toBe(
+        true,
+      );
+    expect(() => store.set("developerSettingsEnabled", scope, "true")).toThrow();
+    expect(() =>
+      store.set("developerSettingsEnabled", { kind: "profile", profileId: work.id }, true),
+    ).toThrow();
+    store.reset("developerSettingsEnabled", scope);
+    expect(store.resolve("developerSettingsEnabled").value).toBe(false);
+  });
   it("includes pre-release updates by default and persists the application opt-out", () => {
     const { db, store, work } = setup();
     const scope = { kind: "application" } as const;

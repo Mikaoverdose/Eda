@@ -3,7 +3,14 @@ import { MAINTAINER_GITHUB_LOGIN, type GitHubAccountProfile } from "@shared/inte
 import { UPDATE_DOWNLOAD_PAGE } from "@shared/updates";
 import { ExternalLink, Heart, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Button, CopyButton, ExternalLinkButton, Skeleton } from "../../../components/ui/index";
+import {
+  Button,
+  Checkbox,
+  CopyButton,
+  ExternalLinkButton,
+  Skeleton,
+} from "../../../components/ui/index";
+import { usePreferencesStore } from "../../../stores/preferences-store";
 import { GitHubProfile } from "../../connections/GitHubProfile";
 import { ProviderIcon } from "../../connections/ProviderIcon";
 import { UpdatesSettings } from "../../updates/UpdatesSettings";
@@ -15,6 +22,10 @@ const maintainerEmail = [emailUser, emailBase].join("@");
 const repositoryUrl = `https://github.com/${maintainer}/Eda`;
 
 export function AboutSettings() {
+  const developerSettingsEnabled = usePreferencesStore(
+    (state) => state.values.developerSettingsEnabled.value,
+  );
+  const busy = usePreferencesStore((state) => state.loading || state.saving);
   const build = window.eda.app.version;
   const [profile, setProfile] = useState<GitHubAccountProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -251,6 +262,28 @@ export function AboutSettings() {
             </span>
           </Button>
         </div>
+      </section>
+      <section
+        aria-labelledby="about-developer-settings-heading"
+        className="space-y-3 border-t border-border-subtle pt-6"
+      >
+        <h2 id="about-developer-settings-heading" className="text-sm font-medium">
+          {t("settings.aboutSettings.developerSettings")}
+        </h2>
+        <Checkbox
+          checked={developerSettingsEnabled}
+          disabled={busy}
+          onChange={(event) =>
+            void usePreferencesStore
+              .getState()
+              .set("developerSettingsEnabled", { kind: "application" }, event.currentTarget.checked)
+          }
+        >
+          {t("settings.aboutSettings.enableDeveloperSettings")}
+        </Checkbox>
+        <p className="text-xs text-text-tertiary">
+          {t("settings.aboutSettings.developerSettingsDescription")}
+        </p>
       </section>
     </div>
   );

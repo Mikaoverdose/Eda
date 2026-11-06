@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { AboutSettings } from "@renderer/features/settings/application/AboutSettings";
 import { builtInSetting, type SettingKey } from "@shared/preferences/settings";
+import { usePreferencesStore } from "@renderer/stores/preferences-store";
 
 it.each([
   null,
@@ -44,8 +45,20 @@ it.each([
       })),
     };
     const events = { onUpdateChanged: vi.fn(() => () => {}) };
+    const previous = usePreferencesStore.getState();
+    let developerSettingsEnabled = false;
     const settings = {
-      resolve: vi.fn(async (key: SettingKey) => ({ ok: true, value: builtInSetting(key) })),
+      resolve: vi.fn(async (key: SettingKey) => ({
+        ok: true,
+        value:
+          key === "developerSettingsEnabled"
+            ? { ...builtInSetting(key), value: developerSettingsEnabled }
+            : builtInSetting(key),
+      })),
+      set: vi.fn(async (_key: SettingKey, _scope: unknown, value: boolean) => {
+        developerSettingsEnabled = value;
+        return { ok: true, value: undefined };
+      }),
     };
     let finishProfile!: () => void;
     const github = {
@@ -73,7 +86,28 @@ it.each([
     const root = createRoot(container);
 
     try {
+      await usePreferencesStore.getState().load({});
       await act(async () => root.render(<AboutSettings />));
+      const developerToggle = container.querySelector<HTMLInputElement>(
+        '[aria-labelledby="about-developer-settings-heading"] input[type="checkbox"]',
+      )!;
+      expect(developerToggle.checked).toBe(false);
+      await act(async () => developerToggle.click());
+      expect(settings.set).toHaveBeenLastCalledWith(
+        "developerSettingsEnabled",
+        { kind: "application" },
+        true,
+      );
+      expect(developerToggle.checked).toBe(true);
+      await act(async () => usePreferencesStore.getState().load({ profileId: "another-profile" }));
+      expect(developerToggle.checked).toBe(true);
+      await act(async () => developerToggle.click());
+      expect(settings.set).toHaveBeenLastCalledWith(
+        "developerSettingsEnabled",
+        { kind: "application" },
+        false,
+      );
+      expect(developerToggle.checked).toBe(false);
       expect(
         container.querySelector('[role="status"][aria-label="Loading maintainer profile"]'),
       ).not.toBeNull();
@@ -143,6 +177,7 @@ it.each([
     } finally {
       await act(async () => root.unmount());
       container.remove();
+      usePreferencesStore.setState(previous);
       vi.unstubAllGlobals();
     }
   },
