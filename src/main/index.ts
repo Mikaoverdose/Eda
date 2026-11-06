@@ -2,7 +2,7 @@ import { redactDiagnostic } from "@shared/diagnostics";
 import { errorMessage, GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { app, BrowserWindow, dialog, Menu, session, shell } from "electron";
-import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { restoreShellPath } from "./git/execution/shell-path";
@@ -40,7 +40,8 @@ if (!app.commandLine.hasSwitch("user-data-dir")) {
   const userData = join(app.getPath("appData"), name);
   const legacyData = join(app.getPath("appData"), name.toLowerCase());
   if (!existsSync(userData) && existsSync(legacyData)) renameSync(legacyData, userData);
-  mkdirSync(userData, { recursive: true });
+  mkdirSync(userData, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") chmodSync(userData, 0o700);
   app.setPath("userData", userData);
 }
 

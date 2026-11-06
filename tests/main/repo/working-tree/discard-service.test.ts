@@ -1,4 +1,4 @@
-import { readFile, unlink } from "node:fs/promises";
+import { link, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { createTempRepo, type TempRepo } from "../../../helpers/temp-repo";
@@ -158,4 +158,18 @@ it("rejects corrupted saved bytes before restoring any file and preserves the sn
   for (const path of ["first.txt", "second.txt"])
     expect(await readFile(join(repo.path, path), "utf8")).toBe("base");
   expect(store.list(profileId, "r").map((entry) => entry.id)).toContain(id);
+});
+
+it("restores a tracked file without writing through a hard link outside the worktree", async () => {
+  const { service, profileId } = await setup();
+  await repo.writeFile("file", "base");
+  await repo.commit("base");
+  await repo.writeFile("file", "changes");
+  const preview = await service.preview(repo.path, profileId, "r", ["file"]);
+  await service.apply(repo.path, profileId, "r", preview.token);
+  const external = join(repo.home, "outside");
+  await link(join(repo.path, "file"), external);
+  await service.restore(repo.path, profileId, "r", service.list(profileId, "r")[0]!.id);
+  expect(await readFile(external, "utf8")).toBe("base");
+  expect(await readFile(join(repo.path, "file"), "utf8")).toBe("changes");
 });

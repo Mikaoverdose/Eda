@@ -1,4 +1,5 @@
 {
+  "main.workflowState.invalidMarker": "Git workflow metadata must be a regular file.",
   "main.git.executable.notFound": "Executable not found: {executable}",
   "main.git.rebaseState.unsafeInstructions": "This saved rebase contains shell commands or unsupported instructions. Inspect and finish it outside Eda, or abort it.",
   "main.applicationHandlers.chooseAnEditorExecutableInApplicationSettingsFirst": "Choose an editor executable in Application settings first.",

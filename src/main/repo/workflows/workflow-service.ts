@@ -13,7 +13,7 @@ import type {
   WorkflowState,
 } from "@shared/workflows/workflow";
 import { createHash, randomUUID } from "node:crypto";
-import { open } from "node:fs/promises";
+import { readRegularFile } from "../../filesystem/read-regular-file";
 import { join } from "node:path";
 import type { GitService } from "../../git/git-service";
 import { createPullAutostash, dropPullAutostash } from "../../git/operations/pull-autostash";
@@ -863,23 +863,12 @@ export class WorkflowService {
           cwd: root,
           operation: t("operations.readMergeMessage"),
         });
-        const handle = await open(
+        const { bytes } = await readRegularFile(
           join(stdout.trim(), workflow.kind === "squash" ? "SQUASH_MSG" : "MERGE_MSG"),
-          "r",
+          1024 * 1024,
+          () => invalid(errorText("main.workflowService.theMergeMessageExceedsThe1MiBEditorLimit")),
         );
-        let message: string;
-
-        try {
-          const buffer = Buffer.alloc(1024 * 1024 + 1);
-          const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-          if (bytesRead > 1024 * 1024)
-            throw invalid(
-              errorText("main.workflowService.theMergeMessageExceedsThe1MiBEditorLimit"),
-            );
-          message = buffer.subarray(0, bytesRead).toString("utf8");
-        } finally {
-          await handle.close();
-        }
+        const message = bytes.toString("utf8");
 
         const sameOperation =
           previous?.head === workflow.head &&

@@ -17,7 +17,6 @@ import {
 } from "@shared/workflows/stashes";
 import { createHash, randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import type { GitService } from "../../git/git-service";
 import { createScopedStash } from "../../git/operations/scoped-stash";
@@ -470,7 +469,7 @@ export class StashService {
 
         try {
           if (saved.preview.deleted)
-            await unlink(resolve(root, saved.preview.path)).catch(
+            await unlink(await this.recovery.safePath(root, saved.preview.path)).catch(
               (error: NodeJS.ErrnoException) => {
                 if (error.code !== "ENOENT") throw error;
               },

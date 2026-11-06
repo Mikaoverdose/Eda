@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -38,7 +39,10 @@ const files = [
 ] as const;
 
 async function readMarker(path: string): Promise<{ text: string; instance: string } | null> {
-  const handle = await open(path, "r").catch((error: NodeJS.ErrnoException) => {
+  const handle = await open(
+    path,
+    constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0),
+  ).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
     throw error;
   });
@@ -46,6 +50,13 @@ async function readMarker(path: string): Promise<{ text: string; instance: strin
   if (!handle) return null;
 
   try {
+    const entry = await handle.stat({ bigint: true });
+    if (!entry.isFile())
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.inspectWorkflow"),
+        message: errorText("main.workflowState.invalidMarker"),
+      });
     const buffer = Buffer.alloc(64 * 1024 + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
 
@@ -57,8 +68,6 @@ async function readMarker(path: string): Promise<{ text: string; instance: strin
           "main.git.workflowState.gitOperationMetadataExceedsTheInspectionLimitInspect",
         ),
       });
-
-    const entry = await handle.stat({ bigint: true });
 
     return {
       text: buffer.subarray(0, bytesRead).toString("utf8"),

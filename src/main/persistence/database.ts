@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { closeSync, constants, fchmodSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { drizzle } from "drizzle-orm/node-sqlite";
@@ -15,7 +15,17 @@ const MIGRATIONS = import.meta.glob("./migrations/*/migration.sql", {
 
 export function openDatabase(path: string): Database {
   if (path !== ":memory:") {
-    mkdirSync(dirname(path), { recursive: true });
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const fd = openSync(
+      path,
+      constants.O_CREAT | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    try {
+      if (process.platform !== "win32") fchmodSync(fd, 0o600);
+    } finally {
+      closeSync(fd);
+    }
   }
 
   const sqlite = new DatabaseSync(path);

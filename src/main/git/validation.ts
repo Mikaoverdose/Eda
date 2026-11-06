@@ -212,7 +212,7 @@ export function assertPlainPath(path: string, operation: string): void {
 export function assertRepositoryPath(path: string, operation: string): void {
   assertPlainPath(path, operation);
 
-  if (path.length > 4096 || path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)) {
+  if (path.length > 4096 || /^[\\/]|^[A-Za-z]:/.test(path)) {
     throw invalid(
       operation,
       errorText("main.git.validation.theFilePathMustBeRelativeToTheRepository"),
@@ -220,7 +220,19 @@ export function assertRepositoryPath(path: string, operation: string): void {
     );
   }
 
-  if (path.split(/[\\/]/).some((part) => part === "..")) {
+  if (
+    path
+      .split(/[\\/]/)
+      .some(
+        (part) =>
+          part === ".." ||
+          /^\.git$/i.test(part.replace(/[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/g, "")) ||
+          (process.platform === "win32" &&
+            (/[.: ]$|:/.test(part) ||
+              /^[^ .]{1,6}~\d+(?:\.|$)/i.test(part) ||
+              /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(part))),
+      )
+  ) {
     throw invalid(
       operation,
       errorText("main.git.validation.theFilePathLeavesTheRepository"),

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
+import { link, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTempRepo, type TempRepo } from "../../../helpers/temp-repo";
 import { IgnoreService, ignoreRule } from "@main/repo/working-tree/ignore-service";
@@ -74,4 +74,13 @@ describe("Git ignore rules", () => {
     expect(await readFile(join(repo.path, "file.log"), "utf8")).toBe("keep these bytes\r\n");
     expect(await repo.run(["diff", "--cached", "--name-status"])).toContain("D\tfile.log");
   });
+});
+
+it("refuses a hard-linked ignore file without appending to the external file", async () => {
+  repo = await createTempRepo();
+  const external = join(repo.home, "outside");
+  await writeFile(external, "outside contents");
+  await link(external, join(repo.path, ".gitignore"));
+  await expect(new IgnoreService(repo.git).add(repo.path, "log.txt", "path")).rejects.toThrow();
+  expect(await readFile(external, "utf8")).toBe("outside contents");
 });

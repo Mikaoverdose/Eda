@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -35,6 +35,7 @@ it("backs up the pre-upgrade database, including WAL data, without overwriting t
     db.exec("INSERT INTO parents VALUES ('in-wal')");
     const next = { id: "002_upgrade", sql: "ALTER TABLE parents ADD COLUMN name TEXT" };
     applyMigrations(db, [initial, next], { backupPath });
+    if (process.platform !== "win32") expect(statSync(backupPath).mode & 0o077).toBe(0);
     const backup = new DatabaseSync(backupPath, { readOnly: true });
     try {
       expect(backup.prepare("SELECT * FROM parents ORDER BY id").all()).toEqual([

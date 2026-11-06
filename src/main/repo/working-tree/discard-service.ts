@@ -1,3 +1,4 @@
+import { readRegularFile } from "../../filesystem/read-regular-file";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -5,7 +6,7 @@ import { GIT_FILE_MODE } from "@shared/repository/git-file-mode";
 import type { PartialStageRequest } from "@shared/repository/partial-stage";
 import type { DiscardPreview, RecoverySummary } from "@shared/workflows/recovery";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { GitService } from "../../git/git-service";
 import { partialPatch } from "../../git/operations/partial-patch";
@@ -285,7 +286,7 @@ export class DiscardService {
     private readonly store: ContentRecoveryRepository,
   ) {}
 
-  private async safePath(root: string, path: string): Promise<string> {
+  async safePath(root: string, path: string): Promise<string> {
     assertRepositoryPath(path, t("operations.discardLocalChanges"));
 
     const target = resolve(root, path);
@@ -317,22 +318,14 @@ export class DiscardService {
 
   private async capture(root: string, path: string, tracked: boolean): Promise<SavedFile> {
     const target = await this.safePath(root, path);
-    const stat = await lstat(target).catch((error: NodeJS.ErrnoException) => {
+    const captured = await readRegularFile(target, MAX_BYTES, () =>
+      invalid(errorText("main.discardService.recoverySupportsRegularFilesUpTo32MiB")),
+    ).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;
       throw error;
     });
-
-    if (!stat) return { path, content: null, mode: 0, hash: "missing", tracked };
-
-    if (!stat.isFile() || stat.size > MAX_BYTES)
-      throw invalid(errorText("main.discardService.recoverySupportsRegularFilesUpTo32MiB"));
-
-    const content = await readFile(target);
-
-    if (content.length > MAX_BYTES)
-      throw invalid(
-        errorText("main.discardService.theFileGrewBeyondTheRecoveryLimitNoChangesWereDiscarded"),
-      );
+    if (!captured) return { path, content: null, mode: 0, hash: "missing", tracked };
+    const { bytes: content, entry: stat } = captured;
 
     return {
       path,
@@ -656,8 +649,19 @@ export class DiscardService {
         });
       else {
         await mkdir(dirname(target), { recursive: true });
-        await writeFile(target, Buffer.from(file.content, "base64"));
-        await chmod(target, file.mode);
+        const temporary = join(dirname(target), `eda-restore-${randomUUID()}`);
+        const handle = await open(temporary, "wx", 0o600);
+        try {
+          await handle.writeFile(Buffer.from(file.content, "base64"));
+          await handle.chmod(file.mode);
+          await handle.close();
+          await rename(temporary, await this.safePath(record.root, file.path));
+        } finally {
+          await handle.close();
+          await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") throw error;
+          });
+        }
       }
     }
   }

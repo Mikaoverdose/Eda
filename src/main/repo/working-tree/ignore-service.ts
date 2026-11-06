@@ -2,7 +2,9 @@ import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { IgnoreInspection, IgnoreKind } from "@shared/repository/ignore";
-import { lstat, open, readFile } from "node:fs/promises";
+import { readRegularFile } from "../../filesystem/read-regular-file";
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { GitService } from "../../git/git-service";
 import { assertRepositoryPath } from "../../git/validation";
@@ -70,17 +72,19 @@ export class IgnoreService {
   async add(root: string, path: string, kind: IgnoreKind): Promise<void> {
     const rule = ignoreRule(path, kind);
     const filename = join(root, ".gitignore");
-    const stat = await lstat(filename).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
-
-    if (stat && (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024))
-      throw invalid(
+    const invalidFile = () =>
+      invalid(
         errorText("main.ignoreService.theRootGitignoreMustBeARegularFileUnder1MiBEditItExternally"),
       );
-
-    const bytes = stat ? await readFile(filename) : Buffer.alloc(0);
+    const snapshot = await readRegularFile(filename, 1024 * 1024, invalidFile).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      },
+    );
+    const stat = snapshot?.entry;
+    if (stat && stat.nlink !== 1) throw invalidFile();
+    const bytes = snapshot?.bytes ?? Buffer.alloc(0);
     let content: string;
 
     try {
@@ -96,14 +100,21 @@ export class IgnoreService {
     if (content.split(/\r?\n/).includes(rule)) return;
 
     const newline = content.includes("\r\n") ? "\r\n" : "\n";
-    const file = await open(filename, stat ? "r+" : "wx");
+    const file = await open(
+      filename,
+      stat ? constants.O_RDWR | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0) : "wx",
+    );
 
     try {
       const current = await file.stat();
 
       if (
         stat &&
-        (current.ino !== stat.ino || current.size !== stat.size || current.mtimeMs !== stat.mtimeMs)
+        (current.dev !== stat.dev ||
+          current.nlink !== 1 ||
+          current.ino !== stat.ino ||
+          current.size !== stat.size ||
+          current.mtimeMs !== stat.mtimeMs)
       )
         throw invalid(errorText("main.ignoreService.theGitignoreFileChangedPreviewTheRuleAgain"));
 

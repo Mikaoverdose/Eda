@@ -206,6 +206,11 @@ describe("assertRepositoryPath", () => {
     throwsInvalidInput(() => assertRepositoryPath("src/../../../etc/passwd", "stage changes"));
   });
 
+  it.each([".git/config", ".GIT/hooks/post-checkout", ".g\u200cit/config", "C:escape"])(
+    "rejects metadata aliases and drive-relative path %s",
+    (path) => throwsInvalidInput(() => assertRepositoryPath(path, "stage changes")),
+  );
+
   it("allows an option-like path, which the -- separator neutralizes", () => {
     expect(() => assertRepositoryPath("--output=/tmp/pwn", "stage changes")).not.toThrow();
     expect(() => assertRepositoryPath("-x", "stage changes")).not.toThrow();

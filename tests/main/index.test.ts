@@ -20,6 +20,7 @@ vi.mock("node:fs", async (importOriginal) => ({
   ...(await importOriginal<typeof FileSystem>()),
   existsSync: startup.existsSync,
   mkdirSync: startup.mkdirSync,
+  chmodSync: vi.fn(),
   renameSync: startup.renameSync,
 }));
 vi.mock("@main/git/execution/shell-path", () => ({

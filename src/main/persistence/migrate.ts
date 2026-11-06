@@ -1,5 +1,6 @@
 import { ERROR_CODE } from "@shared/error-codes";
 import { AppError } from "@shared/errors";
+import { closeSync, openSync } from "node:fs";
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -16,7 +17,6 @@ export function applyMigrations(
   if (sqlite.isTransaction) throw new AppError(ERROR_CODE.MIGRATION_TRANSACTION_REQUIRED);
 
   // VACUUM INTO includes WAL changes and must run outside the transaction.
-  // It also refuses to overwrite an existing backup.
   if (
     options.backupPath &&
     sqlite
@@ -26,8 +26,10 @@ export function applyMigrations(
     const applied = sqlite.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get() as {
       count: number;
     };
-    if (applied.count > 0 && applied.count < migrations.length)
+    if (applied.count > 0 && applied.count < migrations.length) {
+      closeSync(openSync(options.backupPath, "wx", 0o600));
       sqlite.prepare("VACUUM INTO ?").run(options.backupPath);
+    }
   }
 
   // SQLite ignores foreign_keys changes inside a transaction.
