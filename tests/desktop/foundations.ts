@@ -704,6 +704,17 @@ try {
 
   const editId = git("rev-parse", "HEAD").trim().slice(0, 8);
 
+  const refreshBeforeRebase = stashPage.getByRole("button", {
+    name: "Refresh repository",
+    exact: true,
+  });
+
+  await refreshBeforeRebase.click();
+  await expect(refreshBeforeRebase).toBeEnabled();
+  await expect(
+    stashPage.getByRole("button", { name: "Inspect branch stash-destination", exact: true }),
+  ).toHaveAttribute("title", `stash-destination\nCurrent branch, Inspect ${editId}`);
+
   await stashPage
     .getByRole("button", { name: "Inspect branch rebase-base", exact: true })
     .click({ button: "right" });
