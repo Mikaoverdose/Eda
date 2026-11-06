@@ -1,5 +1,5 @@
 import { errorText } from "@shared/error-codes";
-import { GitError } from "@shared/errors";
+import { AppError, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type {
   AgentStatus,
@@ -8,10 +8,11 @@ import type {
   SshKey,
   UnlockKeyRequest,
 } from "@shared/identity/ssh";
-import { existsSync } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
+import { copyFile, lstat, mkdtemp, readdir, rm, stat, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { readRegularFile } from "../filesystem/read-regular-file";
+import { basename, dirname, join } from "node:path";
 import { buildGitEnvironment, SSH_HOST_TRUST_OPTIONS } from "../git/execution/environment";
 import type { ProcessRunner } from "../git/execution/process-runner";
 import { ProcessSpawnError } from "../git/execution/process-runner";
@@ -117,7 +118,25 @@ export class SshService {
       t("main.sshService.comment"),
     );
 
-    if (existsSync(request.path) || existsSync(`${request.path}.pub`)) {
+    if (
+      /[\x00-\x1f\x7f]/.test(request.comment) ||
+      (request.type === "rsa" && ![2048, 3072, 4096].includes(request.bits ?? 4096))
+    )
+      throw new GitError({
+        kind: "invalid-input",
+        operation: t("operations.generateSshKey"),
+        message: errorText("main.sshHandlers.invalidKeyParameters"),
+      });
+    const publicPath = `${request.path}.pub`;
+    const exists = async (path: string) =>
+      lstat(path).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT") throw error;
+          return false;
+        },
+      );
+    if ((await exists(request.path)) || (await exists(publicPath))) {
       throw new GitError({
         kind: "invalid-input",
         operation: t("operations.generateSshKey"),
@@ -128,25 +147,38 @@ export class SshService {
       });
     }
 
-    const args = ["-t", request.type, "-f", request.path, "-C", request.comment, "-N", "", "-q"];
+    const staging = await mkdtemp(join(dirname(request.path), ".eda-key-"));
+    const temporary = join(staging, "key");
+    try {
+      const args = ["-t", request.type, "-f", temporary, "-C", request.comment, "-N", "", "-q"];
 
-    if (request.type === "rsa") {
-      args.push("-b", String(request.bits ?? 4096));
+      if (request.type === "rsa") {
+        args.push("-b", String(request.bits ?? 4096));
+      }
+
+      const result = await this.run("ssh-keygen", args, t("operations.generateSshKey"));
+
+      if (result.exitCode !== 0) {
+        throw new GitError({
+          kind: "unknown",
+          operation: t("operations.generateSshKey"),
+          message: errorText("main.ssh.sshService.sshKeygenCouldNotCreateTheKey"),
+          suggestedAction: errorText("main.ssh.sshService.checkThatTheFolderExistsAndIsWritable"),
+          exitCode: result.exitCode,
+          rawStderr: result.stderr,
+        });
+      }
+
+      await copyFile(temporary, request.path, constants.COPYFILE_EXCL);
+      try {
+        await copyFile(`${temporary}.pub`, publicPath, constants.COPYFILE_EXCL);
+      } catch (error) {
+        await unlink(request.path);
+        throw error;
+      }
+    } finally {
+      await rm(staging, { recursive: true, force: true });
     }
-
-    const result = await this.run("ssh-keygen", args, t("operations.generateSshKey"));
-
-    if (result.exitCode !== 0) {
-      throw new GitError({
-        kind: "unknown",
-        operation: t("operations.generateSshKey"),
-        message: errorText("main.ssh.sshService.sshKeygenCouldNotCreateTheKey"),
-        suggestedAction: errorText("main.ssh.sshService.checkThatTheFolderExistsAndIsWritable"),
-        exitCode: result.exitCode,
-        rawStderr: result.stderr,
-      });
-    }
-
     return this.importKey(request.path);
   }
 
@@ -337,7 +369,19 @@ export class SshService {
       return undefined;
     }
 
-    const publicKeyContents = await readFile(publicKeyPath, "utf8").catch(() => undefined);
+    const publicKeyContents = await readRegularFile(
+      publicKeyPath,
+      64 * 1024,
+      () =>
+        new AppError(
+          errorText("main.ssh.sshService.edaCouldNotReadAsAnSshKey", {
+            value1: basename(publicKeyPath),
+          }),
+        ),
+    ).then(
+      ({ bytes }) => bytes.toString("utf8"),
+      () => undefined,
+    );
 
     if (publicKeyContents === undefined) return undefined;
 
@@ -440,21 +484,23 @@ export class SshService {
 async function createAskpassScript(
   passphrase: string,
 ): Promise<{ path: string; cleanup: () => Promise<void> }> {
-  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
 
   const dir = await mkdtemp(join(tmpdir(), "eda-askpass-"));
   const isWindows = process.platform === "win32";
   const scriptPath = join(dir, isWindows ? "askpass.bat" : "askpass.sh");
   const dataPath = join(dir, "passphrase");
-  const stampPath = join(dir, "asked");
-
   const script = isWindows
-    ? `@echo off\r\nif exist "${stampPath}" exit /b 1\r\ntype nul > "${stampPath}"\r\ntype "${dataPath}"\r\n`
-    : `#!/bin/sh\nif [ -f '${stampPath}' ]; then exit 1; fi\n: > '${stampPath}'\ncat '${dataPath}'\n`;
-
-  await writeFile(dataPath, passphrase, { mode: 0o600 });
-  await writeFile(scriptPath, script, { mode: 0o700 });
+    ? '@echo off\r\nsetlocal DisableDelayedExpansion\r\nif exist "%~dp0asked" exit /b 1\r\ntype nul > "%~dp0asked"\r\ntype "%~dp0passphrase"\r\n'
+    : '#!/bin/sh\ncd -- "${0%/*}" || exit 1\n(set -C; : > asked) 2>/dev/null || exit 1\nexec cat passphrase\n';
+  try {
+    await writeFile(dataPath, passphrase, { mode: 0o600, flag: "wx" });
+    await writeFile(scriptPath, script, { mode: 0o700, flag: "wx" });
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
 
   return {
     path: scriptPath,

@@ -10,6 +10,7 @@ import { handle } from "../transport";
 import { optionalRecord, requireAbsolutePath, requireId, requireString } from "../validate";
 
 export function registerSshHandlers(services: Services): void {
+  const keyDestinations = new WeakMap<Electron.WebContents, string>();
   handle(IPC_CHANNELS.sshPendingHostTrust, async (event) => {
     if (event.senderFrame !== event.sender.mainFrame)
       throw invalidRequest(errorText("main.sshHandlers.sshHostTrustRequiresTheApplicationWindow"));
@@ -32,14 +33,18 @@ export function registerSshHandlers(services: Services): void {
     ok(await services.ssh.importKey(requireAbsolutePath(rawPath, t("fields.keyPath")))),
   );
 
-  handle(IPC_CHANNELS.sshGenerateKey, async (_e, raw) => {
+  handle(IPC_CHANNELS.sshGenerateKey, async (event, raw) => {
     const input = optionalRecord(raw);
+    const path = requireAbsolutePath(input["path"], t("fields.keyPath"));
+    if (keyDestinations.get(event.sender) !== path)
+      throw invalidRequest(errorText("main.sshHandlers.chooseKeyFirst"));
+    keyDestinations.delete(event.sender);
     const type = input["type"] === "rsa" ? "rsa" : "ed25519";
     const bits = typeof input["bits"] === "number" ? input["bits"] : undefined;
 
     return ok(
       await services.ssh.generateKey({
-        path: requireAbsolutePath(input["path"], t("fields.keyPath")),
+        path,
         type,
         comment: requireString(input["comment"], t("fields.comment"), 256),
         ...(bits !== undefined && { bits }),
@@ -113,6 +118,8 @@ export function registerSshHandlers(services: Services): void {
     const result = window
       ? await dialog.showSaveDialog(window, options)
       : await dialog.showSaveDialog(options);
+    keyDestinations.delete(event.sender);
+    if (!result.canceled && result.filePath) keyDestinations.set(event.sender, result.filePath);
     return ok(result.canceled ? null : (result.filePath ?? null));
   });
 }

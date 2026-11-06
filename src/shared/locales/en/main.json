@@ -1,4 +1,6 @@
 {
+  "main.sshHandlers.invalidKeyParameters": "Use a single-line key comment and a 2048, 3072 or 4096-bit RSA key.",
+  "main.sshHandlers.chooseKeyFirst": "Choose the new key’s destination in the file picker.",
   "main.workflowState.invalidMarker": "Git workflow metadata must be a regular file.",
   "main.git.executable.notFound": "Executable not found: {executable}",
   "main.git.rebaseState.unsafeInstructions": "This saved rebase contains shell commands or unsupported instructions. Inspect and finish it outside Eda, or abort it.",

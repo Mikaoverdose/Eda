@@ -198,7 +198,8 @@ describe("SshService generation", () => {
 
     const args = runner.calls[0]?.args ?? [];
 
-    expect(args).toEqual(expect.arrayContaining(["-t", "ed25519", "-f", keyPath]));
+    expect(args).toEqual(expect.arrayContaining(["-t", "ed25519", "-f"]));
+    expect(args[args.indexOf("-f") + 1]).toContain(".eda-key-");
     expect(args).toEqual(expect.arrayContaining(["-N", ""]));
   });
 
