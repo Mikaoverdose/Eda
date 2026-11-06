@@ -42,7 +42,7 @@
     "colorjs.io": "^0.7.1",
     "drizzle-kit": "1.0.0-rc.5",
     "drizzle-orm": "1.0.0-rc.5",
-    "electron": "^45.2.1",
+    "electron": "^45.2.3",
     "electron-builder": "^26.18.1",
     "eslint": "^10.14.0",
     "happy-dom": "^21.0.4",
