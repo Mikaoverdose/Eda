@@ -10,6 +10,7 @@ import {
   Palette,
   PanelsTopLeft,
   Plug,
+  Trash2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -204,7 +205,7 @@ const SECTIONS: {
     keywords: t("settings.debugResetDeleteClearAllDataRestartOnboardingFactorySettings"),
     title: t("settings.resetAppData"),
     description: t("settings.startFreshWithEda"),
-    icon: FlaskConical,
+    icon: Trash2,
     group: "debug",
   },
 ];
@@ -278,7 +279,10 @@ export function Settings({
             />
           </div>
         </div>
-        <nav aria-label={t("settings.settingsSections")} className="min-h-0 flex-1 overflow-y-auto">
+        <nav
+          aria-label={t("settings.settingsSections")}
+          className="-m-1 min-h-0 flex-1 overflow-y-auto p-1"
+        >
           {matches.length === 0 && (
             <p role="status" className="px-2 py-3 text-xs text-text-tertiary">
               {t("settings.noSettingsMatch", { query: query })}
