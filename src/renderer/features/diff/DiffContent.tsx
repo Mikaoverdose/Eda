@@ -8,7 +8,7 @@ import { diffSearchMatches } from "../../repository/diff-search";
 
 import { useRepositoryStore } from "../../stores/repository-store";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
-import { PartialStageProvider, PartialStageToolbar } from "../changes/PartialStageControls";
+import { PartialStageProvider } from "../changes/PartialStageControls";
 import { DIFF_ROW_HEIGHT, DiffCell, DiffSummaryRow, UnifiedDiffRow } from "./DiffRows";
 import { IconButton, SearchField } from "../../components/ui/index";
 
@@ -100,7 +100,6 @@ export function DiffContent({
   };
   const content = (
     <>
-      <PartialStageToolbar />
       <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1 text-xs text-text-tertiary">
         <SearchField
           aria-label={t("diff.diffContent.findInDiff")}

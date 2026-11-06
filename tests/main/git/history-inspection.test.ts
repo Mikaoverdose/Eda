@@ -1,8 +1,45 @@
 import { createTempRepo } from "../../helpers/temp-repo";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { SshService } from "@main/ssh/ssh-service";
+import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 
 describe("history visibility and inspection", () => {
+  it("detects commit signatures from headers without verifying them or mistaking message text for a signature", async () => {
+    const repo = await createTempRepo();
+
+    try {
+      await repo.writeFile("file.txt", "base\n");
+      await repo.commit("Unsigned commit\n\ngpgsig -----BEGIN SSH SIGNATURE-----");
+      const unsigned = (await repo.run(["rev-parse", "HEAD"])).trim();
+      expect((await repo.git.inspectCommit(repo.path, unsigned)).signed).toBe(false);
+
+      const key = join(repo.home, "signing-key");
+      await new SshService(new NodeProcessRunner(), repo.home).generateKey({
+        path: key,
+        type: "ed25519",
+        comment: "Eda",
+      });
+      await repo.run([
+        "-c",
+        "gpg.format=ssh",
+        "-c",
+        `user.signingkey=${key}`,
+        "commit",
+        "--allow-empty",
+        "-S",
+        "-m",
+        "Signed commit",
+      ]);
+      const signed = (await repo.run(["rev-parse", "HEAD"])).trim();
+      await repo.run(["config", "gpg.ssh.program", join(repo.home, "missing-verifier")]);
+      expect((await repo.git.inspectCommit(repo.path, signed)).signed).toBe(true);
+      expect((await repo.git.inspectCommit(repo.path, unsigned)).signed).toBe(false);
+    } finally {
+      await repo.cleanup();
+    }
+  });
+
   it("shows older stashes and their snapshot topology across pages without changing refs or files", async () => {
     const repo = await createTempRepo();
 

@@ -47,6 +47,8 @@ export function CommitChangesPanel() {
   const selectedPath = useRepositoryStore((state) => state.commitFilePath);
   const selectFile = useRepositoryStore((state) => state.selectCommitFile);
   const showWorkingTree = useRepositoryStore((state) => state.showWorkingTree);
+  const changeCount = useRepositoryStore((state) => state.status?.changes.length ?? 0);
+  const truncatedChanges = useRepositoryStore((state) => state.truncatedChanges);
   const [query, setQuery] = useState("");
   const [details, setDetails] = useState<{
     oid: string;
@@ -105,9 +107,25 @@ export function CommitChangesPanel() {
           collapseDirection="right"
         />
       </header>
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-3 py-2 text-xs text-text-tertiary">
-        <span className="mono">{t("commitChangesPanel.commit", { oid: oid?.slice(0, 8) })}</span>
-        <TextButton onClick={showWorkingTree}>{t("commitChangesPanel.workingTree")}</TextButton>
+      <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-accent-border bg-accent-muted px-3 py-1.5 text-xs text-text-primary">
+        <span role="status">
+          {changeCount
+            ? t(
+                truncatedChanges
+                  ? "commitChangesPanel.workingTreeChangesTruncated"
+                  : "commitChangesPanel.workingTreeChanges",
+                { count: changeCount },
+              )
+            : t("commitChangesPanel.workingTreeClean")}
+        </span>
+        <ButtonBase
+          onClick={showWorkingTree}
+          className="shrink-0 rounded-sm border border-accent-border px-1.5 py-0.5 text-xs text-accent-text hover:bg-bg-raised"
+        >
+          {changeCount
+            ? t("commitChangesPanel.viewWorkingTreeChanges")
+            : t("commitChangesPanel.workingTree")}
+        </ButtonBase>
       </div>
       <div className="max-h-[40%] shrink-0 overflow-auto">
         {commit && (

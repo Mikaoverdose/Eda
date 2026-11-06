@@ -89,6 +89,7 @@ export interface CommitInspection {
   commit: HistoryCommit;
   containingRefs: string[];
   shallow: boolean;
+  signed: boolean;
 }
 
 export type DiffLineType = "context" | "addition" | "deletion" | "no-newline";

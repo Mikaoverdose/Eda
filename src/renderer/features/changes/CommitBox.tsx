@@ -3,7 +3,7 @@ import { t } from "@shared/i18n";
 import { emptyDraft } from "@shared/identity/profile-session";
 import { matchCommitPrefix } from "@shared/preferences/commit-prefix";
 import type { CommitPreview } from "@shared/repository/repository-write";
-import { KeyRound, ShieldOff } from "lucide-react";
+import { FileInput, KeyRound, ShieldOff, UserPlus } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Skeleton } from "../../components/ui/feedback/Skeleton";
 import {
@@ -13,9 +13,9 @@ import {
   Disclosure,
   ErrorDialog,
   IdentityIcon,
+  IconButton,
   Input,
   Textarea,
-  TextButton,
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { usePreferencesStore } from "../../stores/preferences-store";
@@ -163,7 +163,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
   return (
     <section
       data-tour="commit-box"
-      className="app-surface-panel flex shrink-0 flex-col gap-3 border-t border-border-default p-3"
+      className="app-surface-panel flex shrink-0 flex-col gap-2 border-t border-border-default px-3 py-2"
     >
       <Disclosure
         open={expanded}
@@ -192,8 +192,8 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
           </div>
         }
       >
-        <div className="flex flex-col gap-3 pt-3">
-          <div className="space-y-2">
+        <div className="flex flex-col gap-2 pt-2">
+          <div className="space-y-1.5">
             <div className="flex min-w-0 items-center gap-2">
               {conventional && (
                 <CommitPrefixPicker
@@ -210,6 +210,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
               )}
               <div className="min-w-0 flex-1">
                 <Input
+                  size="sm"
                   value={subject}
                   onChange={(event) =>
                     setMessage(`${composeTitle(event.target.value)}${messageTail}`)
@@ -235,7 +236,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
               </div>
             </div>
             <Textarea
-              rows={3}
+              rows={2}
               value={description}
               onChange={(event) =>
                 setMessage(event.target.value ? `${title}\n\n${event.target.value}` : title)
@@ -245,7 +246,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
               aria-label={t("commitBox.commitDescription")}
               disabled={pending || !!snapshot?.recovery || transitioning}
               surface="base"
-              className="resize-none leading-relaxed"
+              className="leading-snug"
             />
           </div>
 
@@ -267,65 +268,72 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
             </p>
           )}
           <Disclosure title={t("commitBox.commitOptions")} className="text-xs">
-            <div className="mt-2 space-y-2">
-              <Checkbox
-                checked={draft.signOff ?? false}
-                disabled={writing || transitioning}
-                onChange={(event) => {
-                  if (repositoryId)
-                    useSessionStore
-                      .getState()
-                      .setDraft(repositoryId, { ...draft, signOff: event.target.checked });
-                }}
-              >
-                {t("commitBox.addSignedOffByTrailer")}
-              </Checkbox>
-              <div className="flex gap-3">
-                <TextButton
+            <div className="mt-1.5 space-y-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <Checkbox
+                  className="min-w-0 text-xs text-text-secondary"
+                  checked={draft.signOff ?? false}
                   disabled={writing || transitioning}
-                  onClick={() => setCoauthorOpen(true)}
-                >
-                  {t("commitBox.addCoAuthor")}
-                </TextButton>
-                <TextButton
-                  disabled={writing || transitioning}
-                  onClick={() => {
-                    if (!repositoryId) return;
-
-                    const owner = snapshot?.context.profileId;
-                    const currentMessage = message;
-
-                    void window.eda.repository.commitTemplate(repositoryId).then((result) => {
-                      const current = useSessionStore.getState();
-
-                      if (
-                        current.snapshot?.context.profileId !== owner ||
-                        current.snapshot?.session.selectedRepositoryId !== repositoryId
-                      )
-                        return;
-
-                      if (!result.ok) setTemplateMessage(errorMessage(result.error));
-                      else if (!result.value)
-                        setTemplateMessage(
-                          t("commitBox.noCommitTemplateIsConfiguredForThisRepository"),
-                        );
-                      else if (
-                        (current.snapshot.drafts[repositoryId]?.message ?? "") !== currentMessage
-                      )
-                        setTemplateMessage(
-                          t("commitBox.theDraftChangedWhileLoadingInsertTheTemplateAgain"),
-                        );
-                      else {
-                        setMessage(
-                          currentMessage ? `${currentMessage}\n\n${result.value}` : result.value,
-                        );
-                        setTemplateMessage(null);
-                      }
-                    });
+                  onChange={(event) => {
+                    if (repositoryId)
+                      useSessionStore
+                        .getState()
+                        .setDraft(repositoryId, { ...draft, signOff: event.target.checked });
                   }}
                 >
-                  {t("commitBox.insertGitTemplate")}
-                </TextButton>
+                  {t("commitBox.addSignedOffByTrailer")}
+                </Checkbox>
+                <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                  <IconButton
+                    size="xs"
+                    aria-label={t("commitBox.addCoAuthor")}
+                    title={t("commitBox.addCoAuthor")}
+                    icon={<UserPlus size={14} aria-hidden="true" />}
+                    disabled={writing || transitioning}
+                    onClick={() => setCoauthorOpen(true)}
+                  />
+                  <IconButton
+                    size="xs"
+                    aria-label={t("commitBox.insertGitTemplate")}
+                    title={t("commitBox.insertGitTemplate")}
+                    icon={<FileInput size={14} aria-hidden="true" />}
+                    disabled={writing || transitioning}
+                    onClick={() => {
+                      if (!repositoryId) return;
+
+                      const owner = snapshot?.context.profileId;
+                      const currentMessage = message;
+
+                      void window.eda.repository.commitTemplate(repositoryId).then((result) => {
+                        const current = useSessionStore.getState();
+
+                        if (
+                          current.snapshot?.context.profileId !== owner ||
+                          current.snapshot?.session.selectedRepositoryId !== repositoryId
+                        )
+                          return;
+
+                        if (!result.ok) setTemplateMessage(errorMessage(result.error));
+                        else if (!result.value)
+                          setTemplateMessage(
+                            t("commitBox.noCommitTemplateIsConfiguredForThisRepository"),
+                          );
+                        else if (
+                          (current.snapshot.drafts[repositoryId]?.message ?? "") !== currentMessage
+                        )
+                          setTemplateMessage(
+                            t("commitBox.theDraftChangedWhileLoadingInsertTheTemplateAgain"),
+                          );
+                        else {
+                          setMessage(
+                            currentMessage ? `${currentMessage}\n\n${result.value}` : result.value,
+                          );
+                          setTemplateMessage(null);
+                        }
+                      });
+                    }}
+                  />
+                </div>
               </div>
               {templateMessage && <p role="status">{templateMessage}</p>}
             </div>

@@ -1,6 +1,7 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { PartialStagePreview, PartialStageRequest } from "@shared/repository/partial-stage";
+import { Minus, Plus } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
@@ -207,35 +208,69 @@ export function PartialStageProvider({
   );
 }
 
-export function PartialStageToolbar() {
+export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }) {
   const context = useContext(Context);
+  const selection = useRepositoryStore((state) => state.selection);
+  const status = useRepositoryStore((state) => state.status);
+  const stage = useRepositoryStore((state) => state.stage);
+  const unstage = useRepositoryStore((state) => state.unstage);
 
-  if (!context) return null;
+  if (!context || selection?.kind !== "change") return null;
+
+  const staged = selection.area === "staged";
+  const fileLabel = staged ? t("diffViewer.unstageFile") : t("diffViewer.stageFile");
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-3 border-b border-border-subtle px-3 py-1 text-xs">
-        <span className="text-text-tertiary">
-          {context.selected.size
-            ? t("partialStageControls.linesSelected", { size: context.selected.size })
-            : t("partialStageControls.selectChangedLinesOrStageUnstageAHunk")}
-        </span>
-        <TextButton
-          disabled={!context.selected.size || context.busy}
-          className="ml-auto"
-          tone="accent"
-          onClick={context.prepareSelected}
-        >
-          {t("partialStageControls.selectedLines", { verb: context.verb })}
-        </TextButton>
-        {context.selected.size > 0 && (
-          <TextButton onClick={context.clearSelected}>{t("partialStageControls.clear")}</TextButton>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-subtle px-3 py-1 text-xs">
+        {!fileOnly && (
+          <span className="min-w-0 flex-1 truncate text-text-tertiary">
+            {context.selected.size
+              ? t("partialStageControls.linesSelected", { size: context.selected.size })
+              : t("partialStageControls.selectChangedLinesOrStageUnstageAHunk")}
+          </span>
         )}
-        {context.discardSelected && context.selected.size > 0 && (
-          <TextButton disabled={context.busy} tone="danger" onClick={context.discardSelected}>
-            {t("partialStageControls.discardSelectedLines")}
+        <div className="ml-auto flex max-w-full flex-wrap items-center gap-3">
+          <TextButton
+            disabled={context.busy || !status || status.capabilities?.write === false}
+            className="flex shrink-0 items-center gap-1.5"
+            tone="accent"
+            title={fileLabel}
+            onClick={() => {
+              if (staged) void unstage([selection.path]);
+              else void stage([selection.path]);
+            }}
+          >
+            {staged ? (
+              <Minus size={14} aria-hidden="true" />
+            ) : (
+              <Plus size={14} aria-hidden="true" />
+            )}
+            {fileLabel}
           </TextButton>
-        )}
+          {!fileOnly && (
+            <>
+              <TextButton
+                disabled={!context.selected.size || context.busy}
+                className="shrink-0"
+                tone="accent"
+                onClick={context.prepareSelected}
+              >
+                {t("partialStageControls.selectedLines", { verb: context.verb })}
+              </TextButton>
+              {context.selected.size > 0 && (
+                <TextButton onClick={context.clearSelected}>
+                  {t("partialStageControls.clear")}
+                </TextButton>
+              )}
+              {context.discardSelected && context.selected.size > 0 && (
+                <TextButton disabled={context.busy} tone="danger" onClick={context.discardSelected}>
+                  {t("partialStageControls.discardSelectedLines")}
+                </TextButton>
+              )}
+            </>
+          )}
+        </div>
       </div>
       {context.error && <ErrorDialog>{context.error}</ErrorDialog>}
     </>

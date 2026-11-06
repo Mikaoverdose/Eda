@@ -2,16 +2,17 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { isImagePath } from "@shared/repository/image-preview";
 import type { DiffMode } from "@shared/repository/repository-read";
+import { ArrowLeft, Columns2, EyeOff, Rows3 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PanelControls } from "../../components/layout/PanelControls";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { LoadingContent } from "../../components/ui/feedback/Skeleton";
-import { ErrorDialog, SegmentedControl, StateMessage, TextButton } from "../../components/ui/index";
+import { ErrorDialog, IconButton, StateMessage, TextButton } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { usePreferencesStore } from "../../stores/preferences-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { IgnoreDialog } from "../changes/IgnoreDialog";
-import { PartialStageProvider } from "../changes/PartialStageControls";
+import { PartialStageProvider, PartialStageToolbar } from "../changes/PartialStageControls";
 import { DiffContent } from "./DiffContent";
 import { ImageDiff } from "./ImageDiff";
 
@@ -64,9 +65,13 @@ export function DiffViewer({ pending = false }: { pending?: boolean }) {
         className="app-surface-panel flex h-full w-full min-h-0 min-w-0 flex-col border-l border-border-subtle"
       >
         <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
-          <TextButton onClick={showHistory} aria-label={t("diffViewer.backToHistory")}>
-            {t("diffViewer.backToHistory")}
-          </TextButton>
+          <IconButton
+            size="xs"
+            onClick={showHistory}
+            aria-label={t("diffViewer.backToHistory")}
+            title={t("diffViewer.backToHistory")}
+            icon={<ArrowLeft size={14} aria-hidden="true" />}
+          />
           <h3 className="text-sm font-semibold text-text-secondary">
             {t("diffViewer.diffViewer")}
           </h3>
@@ -92,42 +97,79 @@ export function DiffViewer({ pending = false }: { pending?: boolean }) {
     );
   }
 
+  const path = selection.kind === "change" ? selection.path : commitFilePath;
+  const fileName = path?.split("/").at(-1);
+  const source =
+    selection.kind === "change"
+      ? selection.area === "staged"
+        ? t("diffViewer.staged")
+        : t("diffViewer.workingTree")
+      : t("diffViewer.commitSource", { oid: selection.oid.slice(0, 8) });
+
   return (
     <PartialStageProvider
       key={`${profileId}:${repositoryId}:${selection.kind === "commit" ? `${selection.oid}:${commitFilePath}` : `${selection.area}:${selection.path}`}`}
     >
       <section
         data-tour="diff"
-        className="app-surface-panel flex h-full w-full min-h-0 min-w-0 flex-col border-l border-border-subtle"
+        className="app-surface-panel @container/diff flex h-full w-full min-h-0 min-w-0 flex-col border-l border-border-subtle"
       >
         <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
-          <TextButton onClick={showHistory} aria-label={t("diffViewer.backToHistory")}>
-            {t("diffViewer.backToHistory")}
-          </TextButton>
+          <IconButton
+            size="xs"
+            onClick={showHistory}
+            aria-label={t("diffViewer.backToHistory")}
+            title={t("diffViewer.backToHistory")}
+            icon={<ArrowLeft size={14} aria-hidden="true" />}
+          />
           <h3 className="sr-only">{t("diffViewer.diffViewer")}</h3>
-          <div className="min-w-0 flex-1 truncate text-xs font-medium text-text-secondary">
-            {selection.kind === "change"
-              ? `${selection.area === "staged" ? t("diffViewer.staged") : t("diffViewer.workingTree")}, ${selection.path}`
-              : t("diffViewer.commit", {
-                  oid: selection.oid.slice(0, 8),
-                  value2: commitFilePath ?? "",
-                })}
+          <div
+            className="flex min-w-0 flex-1 items-baseline gap-2"
+            title={`${source}: ${path ?? ""}`}
+          >
+            <span className="truncate text-sm font-medium text-text-primary">
+              {fileName ?? source}
+            </span>
+            {fileName && (
+              <span className="hidden shrink-0 text-xs text-text-tertiary @min-[600px]/diff:inline">
+                {source}
+              </span>
+            )}
           </div>
           {!imageFile && (
-            <SegmentedControl
-              label={t("diffViewer.diffLayout")}
-              value={mode}
-              options={[
-                { value: "unified", label: t("diffViewer.unified") },
-                { value: "split", label: t("diffViewer.sideBySide") },
-              ]}
-              onChange={setMode}
-            />
+            <div
+              role="group"
+              aria-label={t("diffViewer.diffLayout")}
+              className="flex shrink-0 gap-0.5"
+            >
+              <IconButton
+                size="xs"
+                aria-label={t("diffViewer.unified")}
+                title={t("diffViewer.unified")}
+                aria-pressed={mode === "unified"}
+                className={mode === "unified" ? "bg-accent-muted text-accent-text" : undefined}
+                onClick={() => setMode("unified")}
+                icon={<Rows3 size={14} aria-hidden="true" />}
+              />
+              <IconButton
+                size="xs"
+                aria-label={t("diffViewer.sideBySide")}
+                title={t("diffViewer.sideBySide")}
+                aria-pressed={mode === "split"}
+                className={mode === "split" ? "bg-accent-muted text-accent-text" : undefined}
+                onClick={() => setMode("split")}
+                icon={<Columns2 size={14} aria-hidden="true" />}
+              />
+            </div>
           )}
           {selection.kind === "change" && (
-            <TextButton onClick={() => setIgnorePath(selection.path)}>
-              {t("diffViewer.ignore")}
-            </TextButton>
+            <IconButton
+              size="xs"
+              aria-label={t("diffViewer.ignore")}
+              title={t("diffViewer.ignore")}
+              onClick={() => setIgnorePath(selection.path)}
+              icon={<EyeOff size={14} aria-hidden="true" />}
+            />
           )}
           <PanelControls
             name={t("diffViewer.diffViewerLabel")}
@@ -137,6 +179,7 @@ export function DiffViewer({ pending = false }: { pending?: boolean }) {
             collapseDirection="down"
           />
         </header>
+        <PartialStageToolbar fileOnly={!!imageFile} />
         {ignorePath && repositoryId && (
           <IgnoreDialog
             key={`${repositoryId}:${ignorePath}`}

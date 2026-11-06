@@ -401,7 +401,7 @@ export class GitService {
 
     const format =
       "%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%ct%x00%s%x00%b%x00%(decorate:prefix=,suffix=,separator=%x1f)%x00";
-    const [log, refs, shallow] = await Promise.all([
+    const [log, refs, shallow, object] = await Promise.all([
       this.exec(["log", "-1", "--decorate=full", `--format=${format}`, oid, "--"], {
         cwd: path,
         operation: t("operations.inspectCommit"),
@@ -426,6 +426,11 @@ export class GitService {
         cwd: path,
         operation: t("operations.inspectHistoryBoundary"),
       }),
+      this.exec(["cat-file", "commit", oid], {
+        cwd: path,
+        operation: t("operations.inspectCommit"),
+        maxStdoutBytes: 1024 * 1024,
+      }),
     ]);
 
     const commit = parseOutput(parseLog, log.stdoutBytes, path, t("operations.inspectCommit"))[0];
@@ -444,6 +449,7 @@ export class GitService {
       commit,
       containingRefs: refs.stdout.trim().split("\n").filter(Boolean),
       shallow: shallow.stdout.trim() === "true",
+      signed: /^gpgsig(?:-sha256)? /m.test(object.stdout.split("\n\n", 1)[0] ?? ""),
     };
   }
 

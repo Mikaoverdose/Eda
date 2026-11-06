@@ -111,6 +111,7 @@ export function createDemo() {
         commit: commits.find((c) => c.oid === oid) ?? commits[0]!,
         containingRefs: containingDemoRefs(oid),
         shallow: false,
+        signed: false,
       }),
     listBranches: async () => ok(demoBranches),
     listTags: async () => ok(demoTags),

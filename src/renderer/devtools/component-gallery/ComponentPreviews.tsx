@@ -424,7 +424,12 @@ export function RepositoryRowsPreview() {
         ))}
         <CommitDetails
           commit={commit}
-          inspection={{ commit, containingRefs: ["refs/heads/main"], shallow: false }}
+          inspection={{
+            commit,
+            containingRefs: ["refs/heads/main"],
+            shallow: false,
+            signed: false,
+          }}
           onSelectParent={(oid) => setCommit(COMMITS.find((item) => item.oid === oid) ?? commit)}
         />
       </div>

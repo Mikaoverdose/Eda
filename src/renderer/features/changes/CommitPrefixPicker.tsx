@@ -38,7 +38,8 @@ export function CommitPrefixPicker({
       <span className="max-w-[45%] shrink-0">
         <Button
           ref={trigger}
-          className="max-w-full"
+          size="sm"
+          className="h-8 max-w-full"
           aria-label={t("commitPrefixPicker.commitPrefix")}
           aria-haspopup="dialog"
           aria-expanded={!!position}
