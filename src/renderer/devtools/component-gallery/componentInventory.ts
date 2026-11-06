@@ -493,7 +493,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/sync/RemoteSelect.tsx": ["RemoteSelect"],
   "features/sync/RemotesDialog.tsx": ["RemotesDialog"],
   "features/sync/RepositorySyncActions.tsx": ["RepositorySyncActions"],
-  "features/sync/TransportFields.tsx": ["TransportFields", "TransferProgress"],
+  "features/sync/TransportFields.tsx": ["CredentialFields", "TransportFields", "TransferProgress"],
   "features/updates/AppUpdateNotice.tsx": ["AppUpdateNotice"],
   "features/updates/UpdatesSettings.tsx": ["UpdateStatus", "UpdatesSettings"],
   "features/workflows/HistoryRecoveryDialog.tsx": ["HistoryRecoveryDialog"],

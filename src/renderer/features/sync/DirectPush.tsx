@@ -11,10 +11,10 @@ import {
 } from "@shared/integrations/remotes";
 import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, Dialog, Field, Input } from "../../components/ui/index";
+import { Button, Dialog } from "../../components/ui/index";
 import { openSettings } from "../../commands/open-settings";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { TransferProgress } from "./TransportFields";
+import { CredentialFields, TransferProgress } from "./TransportFields";
 import { useTransportOperation } from "./hooks/useTransportOperation";
 import { ProviderIcon } from "../connections/ProviderIcon";
 
@@ -180,27 +180,7 @@ export function DirectPush({
 
   const credentialFields = needsAuth && (
     <div className="mt-3 space-y-3">
-      <Field label={t("directPush.username")}>
-        {(field) => (
-          <Input
-            {...field}
-            value={credentials.username}
-            onChange={(event) => setCredentials({ ...credentials, username: event.target.value })}
-            autoComplete="off"
-          />
-        )}
-      </Field>
-      <Field label={t("directPush.accessToken")}>
-        {(field) => (
-          <Input
-            {...field}
-            type="password"
-            value={credentials.password}
-            onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
-            autoComplete="off"
-          />
-        )}
-      </Field>
+      <CredentialFields shortLabels value={credentials} onChange={setCredentials} disabled={busy} />
       {githubRemote && (
         <div className="space-y-2 border-t border-border-subtle pt-3">
           <p className="text-xs text-text-secondary">

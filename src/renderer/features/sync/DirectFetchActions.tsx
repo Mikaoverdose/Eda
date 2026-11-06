@@ -1,17 +1,10 @@
+import { CredentialFields } from "./TransportFields";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { ChevronDown, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 import { openSettings } from "../../commands/open-settings";
-import {
-  Button,
-  Dialog,
-  ErrorDialog,
-  Field,
-  Input,
-  MenuItem,
-  PopoverSurface,
-} from "../../components/ui/index";
+import { Button, Dialog, ErrorDialog, MenuItem, PopoverSurface } from "../../components/ui/index";
 import { GitHubSignInDialog } from "../connections/GitHubSignInDialog";
 import { useDirectFetch } from "./hooks/useDirectFetch";
 
@@ -151,29 +144,7 @@ export function DirectFetchActions({
                 {action.error}
               </p>
             )}
-            <Field label={t("directFetchActions.username")}>
-              {(field) => (
-                <Input
-                  {...field}
-                  aria-label={t("directFetchActions.hTtpsUsername")}
-                  autoComplete="off"
-                  value={auth.username}
-                  onChange={(event) => setAuth({ ...auth, username: event.target.value })}
-                />
-              )}
-            </Field>
-            <Field label={t("directFetchActions.accessToken")}>
-              {(field) => (
-                <Input
-                  {...field}
-                  aria-label={t("directFetchActions.hTtpsToken")}
-                  type="password"
-                  autoComplete="off"
-                  value={auth.password}
-                  onChange={(event) => setAuth({ ...auth, password: event.target.value })}
-                />
-              )}
-            </Field>
+            <CredentialFields value={auth} onChange={setAuth} disabled={action.busy} />
             <Button type="submit" disabled={!auth.username.trim() || !auth.password || action.busy}>
               {t("directFetchActions.retryFetch")}
             </Button>

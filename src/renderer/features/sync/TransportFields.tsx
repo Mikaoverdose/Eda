@@ -3,17 +3,64 @@ import { t, type MessageKey } from "@shared/i18n";
 import type { TransportCredentials } from "@shared/integrations/remotes";
 import type { OperationRecord } from "@shared/operations";
 import { useEffect, useState } from "react";
-import { Button, CodeBlock, Disclosure, ErrorDialog, Input } from "../../components/ui/index";
+import {
+  Button,
+  CodeBlock,
+  Disclosure,
+  ErrorDialog,
+  Field,
+  Input,
+} from "../../components/ui/index";
 
-export function TransportFields({
-  value,
-  onChange,
-  disabled,
-}: {
+interface CredentialFieldsProps {
   value: TransportCredentials;
   onChange: (value: TransportCredentials) => void;
   disabled: boolean;
-}) {
+}
+
+export function CredentialFields({
+  value,
+  onChange,
+  disabled,
+  shortLabels = false,
+}: CredentialFieldsProps & { shortLabels?: boolean }) {
+  return (
+    <>
+      <Field label={t("transportFields.username")}>
+        {(field) => (
+          <Input
+            {...field}
+            aria-label={shortLabels ? undefined : t("transportFields.hTtpsUsername")}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            disabled={disabled}
+            placeholder={t("transportFields.yourGitUsername")}
+            value={value.username}
+            onChange={(event) => onChange({ ...value, username: event.target.value })}
+          />
+        )}
+      </Field>
+      <Field label={t("transportFields.accessToken")}>
+        {(field) => (
+          <Input
+            {...field}
+            aria-label={shortLabels ? undefined : t("transportFields.hTtpsToken")}
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={disabled}
+            placeholder={t("transportFields.pasteYourAccessToken")}
+            value={value.password}
+            onChange={(event) => onChange({ ...value, password: event.target.value })}
+          />
+        )}
+      </Field>
+    </>
+  );
+}
+
+export function TransportFields({ value, onChange, disabled }: CredentialFieldsProps) {
   return (
     <Disclosure
       title={t("transportFields.hTtpsAuthentication")}
@@ -23,23 +70,7 @@ export function TransportFields({
         <p className="text-text-tertiary">
           {t("transportFields.forPrivateHttpsRepositoriesEnterYourUsernameAnd")}
         </p>
-        <Input
-          aria-label={t("transportFields.hTtpsUsername")}
-          autoComplete="off"
-          disabled={disabled}
-          value={value.username}
-          onChange={(event) => onChange({ ...value, username: event.target.value })}
-          placeholder={t("transportFields.username")}
-        />
-        <Input
-          aria-label={t("transportFields.hTtpsToken")}
-          type="password"
-          autoComplete="off"
-          disabled={disabled}
-          value={value.password}
-          onChange={(event) => onChange({ ...value, password: event.target.value })}
-          placeholder={t("transportFields.accessToken")}
-        />
+        <CredentialFields value={value} onChange={onChange} disabled={disabled} />
       </div>
     </Disclosure>
   );

@@ -1,3 +1,5 @@
+import { emptySession, emptyView } from "@shared/identity/profile-session";
+import { useSessionStore } from "@renderer/stores/session-store";
 import { errorFixture } from "../../helpers/error";
 import type { EdaApi } from "@shared/ipc";
 import type { HistoryCommit, UnifiedDiff } from "@shared/repository/repository-read";
@@ -103,6 +105,47 @@ describe("repository read store", () => {
     await useRepositoryStore.getState().refresh();
     expect(useRepositoryStore.getState().historyTip).toBeNull();
     expect(useRepositoryStore.getState().pages[0]?.commits[0]?.oid).toBe("head");
+  });
+
+  it("restores the pinned graph lane when refreshing after inspecting another commit", async () => {
+    const pinnedOid = "b".repeat(40);
+    const session = vi.spyOn(useSessionStore, "getState").mockReturnValue({
+      ...useSessionStore.getState(),
+      setView: vi.fn(),
+      snapshot: {
+        context: { profileId: "identity", windowId: "primary", generation: 1 },
+        session: {
+          ...emptySession(),
+          views: {
+            repo: {
+              ...emptyView(),
+              graphFilter: { refs: [], hiddenRefs: [], pinnedRef: null, pinnedOid },
+            },
+          },
+        },
+        drafts: {},
+        recovery: null,
+      },
+    });
+    Object.defineProperty(window, "eda", {
+      configurable: true,
+      value: api(async ({ refs }) =>
+        ok({ commits: [{ ...makeCommit(0), oid: refs?.[0] ?? "head" }], nextOffset: null }),
+      ),
+    });
+    try {
+      const store = useRepositoryStore.getState();
+      await store.open("repo", "identity", true);
+      await store.jumpToCommit("a".repeat(40));
+      expect(useRepositoryStore.getState().dagBoundary).toEqual({ lanes: [] });
+      await store.refresh();
+      expect(useRepositoryStore.getState().dagBoundary).toEqual({
+        lanes: [pinnedOid],
+        pinned: true,
+      });
+    } finally {
+      session.mockRestore();
+    }
   });
 
   it("keeps bounded back/forward selections and drops the forward branch after a new selection", async () => {
@@ -295,6 +338,40 @@ describe("repository read store", () => {
     expect(useRepositoryStore.getState().pages).toHaveLength(MAX_HISTORY_PAGES);
   });
 
+  it("drops an in-flight page from the old history after a disk refresh replaces the first page", async () => {
+    let finishRefresh!: () => void;
+    let finishPage!: () => void;
+    let opened = false;
+    const bridge = api(async ({ offset }) => {
+      if (offset) {
+        await new Promise<void>((resolve) => {
+          finishPage = resolve;
+        });
+        return ok({ commits: [makeCommit(2)], nextOffset: null });
+      }
+      if (opened) {
+        await new Promise<void>((resolve) => {
+          finishRefresh = resolve;
+        });
+        return ok({ commits: [makeCommit(3)], nextOffset: null });
+      }
+      opened = true;
+      return ok({ commits: [makeCommit(1)], nextOffset: 1 });
+    });
+    Object.defineProperty(window, "eda", { configurable: true, value: bridge });
+    const store = useRepositoryStore.getState();
+    await store.open("repo", "identity", true);
+    const refresh = store.syncFromDisk();
+    const page = store.loadMore();
+    finishRefresh();
+    await refresh;
+    finishPage();
+    await page;
+    expect(useRepositoryStore.getState().pages).toEqual([
+      { commits: [makeCommit(3)], nextOffset: null },
+    ]);
+  });
+
   it("keeps a history paging failure out of the diff surface", async () => {
     Object.defineProperty(window, "eda", {
       configurable: true,
@@ -400,6 +477,51 @@ describe("repository read store", () => {
     expect(committed).toBe(false);
     expect(useRepositoryStore.getState().writeError?.kind).toBe("identity-mismatch");
     expect(useRepositoryStore.getState().writing).toBe(false);
+  });
+
+  it("reloads the remaining unstaged hunk after partially staging the selected file", async () => {
+    const bridge = api(async () => ok({ commits: [], nextOffset: null }));
+    const change = {
+      kind: "ordinary",
+      path: "a",
+      index: ".",
+      worktree: "M",
+      submodule: "N...",
+    } as const;
+    const status = await bridge.repository.status("repo");
+    if (!status.ok) throw new Error("fixture status");
+    bridge.repository.status = async () => ok({ ...status.value, changes: [change] });
+    let lines = ["first hunk", "second hunk"];
+    bridge.repository.workingDiff = async () =>
+      ok({
+        files: [
+          {
+            newPath: "a",
+            status: "modified",
+            binary: false,
+            hunks: lines.map((heading) => ({
+              oldStart: 1,
+              newStart: 1,
+              oldLines: 1,
+              newLines: 1,
+              heading,
+              lines: [],
+            })),
+          },
+        ],
+      });
+    bridge.repository.applyPartial = async () => {
+      lines = ["second hunk"];
+      return ok(undefined);
+    };
+    Object.defineProperty(window, "eda", { configurable: true, value: bridge });
+    const store = useRepositoryStore.getState();
+    await store.open("repo", "identity", true);
+    await store.selectChange(change, "unstaged");
+    await store.applyPartial("token");
+    expect(useRepositoryStore.getState().diff?.files[0]?.hunks.map((h) => h.heading)).toEqual([
+      "second hunk",
+    ]);
   });
 
   it("previews the next file in the same area after staging the selected one", async () => {

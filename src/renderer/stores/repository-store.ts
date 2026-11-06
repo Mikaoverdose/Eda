@@ -1,6 +1,5 @@
-import { errorText } from "@shared/error-codes";
+import { createHistoryPagination, type HistoryWindow } from "./history-pagination";
 import type { GitErrorData } from "@shared/errors";
-import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import {
   HISTORY_PAGE_SIZE,
@@ -12,21 +11,21 @@ import {
 } from "@shared/repository/repository-read";
 import type { SavedSelection } from "@shared/identity/profile-session";
 import { create } from "zustand";
-import { layoutCommitPage, type DagBoundary } from "../repository/dag-layout";
+import type { DagBoundary } from "../repository/dag-layout";
 
 import { boundDiff } from "../repository/diff-model";
 import { useLayoutStore } from "./layout-store";
 import { useSessionStore } from "./session-store";
 
 export { HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
-export const MAX_HISTORY_PAGES = 3;
+export { MAX_HISTORY_PAGES } from "./history-pagination";
 export const MAX_STATUS_CHANGES = 5_000;
 
 export type { ChangeArea } from "@shared/repository/repository-read";
 
 export type RepositorySelection = SavedSelection;
 
-interface RepositoryReadState {
+interface RepositoryReadState extends HistoryWindow {
   commandDialog: {
     kind:
       | "repository.remotes"
@@ -44,13 +43,8 @@ interface RepositoryReadState {
   identityId: string | null;
   phase: "idle" | "loading" | "ready" | "missing" | "error";
   status: RepositoryStatus | null;
-  pages: HistoryPage[];
-  dagBoundary: DagBoundary;
   hoveredRefOid: string | null;
   watchWarning: string | null;
-  baseOffset: number;
-  nextOffset: number | null;
-  historyLoading: boolean;
   selection: RepositorySelection;
   contentView: "history" | "diff";
   commitFilePath: string | null;
@@ -66,7 +60,6 @@ interface RepositoryReadState {
   diff: UnifiedDiff | null;
   diffLoading: boolean;
   error: GitErrorData | null;
-  historyError: GitErrorData | null;
   truncatedChanges: boolean;
   generation: number;
 
@@ -78,7 +71,6 @@ interface RepositoryReadState {
   selectChange: (change: RepositoryChange, area: ChangeArea) => Promise<void>;
   selectCommit: (oid: string) => Promise<void>;
   jumpToCommit: (oid: string) => Promise<void>;
-  historyTip: string | null;
   clear: () => void;
 
   stage: (paths?: string[]) => Promise<void>;
@@ -95,8 +87,6 @@ interface RepositoryReadState {
 
 let openRequest: Promise<void> | null = null;
 let openRequestKey: string | null = null;
-let pageRequest: Promise<void> | null = null;
-let pageRequestKey: string | null = null;
 let diffRequest: Promise<void> | null = null;
 let diffRequestKey: string | null = null;
 
@@ -132,27 +122,9 @@ const emptyState = {
   commitNotice: null,
 };
 
-const graphQuery = (repositoryId: string) => {
-  const filter = useSessionStore.getState().snapshot?.session.views[repositoryId]?.graphFilter;
-  return {
-    ...(filter ? { refs: filter.refs, hiddenRefs: filter.hiddenRefs } : {}),
-    showStashes: filter?.showStashes ?? true,
-  };
-};
-
 export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
   let commitFileRevision = 0;
-  const boundaries = new Map<number, DagBoundary>();
-  let historyRevision = 0;
-  let firstPageKey = "";
-  const queryHistory = (repositoryId: string) =>
-    get().historyTip ? { refs: [get().historyTip!] } : graphQuery(repositoryId);
-  const firstBoundary = (repositoryId: string): DagBoundary => {
-    if (get().historyTip) return { lanes: [] };
-    const oid =
-      useSessionStore.getState().snapshot?.session.views[repositoryId]?.graphFilter?.pinnedOid;
-    return { lanes: oid ? [oid] : [], ...(oid && { pinned: true }) };
-  };
+  const history = createHistoryPagination(get, set);
 
   const load = async (
     repositoryId: string,
@@ -175,17 +147,15 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
 
     if (!force && openRequestKey === key && openRequest) return openRequest;
 
-    boundaries.clear();
-    historyRevision++;
-    firstPageKey = "";
+    history.invalidate();
+    history.replaceFirst();
 
     const generation = get().generation + 1;
 
-    pageRequest = null;
     diffRequest = null;
     set({
       ...emptyState,
-      dagBoundary: firstBoundary(repositoryId),
+      dagBoundary: history.firstBoundary(repositoryId, null),
       repositoryId,
       identityId,
       generation,
@@ -201,7 +171,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
           repositoryId,
           offset: 0,
           limit: HISTORY_PAGE_SIZE,
-          ...queryHistory(repositoryId),
+          ...history.query(repositoryId),
         }),
       ]);
 
@@ -228,7 +198,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
         return;
       }
 
-      firstPageKey = JSON.stringify(historyResult.value);
+      history.replaceFirst(historyResult.value);
 
       const changes = statusResult.value.changes.slice(0, MAX_STATUS_CHANGES);
 
@@ -271,9 +241,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
 
   const reloadAfterWrite = async (repositoryId: string): Promise<boolean> => {
     const { generation } = get();
-    const revision = ++historyRevision;
-
-    pageRequest = null;
+    const revision = history.invalidate();
 
     const [statusResult, historyResult] = await Promise.all([
       window.eda.repository.status(repositoryId),
@@ -281,14 +249,14 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
         repositoryId,
         offset: 0,
         limit: HISTORY_PAGE_SIZE,
-        ...queryHistory(repositoryId),
+        ...history.query(repositoryId),
       }),
     ]);
 
     if (
       get().generation !== generation ||
       get().repositoryId !== repositoryId ||
-      revision !== historyRevision
+      !history.isCurrent(revision)
     )
       return false;
 
@@ -301,11 +269,10 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     }
 
     const changes = statusResult.value.changes.slice(0, MAX_STATUS_CHANGES);
-    const replaceHistory = historyResult.ok && JSON.stringify(historyResult.value) !== firstPageKey;
+    const replaceHistory = historyResult.ok && history.firstPageChanged(historyResult.value);
 
     if (replaceHistory) {
-      boundaries.clear();
-      firstPageKey = JSON.stringify(historyResult.value);
+      history.replaceFirst(historyResult.value);
     }
 
     set({
@@ -323,7 +290,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
             },
           ],
           baseOffset: 0,
-          dagBoundary: firstBoundary(repositoryId),
+          dagBoundary: history.firstBoundary(repositoryId),
           nextOffset: historyResult.value.nextOffset,
           historyError: null,
         }),
@@ -406,9 +373,8 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
 
     if (!repositoryId || selection?.kind !== "commit" || selection.oid !== oid) return;
 
-    const revision = ++historyRevision;
+    const revision = history.invalidate();
 
-    pageRequest = null;
     set({ historyLoading: true });
 
     const result = await window.eda.repository.history({
@@ -418,7 +384,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       limit: HISTORY_PAGE_SIZE,
     });
 
-    if (get().generation !== generation || revision !== historyRevision) return;
+    if (get().generation !== generation || !history.isCurrent(revision)) return;
 
     if (get().selection !== selection) {
       set({ historyLoading: false });
@@ -430,8 +396,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       return;
     }
 
-    boundaries.clear();
-    firstPageKey = JSON.stringify(result.value);
+    history.replaceFirst(result.value);
     set({
       historyTip: oid,
       pages: [result.value],
@@ -474,7 +439,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
         before?.kind === "change" &&
         get().selection === before
       )
-        advanceSelection(before, successors);
+        await advanceSelection(before, successors);
 
       return true;
     } finally {
@@ -482,23 +447,24 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     }
   };
 
-  const advanceSelection = (
+  const advanceSelection = async (
     previous: Extract<RepositorySelection, { kind: "change" }>,
     successors: string[],
-  ) => {
+  ): Promise<void> => {
     const remaining = categorizeChanges(get().status?.changes ?? [])[previous.area];
 
-    if (remaining.some((change) => change.path === previous.path)) return;
+    if (remaining.some((change) => change.path === previous.path)) {
+      diffRequest = null;
+      return loadDiff({ ...previous });
+    }
 
     const next = successors
       .map((path) => remaining.find((change) => change.path === path))
       .find((change) => change !== undefined);
 
-    if (next) void loadDiff({ kind: "change", path: next.path, area: previous.area });
-    else {
-      set({ selection: null, diff: null, diffLoading: false, contentView: "history" });
-      useLayoutStore.getState().reveal("graph");
-    }
+    if (next) return loadDiff({ kind: "change", path: next.path, area: previous.area });
+    set({ selection: null, diff: null, diffLoading: false, contentView: "history" });
+    useLayoutStore.getState().reveal("graph");
   };
 
   const remember = (selection: Exclude<RepositorySelection, null>) => {
@@ -522,146 +488,8 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       const { repositoryId, phase } = get();
       if (repositoryId && phase === "ready") await reloadAfterWrite(repositoryId);
     },
-    async loadMore() {
-      const { repositoryId, nextOffset, generation } = get();
-      const revision = historyRevision;
-
-      if (!repositoryId || nextOffset === null) return;
-
-      const key = `${generation}:${nextOffset}`;
-
-      if (pageRequestKey === key && pageRequest) return pageRequest;
-
-      set({ historyLoading: true });
-
-      const request = (async () => {
-        const result = await window.eda.repository.history({
-          repositoryId,
-          offset: nextOffset,
-          limit: HISTORY_PAGE_SIZE,
-          ...queryHistory(repositoryId),
-        });
-
-        if (
-          get().generation !== generation ||
-          get().repositoryId !== repositoryId ||
-          revision !== historyRevision
-        )
-          return;
-
-        if (!result.ok) {
-          set({ historyError: result.error, historyLoading: false });
-          return;
-        }
-
-        const current = get();
-        const appended = [
-          ...current.pages,
-          { ...result.value, commits: result.value.commits.slice(0, HISTORY_PAGE_SIZE) },
-        ];
-        const evicted = appended.length > MAX_HISTORY_PAGES ? appended.shift() : undefined;
-        let dagBoundary = current.dagBoundary;
-
-        if (evicted) {
-          boundaries.set(current.baseOffset, dagBoundary);
-          if (boundaries.size > 128) boundaries.delete(boundaries.keys().next().value!);
-          dagBoundary = layoutCommitPage(evicted.commits, dagBoundary).boundary;
-        }
-
-        set({
-          pages: appended,
-          dagBoundary,
-          baseOffset: current.baseOffset + (evicted?.commits.length ?? 0),
-          nextOffset: result.value.nextOffset,
-          historyLoading: false,
-          historyError: null,
-        });
-      })();
-
-      pageRequest = request;
-      pageRequestKey = key;
-      await request.finally(() => {
-        if (pageRequest === request) {
-          pageRequest = null;
-          pageRequestKey = null;
-        }
-      });
-    },
-    async loadPrevious() {
-      const { repositoryId, baseOffset, generation } = get();
-      const revision = historyRevision;
-
-      if (!repositoryId || baseOffset === 0) return;
-
-      const offset = Math.max(0, baseOffset - HISTORY_PAGE_SIZE);
-
-      if (offset > 0 && !boundaries.has(offset)) {
-        set({
-          historyError: new GitError({
-            kind: "invalid-input",
-            operation: t("operations.loadHistory"),
-            message: errorText("repositoryStore.earlierGraphCheckpointsHaveLeftTheBoundedCache"),
-            suggestedAction: errorText("repositoryStore.useRefreshToReturnToTheBeginningOfHistory"),
-          }).toData(),
-        });
-
-        return;
-      }
-
-      const key = `${generation}:previous:${offset}`;
-
-      if (pageRequestKey === key && pageRequest) return pageRequest;
-
-      set({ historyLoading: true });
-
-      const request = (async () => {
-        const result = await window.eda.repository.history({
-          repositoryId,
-          offset,
-          limit: HISTORY_PAGE_SIZE,
-          ...queryHistory(repositoryId),
-        });
-
-        if (
-          get().generation !== generation ||
-          get().repositoryId !== repositoryId ||
-          revision !== historyRevision
-        )
-          return;
-
-        if (!result.ok) {
-          set({ historyError: result.error, historyLoading: false });
-          return;
-        }
-
-        const current = get();
-        const prepended = [
-          { ...result.value, commits: result.value.commits.slice(0, HISTORY_PAGE_SIZE) },
-          ...current.pages,
-        ];
-        const evicted = prepended.length > MAX_HISTORY_PAGES ? prepended.pop() : undefined;
-
-        set({
-          pages: prepended,
-          dagBoundary: boundaries.get(offset) ?? firstBoundary(repositoryId),
-          baseOffset: offset,
-          nextOffset: evicted
-            ? offset + prepended.reduce((total, page) => total + page.commits.length, 0)
-            : current.nextOffset,
-          historyLoading: false,
-          historyError: null,
-        });
-      })();
-
-      pageRequest = request;
-      pageRequestKey = key;
-      await request.finally(() => {
-        if (pageRequest === request) {
-          pageRequest = null;
-          pageRequestKey = null;
-        }
-      });
-    },
+    loadMore: history.loadMore,
+    loadPrevious: history.loadPrevious,
     selectChange(change, area) {
       set({ contentView: "diff", commitFilePath: null });
       useLayoutStore.getState().reveal("diff");
@@ -815,7 +643,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     clear() {
       const generation = get().generation + 1;
       openRequest = null;
-      pageRequest = null;
+      history.invalidate();
       diffRequest = null;
       set({ ...emptyState, generation });
     },

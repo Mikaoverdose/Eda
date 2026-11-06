@@ -1,18 +1,11 @@
+import { CredentialFields } from "./TransportFields";
 import { t } from "@shared/i18n";
 import { DirectFetchActions } from "./DirectFetchActions";
 import { useId, useRef, useState } from "react";
 import { ArrowDown, ChevronDown } from "lucide-react";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
-import {
-  Button,
-  MenuItem,
-  PopoverSurface,
-  Dialog,
-  Input,
-  Field,
-  ErrorDialog,
-} from "../../components/ui/index";
+import { Button, MenuItem, PopoverSurface, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useDirectPull } from "./hooks/useDirectPull";
 import { DirectPush } from "./DirectPush";
 import { GitHubSignInDialog } from "../connections/GitHubSignInDialog";
@@ -185,34 +178,7 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
                 {error}
               </p>
             )}
-            <Field label={t("repositorySyncActions.username")}>
-              {(field) => (
-                <Input
-                  {...field}
-                  aria-label={t("repositorySyncActions.hTtpsUsername")}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={auth.username}
-                  onChange={(event) => setAuth({ ...auth, username: event.target.value })}
-                  placeholder={t("repositorySyncActions.yourGitUsername")}
-                />
-              )}
-            </Field>
-            <Field label={t("repositorySyncActions.accessToken")}>
-              {(field) => (
-                <Input
-                  {...field}
-                  aria-label={t("repositorySyncActions.hTtpsToken")}
-                  type="password"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={auth.password}
-                  onChange={(event) => setAuth({ ...auth, password: event.target.value })}
-                  placeholder={t("repositorySyncActions.pasteYourAccessToken")}
-                />
-              )}
-            </Field>
+            <CredentialFields value={auth} onChange={setAuth} disabled={busy} />
           </form>
         </Dialog>
       )}
