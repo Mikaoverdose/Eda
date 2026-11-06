@@ -43,7 +43,6 @@ export function useScopedSetting<K extends SettingKey>(
     let cancelled = false;
 
     setReading(true);
-    setResult(null);
     void window.eda.settings
       .resolve(
         key,
@@ -54,17 +53,21 @@ export function useScopedSetting<K extends SettingKey>(
       .then((result) => {
         if (cancelled) return;
         if (result.ok) setResult({ contextKey, value: result.value });
-        else usePreferencesStore.setState({ error: result.error });
+        else {
+          setResult(null);
+          usePreferencesStore.setState({ error: result.error });
+        }
       })
       .catch(() => {
-        if (!cancelled)
-          usePreferencesStore.setState({
-            error: new GitError({
-              kind: "unknown",
-              operation: t("operations.readPreferences"),
-              message: errorText("settings.useScopedSetting.couldNotReadApplicationPreferences"),
-            }).toData(),
-          });
+        if (cancelled) return;
+        setResult(null);
+        usePreferencesStore.setState({
+          error: new GitError({
+            kind: "unknown",
+            operation: t("operations.readPreferences"),
+            message: errorText("settings.useScopedSetting.couldNotReadApplicationPreferences"),
+          }).toData(),
+        });
       })
       .finally(() => {
         if (!cancelled) setReading(false);

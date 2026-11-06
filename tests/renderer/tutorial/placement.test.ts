@@ -17,3 +17,21 @@ it("keeps the guide beside a full-height panel and inside the viewport", () => {
   expect(result.left).toBe(666);
   expect(result.top + 240).toBeLessThan(700);
 });
+
+it("leaves the target controls accessible when there is too little room beside the panel", () => {
+  const card = { width: 340, height: 230 };
+  const viewport = { width: 940, height: 600 };
+  const control = { left: 595, top: 85, width: 65, height: 32 };
+  const position = placeGuide(
+    { left: 35, top: 80, width: 645, height: 500 },
+    card,
+    viewport,
+    control,
+  );
+  expect(
+    position.left + card.width <= control.left ||
+      position.left >= control.left + control.width ||
+      position.top + card.height <= control.top ||
+      position.top >= control.top + control.height,
+  ).toBe(true);
+});

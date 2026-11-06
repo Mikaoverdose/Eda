@@ -184,7 +184,7 @@ export function TourGuide({
       <Coachmark
         ref={card}
         label={t("tutorial.tourGuide.guidedTour")}
-        position={placeGuide(bounds, cardSize, viewport)}
+        position={placeGuide(bounds, cardSize, viewport, step.hintTarget ? hintBounds : null)}
         contentKey={displayedStep.id}
         eyebrow={`${steps.indexOf(displayedStep) + 1} / ${steps.length} · ${displayedStep.task ? t("tutorial.tourGuide.tryIt") : t("tutorial.tourGuide.goodToKnow")}`}
         title={displayedStep.title}

@@ -265,7 +265,9 @@ function WorkspaceContent() {
                         <div className="min-h-0 flex-1">
                           <ChangesPanel key={owner} pending={loading} />
                         </div>
-                        <CommitBox key={owner} pending={loading} />
+                        <div className="max-h-3/5 shrink-0 overflow-y-auto">
+                          <CommitBox key={owner} pending={loading} />
+                        </div>
                       </>
                     )}
                   </ViewTransition>

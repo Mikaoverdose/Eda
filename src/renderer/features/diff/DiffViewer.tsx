@@ -139,6 +139,7 @@ export function DiffViewer({ pending = false }: { pending?: boolean }) {
           {!imageFile && (
             <div
               role="group"
+              data-tour="diff-layout"
               aria-label={t("diffViewer.diffLayout")}
               className="flex shrink-0 gap-0.5"
             >

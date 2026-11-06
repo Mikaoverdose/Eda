@@ -9,25 +9,37 @@ export function placeGuide(
   target: TourRect | null,
   card: { width: number; height: number },
   viewport: { width: number; height: number },
+  control: TourRect | null = null,
 ) {
   const margin = 16;
   const gap = 16;
   const clamp = (value: number, max: number) => Math.max(margin, Math.min(value, max - margin));
   if (!target)
     return { left: (viewport.width - card.width) / 2, top: (viewport.height - card.height) / 2 };
-  const right = target.left + target.width;
-  const bottom = target.top + target.height;
-  const candidates = [
-    { left: right + gap, top: target.top },
-    { left: target.left - card.width - gap, top: target.top },
-    { left: target.left, top: bottom + gap },
-    { left: target.left, top: target.top - card.height - gap },
-  ].map((p) => ({
-    left: clamp(p.left, viewport.width - card.width),
-    top: clamp(p.top, viewport.height - card.height),
-  }));
-  const overlap = (p: (typeof candidates)[number]) =>
-    Math.max(0, Math.min(p.left + card.width, right) - Math.max(p.left, target.left)) *
-    Math.max(0, Math.min(p.top + card.height, bottom) - Math.max(p.top, target.top));
-  return candidates.reduce((best, next) => (overlap(next) < overlap(best) ? next : best));
+  const candidatesFor = (rect: TourRect) =>
+    [
+      { left: rect.left + rect.width + gap, top: rect.top },
+      { left: rect.left - card.width - gap, top: rect.top },
+      { left: rect.left, top: rect.top + rect.height + gap },
+      { left: rect.left, top: rect.top - card.height - gap },
+    ].map((p) => ({
+      left: clamp(p.left, viewport.width - card.width),
+      top: clamp(p.top, viewport.height - card.height),
+    }));
+  const candidates = candidatesFor(target);
+  if (control) candidates.push(...candidatesFor(control));
+
+  const overlap = (p: { left: number; top: number }, rect: TourRect) =>
+    Math.max(
+      0,
+      Math.min(p.left + card.width, rect.left + rect.width) - Math.max(p.left, rect.left),
+    ) *
+    Math.max(0, Math.min(p.top + card.height, rect.top + rect.height) - Math.max(p.top, rect.top));
+  return candidates.reduce((best, next) => {
+    if (control) {
+      const difference = overlap(next, control) - overlap(best, control);
+      if (difference !== 0) return difference < 0 ? next : best;
+    }
+    return overlap(next, target) < overlap(best, target) ? next : best;
+  });
 }

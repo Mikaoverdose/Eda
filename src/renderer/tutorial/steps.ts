@@ -88,6 +88,7 @@ export const welcomeTour: readonly TourStep[] = [
   {
     id: "diff",
     target: "diff",
+    hintTarget: "diff-layout",
     title: t("tutorial.steps.readTheChange"),
     description: t("tutorial.steps.greenMeansAddedRedMeansRemovedTrySideBySideViewOrFinishTheTour"),
     scene: "diff",

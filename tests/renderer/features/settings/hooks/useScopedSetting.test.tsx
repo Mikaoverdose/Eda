@@ -17,7 +17,9 @@ vi.mock("@renderer/stores/app-store", () => ({
   ),
 }));
 
-it("clears the previous profile value while loading and after a failed resolve", async () => {
+it("retains the confirmed value on refresh but clears it across profile changes and failed reads", async () => {
+  const { usePreferencesStore } = await import("@renderer/stores/preferences-store");
+  const previous = usePreferencesStore.getState();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   let reject!: (reason: Error) => void;
   const resolve = vi
@@ -29,6 +31,7 @@ it("clears the previous profile value while loading and after a failed resolve",
         source: { kind: "profile", profileId: "first" },
       }),
     )
+    .mockImplementationOnce(() => new Promise(() => {}))
     .mockImplementationOnce(
       () =>
         new Promise((_, fail) => {
@@ -45,6 +48,9 @@ it("clears the previous profile value while loading and after a failed resolve",
   try {
     await act(async () => root.render(<Example />));
     expect(container.textContent).toBe("150");
+    await act(async () => usePreferencesStore.setState({ values: { ...previous.values } }));
+    expect(container.textContent).toBe("150");
+    expect(container.querySelector("output")?.dataset["reading"]).toBe("true");
     profile.id = "second";
     await act(async () => root.render(<Example />));
     expect(container.textContent).toBe(String(builtInSetting("uiZoom").value));
@@ -55,6 +61,7 @@ it("clears the previous profile value while loading and after a failed resolve",
   } finally {
     await act(async () => root.unmount());
     profile.id = "first";
+    usePreferencesStore.setState(previous, true);
     vi.unstubAllGlobals();
   }
 });
