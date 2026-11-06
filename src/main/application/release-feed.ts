@@ -12,7 +12,7 @@ import { newerRelease, type UpdateCheckResult } from "./update-service";
 
 const MAX_FEED_BYTES = 256 * 1024;
 
-async function readFeed(response: Response): Promise<unknown> {
+export async function readFeed(response: Response): Promise<unknown> {
   if (!response.body) throw new AppError(ERROR_CODE.INVALID_STABLE_VERSION);
 
   const reader = response.body.getReader();

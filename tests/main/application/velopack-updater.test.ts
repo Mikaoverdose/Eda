@@ -29,7 +29,7 @@ function fixture() {
   };
   const quit = vi.fn();
 
-  return { manager, quit, driver: new VelopackUpdater(manager, quit) };
+  return { manager, quit, driver: new VelopackUpdater(manager, quit, async () => {}) };
 }
 
 it("waits for verified download, then starts the native helper before quitting", async () => {
@@ -82,6 +82,7 @@ it("never installs a discarded download and ignores progress after discard", asy
 
   const progress = vi.fn();
   const downloading = driver.download(progress);
+  await vi.waitFor(() => expect(manager.downloadUpdateAsync).toHaveBeenCalledOnce());
   driver.discardDownload();
   report(90);
   finish();
@@ -100,4 +101,24 @@ it("handles no update and rejects downgrade offers", async () => {
   manager.checkForUpdatesAsync.mockResolvedValueOnce({ ...update, IsDowngrade: true });
   expect(await driver.check()).toMatchObject({ available: false });
   await expect(driver.download(vi.fn())).rejects.toThrow();
+});
+
+it("binds the native download to the platform's published GitHub release digest", async () => {
+  const { verifyPublishedPackage } = await import("@main/application/velopack-updater");
+  const asset = update.TargetFullRelease;
+  const request = vi.fn(async () =>
+    Response.json({
+      tag_name: asset.Version,
+      draft: false,
+      assets: [{ name: asset.FileName, size: asset.Size, digest: "sha256:" + asset.SHA256 }],
+    }),
+  );
+  await verifyPublishedPackage(asset, "linux-x64-stable", request);
+  await expect(
+    verifyPublishedPackage({ ...asset, SHA256: "0".repeat(64) }, "linux-x64-stable", request),
+  ).rejects.toThrow();
+  await expect(
+    verifyPublishedPackage({ ...asset, FileName: "../elsewhere" }, "linux-x64-stable", request),
+  ).rejects.toThrow();
+  expect(request).toHaveBeenCalledTimes(2);
 });
