@@ -30,6 +30,7 @@ export function GpgKeyPicker({
   onCommit?: (value: string) => void;
 }) {
   const configured = value.replace(/^0x/i, "").replace(/!$/, "").toUpperCase();
+  const exact = value.endsWith("!");
   const matches = /^[\dA-F]{8,64}$/.test(configured)
     ? keys.filter((key) =>
         [key.fingerprint, ...key.signingFingerprints].some((fingerprint) =>
@@ -38,7 +39,11 @@ export function GpgKeyPicker({
       )
     : [];
 
-  const selectedGpg = matches.length === 1 ? matches[0] : undefined;
+  const certificate = matches.length === 1 ? matches[0] : undefined;
+  const signers = certificate?.signingFingerprints.filter((fp) => fp.endsWith(configured)) ?? [];
+  const signer = exact && signers.length === 1 ? signers[0] : undefined;
+  const selectedGpg = exact && !signer ? undefined : certificate;
+  const selectedValue = signer ? `${signer}!` : selectedGpg ? "" : value;
 
   return (
     <>
@@ -52,7 +57,7 @@ export function GpgKeyPicker({
               {...props}
               className="min-w-0 flex-1"
               disabled={loading && keys.length === 0}
-              value={selectedGpg?.fingerprint ?? value}
+              value={selectedValue}
               onValueChange={(value) => {
                 onChange(value);
                 onCommit?.(value);
@@ -66,14 +71,22 @@ export function GpgKeyPicker({
                   {t("credentials.gpgKeyPicker.configuredKey", { value: value })}
                 </option>
               )}
-              {keys.map((key) => (
-                <option key={key.fingerprint} value={key.fingerprint}>
-                  {key.userIds.find((uid) => uid.includes(email)) ||
-                    key.userIds[0] ||
-                    t("credentials.gpgKeyPicker.gpgKey")}{" "}
-                  , {key.keyId}
-                </option>
-              ))}
+              {keys.flatMap((key) => {
+                const owner =
+                  key.userIds.find((uid) => uid.includes(email)) ||
+                  key.userIds[0] ||
+                  t("credentials.gpgKeyPicker.gpgKey");
+                return key.signingFingerprints.map((fp) => (
+                  <option key={fp + "!"} value={fp + "!"}>
+                    {t(
+                      fp === key.fingerprint
+                        ? "credentials.gpgKeyPicker.primary"
+                        : "credentials.gpgKeyPicker.subkey",
+                      { owner, id: fp.slice(-16) },
+                    )}
+                  </option>
+                ));
+              })}
             </Select>
             <RefreshButton
               label={t("credentials.gpgKeyPicker.refreshGpgKeys")}
@@ -103,19 +116,32 @@ export function GpgKeyPicker({
         </>
       )}
       {selectedGpg && (
-        <p className="break-all text-xs text-text-secondary">
-          <Localized
-            id="credentials.gpgKeyPicker.fingerprint"
-            values={{
-              code: <code>{selectedGpg.fingerprint}</code>,
-              value2: selectedGpg.expiresAt
-                ? t("credentials.gpgKeyPicker.expires", {
-                    value1: new Date(selectedGpg.expiresAt * 1000).toLocaleDateString(getLocale()),
-                  })
-                : t("gpgKeyPicker.noExpiration"),
-            }}
-          />
-        </p>
+        <div className="grid gap-1 break-all text-xs text-text-secondary">
+          <p>
+            <Localized
+              id="credentials.gpgKeyPicker.fingerprint"
+              values={{
+                code: <code>{selectedGpg.fingerprint}</code>,
+                value2: selectedGpg.expiresAt
+                  ? t("credentials.gpgKeyPicker.expires", {
+                      value1: new Date(selectedGpg.expiresAt * 1000).toLocaleDateString(
+                        getLocale(),
+                      ),
+                    })
+                  : t("gpgKeyPicker.noExpiration"),
+              }}
+            />
+          </p>
+          {!exact && <p>{t("credentials.gpgKeyPicker.unspecifiedSigner")}</p>}
+          {signer && signer !== selectedGpg.fingerprint && (
+            <p>
+              <Localized
+                id="credentials.gpgKeyPicker.subkeyFingerprint"
+                values={{ code: <code>{signer}</code> }}
+              />
+            </p>
+          )}
+        </div>
       )}
 
       <Disclosure title={t("credentials.gpgKeyPicker.useAKeyIdManually")} className="text-xs">

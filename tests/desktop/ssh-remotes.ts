@@ -382,7 +382,8 @@ try {
 
   const picker = signing.getByRole("combobox", { name: "GPG signing key", exact: true });
 
-  await chooseSelect(picker, fingerprint);
+  const exactSigner = `${fingerprint}!`;
+  await chooseSelect(picker, exactSigner);
   assert.match((await picker.textContent()) ?? "", /test@eda.invalid/);
 
   await page.waitForFunction(async (expected) => {
@@ -392,11 +393,11 @@ try {
       result.value?.signing.format === "gpg" &&
       result.value.signing.keyRef === expected
     );
-  }, fingerprint);
+  }, exactSigner);
 
   const gpgProfile = await page.evaluate(() => window.eda.identity.getActive());
 
-  assert.ok(gpgProfile.ok && gpgProfile.value?.signing.keyRef === fingerprint);
+  assert.ok(gpgProfile.ok && gpgProfile.value?.signing.keyRef === exactSigner);
   assert.equal(gpgProfile.value.signing.format, "gpg");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();

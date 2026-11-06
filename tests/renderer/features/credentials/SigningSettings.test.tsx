@@ -89,7 +89,7 @@ it("keeps the selected key after a failed save and only persists an explicit cho
   expect(document.querySelector('[role="alert"]')?.textContent).toContain(
     "Could not update Git configuration",
   );
-  expect(container.textContent).toContain(`Fingerprint: ${key.fingerprint}`);
+  expect(container.textContent).toContain(`Primary key fingerprint: ${key.fingerprint}`);
   expect(onSaved).not.toHaveBeenCalled();
 
   configureSigning.mockResolvedValue(ok(identity));
@@ -126,4 +126,37 @@ it("discards a late key query after switching profiles and preserves an undetect
   expect(picker().textContent).not.toContain(key.keyId);
   expect(container.textContent).toContain("No usable GPG signing keys found");
   expect(container.textContent).toContain("Your saved key is retained");
+});
+
+it("preserves a legacy key reference until the user selects an exact signer", async () => {
+  const subkey = "AB".repeat(20);
+  const configureSigning = vi.fn().mockResolvedValue(ok(identity));
+  vi.stubGlobal("eda", {
+    identity: {
+      listGpgSigningKeys: async () =>
+        ok([{ ...key, signingFingerprints: [key.fingerprint, subkey] }]),
+      configureSigning,
+    },
+  });
+  const profile = { ...identity, signing: { ...identity.signing, keyRef: key.keyId } };
+  await act(async () =>
+    root.render(<SigningSettings identity={profile} sshKeys={[]} onSaved={async () => {}} />),
+  );
+  expect(container.textContent).toContain("Your saved setting lets GnuPG choose the signer");
+  expect(configureSigning).not.toHaveBeenCalled();
+  await act(async () =>
+    picker().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+  );
+  expect(
+    document.querySelector(`[data-eda-select-value="${key.fingerprint}!"]`)?.textContent,
+  ).toContain("Primary key");
+  expect(document.querySelector(`[data-eda-select-value="${key.fingerprint}"]`)).toBeNull();
+  const option = document.querySelector<HTMLElement>(`[data-eda-select-value="${subkey}!"]`)!;
+  expect(option.textContent).toContain("Signing subkey");
+  await act(async () => option.click());
+  expect(configureSigning).toHaveBeenCalledWith(
+    { ...identity.signing, keyRef: subkey + "!" },
+    identity.id,
+  );
+  expect(container.textContent).toContain(`Signing subkey fingerprint: ${subkey}`);
 });
