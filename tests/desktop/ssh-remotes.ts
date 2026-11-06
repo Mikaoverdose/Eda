@@ -294,12 +294,10 @@ try {
     .getByRole("button", { name: "Inspect tag signed-release", exact: true })
     .click({ button: "right" });
 
-  const tag = page.getByRole("dialog", { name: "Tag details" });
+  await page.getByRole("menuitem", { name: "Verify tag signature...", exact: true }).click();
+  const tag = page.getByRole("dialog", { name: "Verify tag", exact: true });
 
-  await tag.getByRole("button", { name: "Verify tag signature", exact: true }).click();
-  await tag
-    .getByText("Git verified the signature using the configured trust policy.", { exact: true })
-    .waitFor();
+  await tag.getByText("Signature verified", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
 
   const signedPush = await page.evaluate(async (id) => {
@@ -382,10 +380,10 @@ try {
 
   await chooseSelect(signing.getByLabel("Format", { exact: true }), "gpg");
 
-  const picker = signing.getByRole("combobox", { name: "GPG signing key", exact: true });
+  const picker = signing.getByRole("radiogroup", { name: "GPG signing key", exact: true });
 
   const exactSigner = `${fingerprint}!`;
-  await chooseSelect(picker, exactSigner);
+  await picker.getByRole("radio", { name: /Primary key · exact selection/ }).check();
   assert.match((await picker.textContent()) ?? "", /test@eda.invalid/);
 
   await page.waitForFunction(async (expected) => {
