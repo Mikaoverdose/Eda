@@ -14,6 +14,8 @@ import {
   IconButton,
   ErrorDialog,
   NoticeBanner,
+  StatusBanner,
+  StatusBannerStack,
   ActionList,
   DefinitionList,
   ComparisonTable,
@@ -290,6 +292,7 @@ function ComponentInventory() {
 }
 
 export function ComponentGallery() {
+  const [showStatusNotice, setShowStatusNotice] = useState(true);
   const exampleTabs = useRef(new Map<string, HTMLButtonElement>());
   const modalDescriptionId = useId();
   const [text, setText] = useState("");
@@ -838,6 +841,39 @@ export function ComponentGallery() {
               },
             ]}
           />
+          <StatusBannerStack>
+            <StatusBanner
+              label={t("globalGitWarning.globalGitConfigurationWarning")}
+              tone="warning"
+            >
+              {t("globalGitWarning.globalGitSettingsDifferFrom", { name: "Alex" })}
+            </StatusBanner>
+
+            {showStatusNotice && (
+              <StatusBanner
+                label={t("appUpdateNotice.updateNotification")}
+                onDismiss={() => setShowStatusNotice(false)}
+                action={
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    onClick={() => setFeedback(t("appUpdateNotice.viewUpdate"))}
+                  >
+                    {t("appUpdateNotice.viewUpdate")}
+                  </Button>
+                }
+              >
+                {t("appUpdateNotice.isAvailable", { value1: "Eda 0.0.3" })}
+              </StatusBanner>
+            )}
+          </StatusBannerStack>
+
+          {!showStatusNotice && (
+            <Button onClick={() => setShowStatusNotice(true)}>
+              {t("settings.stateSimulations.resetPreview")}
+            </Button>
+          )}
+
           <NoticeBanner
             tone="warning"
             action={

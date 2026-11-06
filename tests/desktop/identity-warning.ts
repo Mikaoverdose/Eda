@@ -56,13 +56,13 @@ try {
   git("config", "--global", "user.email", "outside@example.invalid");
   const warning = page.locator('aside[aria-label="Global Git configuration warning"]');
   await warning.waitFor();
-  const toolbar = await page.locator('header[aria-label="Repository overview"]').boundingBox();
+  const toolbar = await page.locator("header").first().boundingBox();
   const bounds = await warning.boundingBox();
   assert(toolbar && bounds);
   assert(bounds.height <= 32, `Warning consumed ${bounds.height}px`);
   assert(
     Math.abs(bounds.y - toolbar.y - toolbar.height) <= 1,
-    "Warning must sit immediately below Fetch/Pull/Push",
+    "Warning must sit immediately below the app title bar",
   );
   assert.equal(await warning.getByRole("dialog").count(), 0);
   await page.screenshot({ path: "/tmp/eda-identity-warning-compact.png" });

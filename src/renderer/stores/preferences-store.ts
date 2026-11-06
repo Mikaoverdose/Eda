@@ -159,7 +159,10 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
       const request = ++generation;
 
       if (context.profileId !== get().context.profileId) {
-        const values = defaults();
+        const values = {
+          ...defaults(),
+          developerSettingsEnabled: get().values.developerSettingsEnabled,
+        };
         set({ context, values, loading: true, error: null });
         apply(values);
       } else set({ context, loading: true });

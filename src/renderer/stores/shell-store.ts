@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-export type SettingsTarget = "repository-fetch" | "repository-remotes" | "integrations" | "about";
+export type SettingsTarget =
+  "repository-fetch" | "repository-remotes" | "integrations" | "about" | "global-git";
 type ShellRequest = { kind: "settings"; section: SettingsTarget } | { kind: "tour" };
 
 interface ShellState {

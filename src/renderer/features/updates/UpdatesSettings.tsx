@@ -5,6 +5,7 @@ import { Download, RotateCw } from "lucide-react";
 import { useState } from "react";
 import { AsyncButton, Button, Checkbox, Disclosure, NoticeBanner } from "../../components/ui/index";
 import { useSessionStore } from "../../stores/session-store";
+import { useSimulationStore } from "../../stores/simulation-store";
 import { formatDateTime } from "../../utils/format";
 import { useScopedSetting } from "../settings/hooks/useScopedSetting";
 import { useUpdates } from "./hooks/useUpdates";
@@ -18,6 +19,7 @@ export interface UpdateActions {
 export function UpdateStatus({ state, actions }: { state: UpdateState; actions: UpdateActions }) {
   const busy = ["checking", "downloading", "installing"].includes(state.phase);
   const release = state.release;
+
   return (
     <div className="space-y-3">
       <p role="status" className="text-sm text-text-secondary [overflow-wrap:anywhere]">
@@ -43,6 +45,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
                         ? t("settings.updatesSettings.updateCheckFailed")
                         : t("settings.updatesSettings.checkForANewVersionOfEda")}
       </p>
+
       {state.phase === "downloading" && (
         <div className="space-y-1.5">
           <progress
@@ -51,6 +54,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
             max={100}
             {...(state.progress ? { value: state.progress.percent } : {})}
           />
+
           <p className="text-xs text-text-tertiary">
             {state.progress
               ? t("settings.updatesSettings.percentDownloaded", {
@@ -60,7 +64,9 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
           </p>
         </div>
       )}
+
       {state.error && <NoticeBanner tone="error">{state.error}</NoticeBanner>}
+
       {release?.notes && (
         <Disclosure title={t("settings.updatesSettings.whatSNew")}>
           <p className="selectable whitespace-pre-wrap text-sm leading-relaxed text-text-secondary [overflow-wrap:anywhere]">
@@ -68,6 +74,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
           </p>
         </Disclosure>
       )}
+
       <div className="flex flex-wrap items-center gap-2 empty:hidden">
         {state.capability === "automatic" &&
           !["available", "downloading", "ready", "installing"].includes(state.phase) && (
@@ -80,6 +87,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
               {t("settings.updatesSettings.checkForUpdates")}
             </AsyncButton>
           )}
+
         {state.phase === "available" && (
           <AsyncButton
             label={t("settings.updatesSettings.downloadUpdate")}
@@ -90,6 +98,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
             {t("settings.updatesSettings.downloadUpdate")}
           </AsyncButton>
         )}
+
         {state.phase === "ready" && (
           <AsyncButton
             label={t("settings.updatesSettings.restartAndInstall")}
@@ -100,10 +109,12 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
             {t("settings.updatesSettings.restartAndInstall")}
           </AsyncButton>
         )}
+
         {state.phase === "installing" && (
           <Button busy>{t("settings.updatesSettings.restartingEda")}</Button>
         )}
       </div>
+
       {state.checkedAt && (
         <p className="text-xs text-text-tertiary">
           {t("settings.updatesSettings.lastChecked", { value1: formatDateTime(state.checkedAt) })}
@@ -114,7 +125,7 @@ export function UpdateStatus({ state, actions }: { state: UpdateState; actions: 
 }
 
 export function UpdatesSettings() {
-  const { state, error } = useUpdates();
+  const { state, error, preview } = useUpdates();
   const automatic = useScopedSetting("automaticUpdateChecks", "application");
   const prereleases = useScopedSetting("includePrereleaseUpdates", "application");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -124,24 +135,36 @@ export function UpdatesSettings() {
 
   const run = async (action: keyof UpdateActions) => {
     setActionError(null);
+
+    const simulation = useSimulationStore.getState();
+
+    if (preview || simulation.update) return simulation.runUpdateAction(action);
+
     try {
       if (action === "install" && !(await useSessionStore.getState().flush())) {
         setActionError(
           t("settings.updatesSettings.saveYourWorkspaceSuccessfullyBeforeRestartingYourInput"),
         );
+
         return false;
       }
+
       const result = await window.eda.updates[action]();
+
       if (!result.ok) {
         setActionError(errorMessage(result.error));
+
         return false;
       }
+
       return !result.value.error;
     } catch {
       setActionError(t("settings.updatesSettings.theUpdateActionCouldNotFinishTryAgain"));
+
       return false;
     }
   };
+
   return (
     <section
       aria-labelledby="about-updates-heading"
@@ -150,12 +173,27 @@ export function UpdatesSettings() {
       <h2 id="about-updates-heading" className="text-sm font-medium">
         {t("settings.updatesSettings.updates")}
       </h2>
+
+      {preview && (
+        <NoticeBanner
+          action={
+            <Button size="sm" onClick={() => useSimulationStore.getState().setUpdatePhase(null)}>
+              {t("settings.stateSimulations.resetPreview")}
+            </Button>
+          }
+        >
+          {t("settings.stateSimulations.previewActive")}
+        </NoticeBanner>
+      )}
+
       {state ? (
         <UpdateStatus
           state={state}
           actions={{
             check: () => run("check"),
+
             download: () => run("download"),
+
             install: () => run("install"),
           }}
         />
@@ -164,7 +202,11 @@ export function UpdatesSettings() {
           {t("settings.updatesSettings.readingUpdateStatus")}
         </p>
       )}
-      {(error || actionError) && <NoticeBanner tone="error">{error || actionError}</NoticeBanner>}
+
+      {(error || (!preview && actionError)) && (
+        <NoticeBanner tone="error">{error || actionError}</NoticeBanner>
+      )}
+
       <Checkbox
         checked={automatic.resolved.value}
         disabled={automatic.reading}
@@ -172,9 +214,11 @@ export function UpdatesSettings() {
       >
         {t("settings.updatesSettings.checkForUpdatesAutomatically")}
       </Checkbox>
+
       <p className="text-xs text-text-tertiary">
         {t("settings.updatesSettings.installedBuildsCheckAfterStartupAndEverySix")}
       </p>
+
       <Checkbox
         checked={prereleases.resolved.value}
         disabled={prereleases.reading || updateInProgress}
@@ -182,6 +226,7 @@ export function UpdatesSettings() {
       >
         {t("settings.updatesSettings.includePrereleaseUpdates")}
       </Checkbox>
+
       <p className="text-xs text-text-tertiary">
         {t("settings.updatesSettings.prereleaseUpdatesDescription")}
       </p>

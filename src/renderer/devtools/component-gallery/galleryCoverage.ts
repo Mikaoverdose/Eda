@@ -32,6 +32,8 @@ export const PREVIEW_ANCHORS: Record<string, string> = {
   "components/ui/actions/AsyncButton.tsx": "gallery-actions",
   "components/ui/display/DefinitionList.tsx": "gallery-feedback",
   "components/ui/feedback/NoticeBanner.tsx": "gallery-feedback",
+  "components/ui/feedback/StatusBanner.tsx": "gallery-feedback",
+  "components/ui/feedback/StatusBannerStack.tsx": "gallery-feedback",
   "components/ui/feedback/StateMessage.tsx": "gallery-states",
   "components/ui/display/TabTrigger.tsx": "gallery-actions",
   "components/ui/actions/TextButton.tsx": "gallery-actions",

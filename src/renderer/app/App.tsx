@@ -12,7 +12,6 @@ import { IdentityDialog } from "../features/profiles/IdentityDialog";
 import { RepositoryPicker } from "../features/repositories/RepositoryPicker";
 import { RepositoryTabs } from "../features/repositories/RepositoryTabs";
 import type { SettingsSection } from "../features/settings/Settings";
-import { AppUpdateNotice } from "../features/updates/AppUpdateNotice";
 import {
   showOpenedRepository,
   useRepositoryNavigation,
@@ -24,6 +23,7 @@ import { useSessionStore } from "../stores/session-store";
 import { useShellStore } from "../stores/shell-store";
 import { TourHost } from "../tutorial/TourHost";
 import { AppErrorDialog } from "./AppErrorDialog";
+import { AppNotices } from "./AppNotices";
 import { CommandPalette } from "./CommandPalette";
 import { FailureScreen } from "./RendererFailure";
 import { ShortcutHelp } from "./ShortcutHelp";
@@ -202,7 +202,14 @@ export function App() {
           }
         />
         <AppErrorDialog />
-        <AppUpdateNotice aboutOpen={view === "settings" && settingsSection === "about"} />
+        <AppNotices
+          aboutOpen={view === "settings" && settingsSection === "about"}
+          onReviewGitSettings={() => {
+            setSettingsSection("global-git");
+            setView("settings");
+          }}
+        />
+
         {(sessionError || recovery) && (
           <ErrorDialog
             key={sessionError || recovery}
@@ -239,12 +246,7 @@ export function App() {
           profileId={activeProfileId}
         >
           <RetainedView active={view === "repositories"}>
-            <Workspace
-              onReviewGitSettings={() => {
-                setSettingsSection("global-git");
-                setView("settings");
-              }}
-            />
+            <Workspace />
           </RetainedView>
           {view === "settings" && (
             <Suspense fallback={null}>

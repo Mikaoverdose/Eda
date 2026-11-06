@@ -10,6 +10,7 @@ import {
   Palette,
   PanelsTopLeft,
   Plug,
+  SlidersHorizontal,
   Trash2,
   UsersRound,
   type LucideIcon,
@@ -38,6 +39,7 @@ import { AboutSettings } from "./application/AboutSettings";
 import { ApplicationPreferences } from "./application/ApplicationPreferences";
 import { FailureSimulations } from "./debug/FailureSimulations";
 import { ResetDataSettings } from "./debug/ResetDataSettings";
+import { StateSimulations } from "./debug/StateSimulations";
 import { FetchSettings } from "./git/FetchSettings";
 import { GitEngineSettings } from "./git/GitEngineSettings";
 import { SshAgentSettings } from "./git/SshAgentSettings";
@@ -69,6 +71,7 @@ export type SettingsSection =
   | "repository-git"
   | "integrations"
   | "debug"
+  | "debug-states"
   | "debug-failures"
   | "debug-reset";
 
@@ -190,6 +193,14 @@ const SECTIONS: {
     title: t("settings.components"),
     description: t("settings.previewTheSharedInterfaceComponentsAndTheirInteractionStates"),
     icon: PanelsTopLeft,
+    group: "debug",
+  },
+  {
+    id: "debug-states",
+    keywords: t("settings.stateSimulations.keywords"),
+    title: t("settings.stateSimulations.title"),
+    description: t("settings.stateSimulations.sectionDescription"),
+    icon: SlidersHorizontal,
     group: "debug",
   },
   {
@@ -490,6 +501,7 @@ export function Settings({
                     <ComponentGallery />
                   </Suspense>
                 )}
+                {section.id === "debug-states" && <StateSimulations />}
                 {section.id === "debug-failures" && selected === "debug-failures" && (
                   <FailureSimulations />
                 )}

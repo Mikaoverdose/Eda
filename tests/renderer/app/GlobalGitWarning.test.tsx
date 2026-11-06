@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
 import { profileGitConfig, type Identity } from "@shared/identity/identity";
 import type { ProfileGitInspection } from "@shared/identity/profile-session";
-import { GlobalGitWarning } from "@renderer/app/GlobalGitWarning";
+import { GlobalGitWarning } from "@renderer/features/profiles/GlobalGitWarning";
 import { useAppStore } from "@renderer/stores/app-store";
 import { usePreferencesStore } from "@renderer/stores/preferences-store";
 

@@ -28,19 +28,18 @@ import { UndoRedoDialog } from "../features/workflows/UndoRedoDialog";
 import { useAppStore } from "../stores/app-store";
 import { useLayoutStore, type PanelId } from "../stores/layout-store";
 import { useRepositoryStore } from "../stores/repository-store";
-import { GlobalGitWarning } from "./GlobalGitWarning";
 
 const PANELS: readonly PanelId[] = ["graph", "diff", "rail"];
 
-export function Workspace({ onReviewGitSettings }: { onReviewGitSettings: () => void }) {
+export function Workspace() {
   return (
     <LayoutTransition className="h-full min-h-0">
-      <WorkspaceContent onReviewGitSettings={onReviewGitSettings} />
+      <WorkspaceContent />
     </LayoutTransition>
   );
 }
 
-function WorkspaceContent({ onReviewGitSettings }: { onReviewGitSettings: () => void }) {
+function WorkspaceContent() {
   const [narrow, setNarrow] = useState(() => window.innerWidth < 1100);
   const [drawer, setDrawer] = useState<{ owner: string; kind: "references" | "commit" } | null>(
     null,
@@ -194,7 +193,6 @@ function WorkspaceContent({ onReviewGitSettings }: { onReviewGitSettings: () => 
             repository={selected}
             {...(!railVisible && { onOpenCommit: () => setDrawer({ owner, kind: "commit" }) })}
           />
-          <GlobalGitWarning onReview={onReviewGitSettings} />
           {!loading && watchWarning && (
             <p role="status" className="px-3 py-1 text-xs text-git-modified">
               {watchWarning}

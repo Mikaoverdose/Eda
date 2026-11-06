@@ -62,6 +62,9 @@ export {
 } from "./icons";
 
 export { NoticeBanner } from "./feedback/NoticeBanner";
+export { StatusBanner } from "./feedback/StatusBanner";
+export { StatusBannerStack } from "./feedback/StatusBannerStack";
+export { useNoticeDismissal } from "./feedback/useNoticeDismissal";
 
 export { DefinitionList } from "./display/DefinitionList";
 export { ComparisonTable, type ComparisonTableProps } from "./display/ComparisonTable";

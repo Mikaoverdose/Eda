@@ -61,7 +61,7 @@ it("gates debug navigation, search, and direct selection behind developer settin
 
   try {
     enable(false);
-    for (const selected of ["debug", "debug-failures", "debug-reset"] as const) {
+    for (const selected of ["debug", "debug-states", "debug-failures", "debug-reset"] as const) {
       onSelect.mockClear();
       await act(async () => root.render(<Settings selected={selected} onSelect={onSelect} />));
       expect(container.querySelector("#settings-about")).not.toBeNull();

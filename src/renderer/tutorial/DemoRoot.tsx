@@ -138,7 +138,7 @@ export function DemoRoot() {
             tabs={<RepositoryTabs onBrowse={() => useAppStore.getState().selectRepository(null)} />}
           />
           <WorkspaceFrame profileId={demoIdentity.id}>
-            <Workspace onReviewGitSettings={noop} />
+            <Workspace />
           </WorkspaceFrame>
         </div>
         <TourGuide

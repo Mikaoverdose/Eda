@@ -2,7 +2,6 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { profileGitConfig, type Identity } from "@shared/identity/identity";
 import type { GitConfigEntry } from "@shared/identity/profile-session";
-import { TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   AsyncButton,
@@ -12,29 +11,40 @@ import {
   Dialog,
   Disclosure,
   NoticeBanner,
-} from "../components/ui/index";
-import { useAppStore } from "../stores/app-store";
-import { usePreferencesStore } from "../stores/preferences-store";
+  StatusBanner,
+} from "../../components/ui/index";
+import { useAppStore } from "../../stores/app-store";
+import { simulatedGitConfig } from "../../devtools/git-identity-simulation";
+import { usePreferencesStore } from "../../stores/preferences-store";
+import { useSimulationStore, type GitIdentitySimulation } from "../../stores/simulation-store";
 
 export function GlobalGitWarning({ onReview }: { onReview: () => void }) {
   const profile = useAppStore((state) => state.activeIdentity);
   const switching = useAppStore((state) => state.switchingIdentityId);
   const enabled = usePreferencesStore((state) => state.values.syncGlobalGitConfig.value);
   const owner = usePreferencesStore((state) => state.context.profileId);
+  const simulation = useSimulationStore((state) => state.gitIdentity);
 
-  if (!profile || switching || !enabled || owner !== profile.id) return null;
+  if (!profile || switching) return null;
 
-  return (
-    <GlobalGitStatus
-      key={JSON.stringify([profile.id, profile.gitName, profile.gitEmail, profile.signing])}
-      profile={profile}
-      onReview={onReview}
-    />
-  );
+  const key = JSON.stringify([profile.id, profile.gitName, profile.gitEmail, profile.signing]);
+
+  if (simulation)
+    return (
+      <SimulatedGlobalGitStatus
+        key={`${key}:${simulation}`}
+        profile={profile}
+        onReview={onReview}
+        simulation={simulation}
+      />
+    );
+
+  if (!enabled || owner !== profile.id) return null;
+
+  return <GlobalGitStatus key={key} profile={profile} onReview={onReview} />;
 }
 
 function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: () => void }) {
-  const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<GitConfigEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -44,45 +54,61 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
   const reading = useRef(0);
   const applyingRef = useRef(false);
   const refreshRef = useRef<() => Promise<boolean>>(async () => false);
-  const expected = profileGitConfig(profile);
-  const differences = entries?.filter((entry) => entry.value !== expected[entry.key]) ?? [];
 
   useEffect(() => {
     mounted.current = true;
+
     const refresh = async () => {
       const request = ++generation.current;
+
       reading.current++;
+
       try {
         const result = await window.eda.identity.inspectGit();
+
         if (!mounted.current || request !== generation.current) return false;
+
         if (!result.ok) {
           setError(errorMessage(result.error));
+
           return false;
         }
+
         if (result.value.profileId !== profile.id) return false;
+
         setEntries(result.value.global);
         setError(null);
+
         const expected = profileGitConfig(profile);
         const matches = result.value.global.every((entry) => entry.value === expected[entry.key]);
+
         if (matches) setApplyError(null);
+
         return matches;
       } catch {
         if (mounted.current && request === generation.current)
           setError(t("globalGitWarning.couldNotReadGlobalGitSettingsTryCheckingAgain"));
+
         return false;
       } finally {
         reading.current--;
       }
     };
+
     refreshRef.current = refresh;
+
     const check = () => {
       if (document.visibilityState !== "hidden" && !reading.current && !applyingRef.current)
         void refresh();
     };
+
     void refresh();
+
     const timer = window.setInterval(check, 5_000);
+
     window.addEventListener("focus", check);
     document.addEventListener("visibilitychange", check);
+
     return () => {
       mounted.current = false;
       generation.current++;
@@ -93,66 +119,165 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
   }, [profile]);
 
   const apply = async () => {
-    if (applyingRef.current) return false;
+    if (!mounted.current || applyingRef.current || useSimulationStore.getState().gitIdentity)
+      return false;
+
     applyingRef.current = true;
     setApplying(true);
     setApplyError(null);
     generation.current++;
+
     try {
       const result = await window.eda.identity.reapplyGlobal(profile.id);
+
       if (!mounted.current) return false;
+
       if (!result.ok) {
         setApplyError(errorMessage(result.error));
+
         return false;
       }
+
       const matches = await refreshRef.current();
+
       if (mounted.current && !matches)
         setApplyError(
           t("globalGitWarning.globalGitSettingsStillDifferReviewTheirSourceFilesAndTryAgain"),
         );
+
       return matches;
     } catch {
       if (mounted.current)
         setApplyError(t("globalGitWarning.couldNotApplyGlobalGitSettingsTryAgain"));
+
       return false;
     } finally {
       applyingRef.current = false;
+
       if (mounted.current) setApplying(false);
     }
   };
 
+  return (
+    <GlobalGitStatusView
+      profile={profile}
+      onReview={onReview}
+      entries={entries}
+      error={error}
+      applyError={applyError}
+      applying={applying}
+      apply={apply}
+      refresh={() => refreshRef.current()}
+    />
+  );
+}
+
+function SimulatedGlobalGitStatus({
+  profile,
+  onReview,
+  simulation,
+}: {
+  profile: Identity;
+  onReview: () => void;
+  simulation: GitIdentitySimulation;
+}) {
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const apply = async () => {
+    if (useSimulationStore.getState().gitIdentity !== simulation) return false;
+
+    if (simulation === "apply-error") {
+      setApplyError(t("settings.stateSimulations.gitRepairError"));
+
+      return false;
+    }
+
+    useSimulationStore.getState().setGitIdentity("matched");
+
+    return true;
+  };
+
+  return (
+    <GlobalGitStatusView
+      profile={profile}
+      onReview={onReview}
+      entries={simulatedGitConfig(profile, simulation === "matched")}
+      error={null}
+      applyError={applyError}
+      applying={false}
+      apply={apply}
+      refresh={async () => {
+        setApplyError(null);
+
+        return simulation === "matched";
+      }}
+      simulated
+    />
+  );
+}
+
+function GlobalGitStatusView({
+  profile,
+  onReview,
+  entries,
+  error,
+  applyError,
+  applying,
+  apply,
+  refresh,
+  simulated = false,
+}: {
+  profile: Identity;
+  onReview: () => void;
+  entries: GitConfigEntry[] | null;
+  error: string | null;
+  applyError: string | null;
+  applying: boolean;
+  apply: () => Promise<boolean>;
+  refresh: () => Promise<boolean>;
+  simulated?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const expected = profileGitConfig(profile);
+  const differences = entries?.filter((entry) => entry.value !== expected[entry.key]) ?? [];
+
   if (!differences.length && !error && !applyError) return null;
 
   return (
-    <aside
-      aria-label={t("globalGitWarning.globalGitConfigurationWarning")}
-      className="relative flex h-8 shrink-0 items-center gap-2 border-b border-git-modified/20 bg-git-modified/5 px-3 text-xs"
-    >
-      <TriangleAlert size={13} aria-hidden="true" className="shrink-0 text-git-modified" />
-      <span role="status" className="min-w-0 flex-1 truncate text-text-secondary">
+    <>
+      <StatusBanner
+        label={t("globalGitWarning.globalGitConfigurationWarning")}
+        tone="warning"
+        action={
+          <Button
+            size="sm"
+            variant="quiet"
+            aria-label={t("globalGitWarning.reviewGlobalGitSettings")}
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            onClick={() => setOpen(true)}
+          >
+            {t("globalGitWarning.review")}
+          </Button>
+        }
+      >
         {applyError
           ? t("globalGitWarning.couldNotUpdateGlobalGitSettings")
           : error
             ? t("globalGitWarning.couldNotCheckGlobalGitSettings")
             : t("globalGitWarning.globalGitSettingsDifferFrom", { name: profile.name })}
-      </span>
-      <Button
-        size="sm"
-        variant="quiet"
-        aria-label={t("globalGitWarning.reviewGlobalGitSettings")}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        onClick={() => setOpen(true)}
-      >
-        {t("globalGitWarning.review")}
-      </Button>
+      </StatusBanner>
+
       {open && (
         <Dialog
           size="lg"
           title={t("globalGitWarning.reviewGlobalGitSettings")}
-          description={t("globalGitWarning.globalGitSyncIsEnabledForReviewThe", {
-            name: profile.name,
-          })}
+          description={
+            simulated
+              ? t("settings.stateSimulations.gitPreviewActive")
+              : t("globalGitWarning.globalGitSyncIsEnabledForReviewThe", {
+                  name: profile.name,
+                })
+          }
           onClose={() => setOpen(false)}
           footer={
             <>
@@ -166,9 +291,11 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
               >
                 {t("globalGitWarning.globalGitSettings")}
               </Button>
+
               <Button variant="secondary" onClick={() => setOpen(false)}>
                 {t("common.close")}
               </Button>
+
               <AsyncButton
                 label={t("globalGitWarning.applyProfileGlobally")}
                 variant="primary"
@@ -190,7 +317,7 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
                     label={t("globalGitWarning.checkGlobalGitSettings")}
                     variant="ghost"
                     disabled={applying}
-                    onAction={() => refreshRef.current()}
+                    onAction={refresh}
                   >
                     {t("globalGitWarning.checkAgain")}
                   </AsyncButton>
@@ -199,9 +326,11 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
                 {applyError || error}
               </NoticeBanner>
             )}
+
             {!!differences.length && (
               <section aria-label={t("globalGitWarning.changesToApply")} className="space-y-3">
                 <h3 className="text-sm font-medium">{t("globalGitWarning.changesToApply")}</h3>
+
                 <ComparisonTable
                   label={t("globalGitWarning.changesToApply")}
                   fieldLabel={t("globalGitWarning.setting")}
@@ -216,9 +345,13 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
                 />
               </section>
             )}
+
             <NoticeBanner>
-              {t("globalGitWarning.applyingThisProfileUpdatesGlobalGitSettingsUsed")}
+              {simulated
+                ? t("settings.stateSimulations.gitPreviewActive")
+                : t("globalGitWarning.applyingThisProfileUpdatesGlobalGitSettingsUsed")}
             </NoticeBanner>
+
             {!!differences.length && (
               <Disclosure title={t("globalGitWarning.configurationSources")}>
                 <div className="mt-3">
@@ -234,7 +367,7 @@ function GlobalGitStatus({ profile, onReview }: { profile: Identity; onReview: (
           </div>
         </Dialog>
       )}
-    </aside>
+    </>
   );
 }
 
@@ -252,15 +385,19 @@ function settingLabel(key: string): string {
 
 function settingValue(key: string, value: string | undefined): string {
   if (value === undefined) return t("globalGitWarning.notConfigured");
+
   if (key === "commit.gpgsign") {
     if (/^(true|yes|on|1)?$/i.test(value)) return t("globalGitWarning.on");
+
     if (/^(false|no|off|0)$/i.test(value)) return t("globalGitWarning.off");
   }
+
   if (key === "gpg.format")
     return value === "ssh"
       ? t("globalGitWarning.ssh")
       : value === "openpgp"
         ? t("globalGitWarning.gpg")
         : value;
+
   return value;
 }

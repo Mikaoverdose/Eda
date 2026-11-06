@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -102,6 +102,160 @@ try {
     false,
   );
   assert.equal(await prereleases.isChecked(), false);
+
+  await page.getByRole("checkbox", { name: "Enable developer settings", exact: true }).check();
+  await page.getByRole("button", { name: "State simulations", exact: true }).click();
+
+  const simulation = page.getByRole("combobox", { name: "Update state", exact: true });
+
+  await simulation.click();
+  await page.getByRole("option", { name: "Update available", exact: true }).click();
+
+  const updateBanner = page.getByRole("complementary", { name: "App update", exact: true });
+
+  await updateBanner.getByText("Eda 0.0.3 is available.", { exact: true }).waitFor();
+
+  assert.ok((await updateBanner.textContent())?.includes(`Installed: ${version.displayVersion}`));
+  assert.equal((await updateBanner.textContent())?.includes("Preview"), false);
+  assert.equal(
+    await updateBanner.evaluate((element) => element.getBoundingClientRect().height),
+    32,
+  );
+  assert.equal(
+    await updateBanner
+      .getByRole("button", { name: "View update", exact: true })
+      .getAttribute("data-variant"),
+    "quiet",
+  );
+
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1440, 900));
+  await page.screenshot({
+    path: join(tmpdir(), "eda-update-banner-available.png"),
+    clip: { x: 0, y: 0, width: 1440, height: 120 },
+  });
+
+  await simulation.click();
+  await page.getByRole("option", { name: "Ready to install", exact: true }).click();
+  await updateBanner.getByText("Eda 0.0.3 is ready to install.", { exact: true }).waitFor();
+  await updateBanner.getByText("Downloaded and verified. Restart to install.").waitFor();
+
+  await page.evaluate(() =>
+    window.eda.settings.set(
+      "theme",
+      { kind: "application" },
+      { mode: "dark", light: "eda-light", dark: "eda-dark" },
+    ),
+  );
+  await page.waitForFunction(() => document.documentElement.dataset["appearance"] === "dark");
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(940, 900));
+
+  assert.equal(
+    await updateBanner.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    true,
+  );
+
+  await page.screenshot({
+    path: join(tmpdir(), "eda-update-banner-ready.png"),
+    clip: { x: 0, y: 0, width: 940, height: 120 },
+  });
+
+  await page.getByRole("button", { name: "Reset preview", exact: true }).click();
+  await updateBanner.waitFor({ state: "detached" });
+
+  const savedGitConfig = await readFile(config, "utf8");
+  const gitSimulation = page.getByRole("combobox", { name: "Git identity state", exact: true });
+
+  await gitSimulation.click();
+  await page.getByRole("option", { name: "Commit identity mismatch", exact: true }).click();
+
+  const gitWarning = page.getByRole("complementary", {
+    name: "Global Git configuration warning",
+    exact: true,
+  });
+
+  await gitWarning.waitFor();
+
+  assert.equal(await gitWarning.count(), 1);
+  assert.equal(await gitWarning.evaluate((element) => element.closest("main") === null), true);
+  assert.equal((await gitWarning.textContent())?.includes("Simulation"), false);
+
+  await simulation.click();
+  await page.getByRole("option", { name: "Update available", exact: true }).click();
+  await updateBanner.waitFor();
+
+  const notices = page.getByRole("region", { name: "App notifications", exact: true });
+
+  assert.deepEqual(
+    await notices
+      .locator("aside")
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute("aria-label"))),
+    ["Global Git configuration warning", "App update"],
+  );
+
+  const warningBounds = await gitWarning.boundingBox();
+  const updateBounds = await updateBanner.boundingBox();
+
+  assert.ok(warningBounds && updateBounds);
+  assert.equal(warningBounds.y + warningBounds.height, updateBounds.y);
+
+  await notices.getByRole("button", { name: "Dismiss App update", exact: true }).click();
+  await updateBanner.waitFor({ state: "detached" });
+  await gitWarning.waitFor();
+
+  await simulation.click();
+  await page.getByRole("option", { name: "Ready to install", exact: true }).click();
+  await updateBanner.waitFor();
+  await notices.getByRole("button", { name: "Dismiss App update", exact: true }).click();
+  await updateBanner.waitFor({ state: "detached" });
+
+  await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  await gitWarning.waitFor();
+
+  assert.equal(await gitWarning.count(), 1);
+  assert.equal(await updateBanner.count(), 0);
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.locator("#settings-debug-states").waitFor();
+  await gitWarning.waitFor();
+
+  assert.equal(await gitWarning.count(), 1);
+
+  await page.screenshot({
+    path: join(tmpdir(), "eda-git-warning-top-bar.png"),
+    clip: { x: 0, y: 0, width: 940, height: 100 },
+  });
+
+  await gitWarning.getByRole("button", { name: "Review global Git settings", exact: true }).click();
+
+  const gitDetails = page.getByRole("dialog", { name: "Review global Git settings", exact: true });
+
+  await gitDetails
+    .getByRole("cell", { name: "simulation+fixture@example.test", exact: true })
+    .waitFor();
+
+  await gitDetails.getByRole("button", { name: "Apply profile globally", exact: true }).click();
+  await gitDetails.waitFor({ state: "detached" });
+  await gitWarning.waitFor({ state: "detached" });
+
+  assert.equal(await readFile(config, "utf8"), savedGitConfig);
+
+  await gitSimulation.click();
+  await page
+    .getByRole("option", { name: "Identity mismatch with repair failure", exact: true })
+    .click();
+  await gitWarning.getByRole("button", { name: "Review global Git settings", exact: true }).click();
+  await gitDetails.getByRole("button", { name: "Apply profile globally", exact: true }).click();
+  await gitDetails
+    .getByRole("alert")
+    .getByText("Simulated repair failure: Git configuration is read-only.", { exact: true })
+    .waitFor();
+
+  await page.keyboard.press("Escape");
+  await gitDetails.waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Reset all simulations", exact: true }).click();
+  await gitWarning.waitFor({ state: "detached" });
+
+  assert.equal(await readFile(config, "utf8"), savedGitConfig);
 
   await page.getByRole("button", { name: "Components", exact: true }).click();
   const preview = page.locator("#gallery-states");
