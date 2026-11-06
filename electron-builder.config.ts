@@ -5,6 +5,13 @@ import { readBuildInfo } from "./scripts/build.ts";
 export default {
   appId: "cafe.kirameki.eda",
   productName: "Eda",
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    onlyLoadAppFromAsar: true,
+    enableEmbeddedAsarIntegrityValidation: true,
+  },
   npmRebuild: false,
   asarUnpack: ["node_modules/velopack/**/*.node"],
   protocols: [{ name: "Eda repository links", schemes: ["eda"] }],

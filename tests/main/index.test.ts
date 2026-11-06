@@ -43,7 +43,9 @@ vi.mock("electron", () => ({
   BrowserWindow: vi.fn(),
   dialog: { showErrorBox: startup.showErrorBox },
   Menu: { setApplicationMenu: vi.fn() },
-  session: { defaultSession: { webRequest: { onHeadersReceived: vi.fn() } } },
+  session: {
+    defaultSession: { webRequest: { onHeadersReceived: vi.fn(), onBeforeRequest: vi.fn() } },
+  },
   shell: {},
 }));
 

@@ -298,4 +298,4 @@ function subscribe<C extends IpcEvent>(
   };
 }
 
-contextBridge.exposeInMainWorld("eda", api);
+if (process.isMainFrame) contextBridge.exposeInMainWorld("eda", api);

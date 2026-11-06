@@ -224,15 +224,7 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryReveal, async (_event, rawId) => {
     const repository = repositories.resolveActiveRepository(requireId(rawId));
-    const error = await shell.openPath(repository.path);
-
-    if (error)
-      throw invalidRequest(
-        errorText(
-          "main.repositoryHandlers.theRepositoryFolderCouldNotBeOpenedCheckThatItStillExists",
-        ),
-      );
-
+    shell.showItemInFolder(repository.path);
     return ok(undefined);
   });
 

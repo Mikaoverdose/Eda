@@ -35,7 +35,7 @@ export default defineConfig(async ({ command }) => {
         main: {
           entry: resolve("./src/main/index.ts"),
           onstart: async ({ startup }) => {
-            await startup([resolve("."), "--no-sandbox"], {
+            await startup([resolve(".")], {
               env: devElectronEnv(),
               stdio: ["inherit", "inherit", "pipe", "ipc"],
             });

@@ -4,10 +4,12 @@ import { setLocale, t } from "@shared/i18n";
 import { app, BrowserWindow, dialog, Menu, session, shell } from "electron";
 import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { restoreShellPath } from "./git/execution/shell-path";
+import { isRendererDocument, isRendererFile, rendererUrl } from "./application/renderer-url";
 import { configureGraphics } from "./application/graphics";
 import { registerWindowRecovery } from "./application/window-recovery";
+import { registerApplicationContents } from "./ipc/transport";
 import { registerIpcHandlers } from "./ipc/register";
 import {
   navigationFromArguments,
@@ -29,7 +31,7 @@ app.on("open-url", (event, url) => {
   const target = parseRepositoryLink(url);
   if (!target) return;
   if (navigation) navigation.push([target]);
-  else pendingLinks.push(url);
+  else if (pendingLinks.length < 20) pendingLinks.push(url);
 });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -77,6 +79,7 @@ function createWindow(zoom = 100): BrowserWindow {
     },
   });
 
+  registerApplicationContents(window.webContents);
   window.once("ready-to-show", () => window.show());
   registerWindowRecovery(window);
 
@@ -93,21 +96,17 @@ function createWindow(zoom = 100): BrowserWindow {
   });
 
   window.webContents.on("will-navigate", (event, url) => {
-    const isDevServer = isDev && url.startsWith(process.env["VITE_DEV_SERVER_URL"] ?? "\0");
-    if (!isDevServer && url !== window.webContents.getURL()) event.preventDefault();
+    if (!isRendererDocument(url)) event.preventDefault();
   });
 
   window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) =>
     callback(false),
   );
 
-  const devServerUrl = process.env["VITE_DEV_SERVER_URL"];
-
-  if (devServerUrl) {
-    void window.loadURL(devServerUrl);
-  } else {
-    void window.loadFile(join(__dirname, "../renderer/index.html"));
-  }
+  window.webContents.on("will-redirect", (event) => {
+    if (event.isMainFrame && !isRendererDocument(event.url)) event.preventDefault();
+  });
+  void window.loadURL(rendererUrl());
 
   return window;
 }
@@ -136,18 +135,17 @@ async function start(): Promise<void> {
 
     if (process.platform !== "darwin") Menu.setApplicationMenu(null);
 
+    session.defaultSession.webRequest.onBeforeRequest(
+      { urls: ["file://*/*"] },
+      (details, callback) => callback({ cancel: !isRendererFile(details.url) }),
+    );
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
           "Content-Security-Policy": [
             details.resourceType === "subFrame" &&
-            details.url ===
-              new URL(
-                "index.html?eda-tour=1",
-                process.env["VITE_DEV_SERVER_URL"] ||
-                  pathToFileURL(join(__dirname, "../renderer/index.html")).href,
-              ).href
+            details.url === new URL("index.html?eda-tour=1", rendererUrl()).href
               ? CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'")
               : CSP,
           ],

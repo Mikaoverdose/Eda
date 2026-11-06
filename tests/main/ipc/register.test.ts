@@ -1,12 +1,13 @@
 import { errorFixture } from "../../helpers/error";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { rendererUrl } from "@main/application/renderer-url";
 import { EventEmitter } from "node:events";
 import { GitError, type Result } from "@shared/errors";
 import { IPC_CHANNELS, IPC_EVENTS, type IpcChannel } from "@shared/ipc";
 import type { Identity } from "@shared/identity/identity";
 import type { Services } from "@main/services";
 import { registerIpcHandlers } from "@main/ipc/register";
-import { beginUpdateInstall } from "@main/ipc/transport";
+import { beginUpdateInstall, registerApplicationContents } from "@main/ipc/transport";
 import { UpdateService } from "@main/application/update-service";
 
 it("allows managed update notifications but refuses download and installation over IPC", async () => {
@@ -152,7 +153,7 @@ const profile: Identity = {
 };
 
 const repositoryId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
-const mainFrame = {};
+const mainFrame = { url: rendererUrl() };
 const event = {
   sender: {
     id: 42,
@@ -172,6 +173,7 @@ type Handler = (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => Promi
 let handlers: Map<IpcChannel, Handler>;
 
 function setup() {
+  registerApplicationContents(event.sender);
   const mocks = {
     installation: { method: "development" },
     updates: {
@@ -654,4 +656,42 @@ describe("IPC registration", () => {
     window.emit("closed");
     expect(sessions.close).toHaveBeenCalledWith(42);
   });
+});
+
+it("rejects foreign main documents and child frames before any ordinary IPC side effect", async () => {
+  setup();
+  const handler = handlers.get(IPC_CHANNELS.appCopyText)!;
+  for (const url of [
+    "https://attacker.invalid/",
+    "file:///tmp/index.html",
+    rendererUrl() + "?eda-tour=1",
+  ]) {
+    const foreign = { url };
+    const sender = { mainFrame: foreign } as Electron.WebContents;
+    registerApplicationContents(sender);
+    expect(
+      await handler({ senderFrame: foreign, sender } as Electron.IpcMainInvokeEvent, "private"),
+    ).toMatchObject({ ok: false });
+  }
+  expect(
+    await handler(
+      { ...event, senderFrame: { url: rendererUrl() } } as Electron.IpcMainInvokeEvent,
+      "private",
+    ),
+  ).toMatchObject({ ok: false });
+  expect(electron.writeText).not.toHaveBeenCalled();
+});
+
+it("requires native approval of executable settings even from the main document", async () => {
+  const mocks = setup();
+  electron.showMessageBox.mockResolvedValueOnce({ response: 0 });
+  expect(
+    await invoke(
+      IPC_CHANNELS.settingsSet,
+      "editorExecutable",
+      { kind: "application" },
+      "/tmp/program",
+    ),
+  ).toMatchObject({ ok: false });
+  expect(mocks.preferences.set).not.toHaveBeenCalled();
 });

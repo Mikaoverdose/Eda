@@ -5,9 +5,11 @@ import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import {
   MAX_BACKGROUND_IMAGE_LENGTH,
   requireSettingKey,
+  validateSetting,
   type SettingScope,
   type SettingsContext,
 } from "@shared/preferences/settings";
+import { isMergeTool } from "@shared/integrations/merge-tool";
 import { BrowserWindow, app, dialog, nativeImage } from "electron";
 import { open } from "node:fs/promises";
 import type { Services } from "../../services";
@@ -195,6 +197,28 @@ export function registerSettingsHandlers(services: Services): void {
   handle(IPC_CHANNELS.settingsSet, async (_e, rawKey, rawScope, value) => {
     const key = requireSettingKey(rawKey);
     const target = scope(rawScope);
+    if (key === "editorExecutable" || key === "mergeTool") {
+      validateSetting(key, target, value);
+      const command = isMergeTool(value) ? [value.executable, ...value.args] : [value];
+      if (command[0]) {
+        const parent = BrowserWindow.fromWebContents(_e.sender);
+        if (
+          !parent ||
+          (
+            await dialog.showMessageBox(parent, {
+              type: "warning",
+              message: t("main.settingsHandlers.confirmProgram"),
+              detail: JSON.stringify(command),
+              buttons: [t("common.cancel"), t("main.settingsHandlers.allowProgram")],
+              defaultId: 0,
+              cancelId: 0,
+              noLink: true,
+            })
+          ).response !== 1
+        )
+          throw invalidRequest(errorText("main.settingsHandlers.programDeclined"));
+      }
+    }
     services.preferences.set(key, target, value);
     changed(key, target);
     return ok(undefined);

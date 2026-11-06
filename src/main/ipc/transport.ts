@@ -4,6 +4,14 @@ import { t } from "@shared/i18n";
 import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventArgs } from "@shared/ipc";
 import { BrowserWindow, ipcMain } from "electron";
 
+import { isRendererDocument } from "../application/renderer-url";
+
+const applicationContents = new WeakSet<Electron.WebContents>();
+
+export function registerApplicationContents(contents: Electron.WebContents): void {
+  applicationContents.add(contents);
+}
+
 let activeRequests = 0;
 let resetting = false;
 let installingUpdate = false;
@@ -40,6 +48,18 @@ type Handler = (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => Promi
 
 export function handle(channel: IpcChannel, handler: Handler): void {
   ipcMain.handle(channel, async (event, ...args) => {
+    const frame = event.senderFrame;
+    if (
+      !applicationContents.has(event.sender) ||
+      !frame ||
+      frame !== event.sender.mainFrame ||
+      !isRendererDocument(frame.url)
+    )
+      return err({
+        kind: "invalid-input",
+        operation: channel,
+        message: errorText("main.transport.untrustedFrame"),
+      });
     const savingForUpdate =
       channel === IPC_CHANNELS.sessionsChange || channel === IPC_CHANNELS.sessionsReadyToClose;
     if (resetting || (installingUpdate && !savingForUpdate))
