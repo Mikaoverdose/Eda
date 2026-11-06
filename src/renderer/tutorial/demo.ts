@@ -112,6 +112,7 @@ export function createDemo() {
         containingRefs: containingDemoRefs(oid),
         shallow: false,
         signed: false,
+        signature: { status: "unsigned", format: null, reasonCode: null, diagnostics: "" },
       }),
     listBranches: async () => ok(demoBranches),
     listTags: async () => ok(demoTags),

@@ -310,6 +310,7 @@
   "operations.verifyReversedIndexFlags": "verify reversed index flags",
   "operations.verifySshHost": "verify SSH host",
   "operations.verifyTag": "verify tag",
+  "operations.verifyCommitSignature": "verify commit signature",
   "operations.writeGitConfiguration": "write Git configuration",
   "operations.writeRepository": "write repository",
   "operationTitles.cloneRepository": "Clone repository",

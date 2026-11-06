@@ -1,22 +1,67 @@
 import { t } from "@shared/i18n";
 import { formatDateTime } from "../../utils/format";
-import type { CommitInspection, HistoryCommit } from "@shared/repository/repository-read";
-import { ChevronRight, KeyRound, ShieldOff } from "lucide-react";
+import {
+  UNSIGNED_COMMIT_SIGNATURE,
+  type CommitInspection,
+  type HistoryCommit,
+} from "@shared/repository/repository-read";
+import { ChevronRight, KeyRound, RefreshCw, ShieldOff } from "lucide-react";
 import { useId, useState } from "react";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
-import { CopyButton, Disclosure, TextButton } from "../../components/ui/index";
+import {
+  CodeBlock,
+  CopyButton,
+  Disclosure,
+  IconButton,
+  TextButton,
+} from "../../components/ui/index";
+import {
+  commitSignatureFormatLabel,
+  commitSignatureLabel,
+  commitSignatureTrustLabel,
+} from "./commit-signature-label";
 
 export function CommitDetails({
   commit,
   inspection,
   onSelectParent,
+  onVerify,
+  verifying = false,
 }: {
   commit: HistoryCommit;
   inspection: CommitInspection | null;
   onSelectParent: (oid: string) => void;
+  onVerify?: () => void;
+  verifying?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
+  const signature =
+    inspection?.signature ??
+    (inspection?.signed === false
+      ? UNSIGNED_COMMIT_SIGNATURE
+      : inspection?.signed
+        ? {
+            status: "unverified" as const,
+            format: "unknown" as const,
+            reasonCode: "verification-error" as const,
+            diagnostics: "",
+          }
+        : null);
+  const signatureLabel = verifying
+    ? t("diff.commitDetails.checkingSignature")
+    : signature
+      ? commitSignatureLabel(signature)
+      : "";
+  const signatureColor = verifying
+    ? "text-text-tertiary"
+    : signature?.status === "verified"
+      ? "text-git-added"
+      : signature?.status === "invalid"
+        ? "text-git-deleted"
+        : signature?.status === "unverified"
+          ? "text-git-modified"
+          : "text-text-tertiary";
 
   return (
     <div className="app-surface-chrome shrink-0 border-b border-border-subtle bg-bg-surface px-3 py-2">
@@ -49,21 +94,17 @@ export function CommitDetails({
           {commit.oid.slice(0, 8)}
         </span>
         <CopyButton value={commit.oid} label={t("diff.commitDetails.copySha")} size="icon-xs" />
-        {typeof inspection?.signed === "boolean" && (
+        {(signature || verifying) && (
           <span
             role="img"
             tabIndex={0}
-            aria-label={
-              inspection.signed ? t("diff.commitDetails.signed") : t("diff.commitDetails.unsigned")
-            }
-            title={
-              inspection.signed
-                ? t("diff.commitDetails.signaturePresent")
-                : t("diff.commitDetails.signatureAbsent")
-            }
-            className={`flex shrink-0 items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text ${inspection.signed ? "text-accent-text" : "text-text-tertiary"}`}
+            aria-label={signatureLabel}
+            title={[signatureLabel, signature?.signer, signature?.fingerprint ?? signature?.keyId]
+              .filter(Boolean)
+              .join("\n")}
+            className={`flex shrink-0 items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text ${signatureColor}`}
           >
-            {inspection.signed ? (
+            {signature?.status !== "unsigned" ? (
               <KeyRound size={14} aria-hidden="true" />
             ) : (
               <ShieldOff size={14} aria-hidden="true" />
@@ -105,6 +146,64 @@ export function CommitDetails({
             <dt className="text-text-tertiary">{t("diff.commitDetails.author")}</dt>
             <dd className="selectable break-all text-text-secondary">{commit.author.email}</dd>
           </div>
+          {(signature || verifying) && (
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
+              <dt className="text-text-tertiary">{t("diff.commitDetails.signature")}</dt>
+              <dd className="flex min-w-0 items-start gap-1">
+                <span className={`min-w-0 flex-1 ${signatureColor}`}>{signatureLabel}</span>
+                {onVerify && (
+                  <IconButton
+                    size="xs"
+                    disabled={verifying}
+                    busy={verifying}
+                    aria-label={t("diff.commitDetails.verifyAgain")}
+                    title={t("diff.commitDetails.verifyAgain")}
+                    icon={<RefreshCw size={13} aria-hidden="true" />}
+                    onClick={onVerify}
+                  />
+                )}
+              </dd>
+            </div>
+          )}
+          {signature?.format && (
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
+              <dt className="text-text-tertiary">{t("diff.commitDetails.signatureFormat")}</dt>
+              <dd>{commitSignatureFormatLabel(signature)}</dd>
+            </div>
+          )}
+          {signature?.signer && (
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
+              <dt className="text-text-tertiary">{t("diff.commitDetails.signatureSigner")}</dt>
+              <dd className="selectable break-words">{signature.signer}</dd>
+            </div>
+          )}
+          {signature?.trustLevel && (
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
+              <dt className="text-text-tertiary">{t("diff.commitDetails.signatureTrust")}</dt>
+              <dd>{commitSignatureTrustLabel(signature)}</dd>
+            </div>
+          )}
+          {(signature?.fingerprint || signature?.keyId) && (
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
+              <dt className="text-text-tertiary">{t("diff.commitDetails.signatureKey")}</dt>
+              <dd className="flex min-w-0 items-start gap-1">
+                <span className="selectable min-w-0 flex-1 break-all font-mono">
+                  {signature.fingerprint ?? signature.keyId}
+                </span>
+                <CopyButton
+                  value={(signature.fingerprint ?? signature.keyId)!}
+                  size="icon-xs"
+                  label={t("diff.commitDetails.copySignatureKey")}
+                />
+              </dd>
+            </div>
+          )}
+          {signature?.primaryFingerprint && (
+            <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
+              <dt className="text-text-tertiary">{t("diff.commitDetails.signaturePrimaryKey")}</dt>
+              <dd className="selectable break-all font-mono">{signature.primaryFingerprint}</dd>
+            </div>
+          )}
           <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-3">
             <dt className="text-text-tertiary">{t("diff.commitDetails.parents")}</dt>
             <dd className="flex min-w-0 flex-wrap gap-1.5">
@@ -151,6 +250,17 @@ export function CommitDetails({
             </div>
           )}
         </dl>
+        {signature?.diagnostics && (
+          <Disclosure title={t("diff.commitDetails.verificationDetails")} className="mt-2 text-xs">
+            <CodeBlock
+              label={t("diff.commitDetails.verificationOutput")}
+              wrap
+              className="mt-2 max-h-40"
+            >
+              {signature.diagnostics}
+            </CodeBlock>
+          </Disclosure>
+        )}
         {inspection?.shallow && (
           <p>{t("diff.commitDetails.shallowRepositoryEarlierAncestorsMayNotBeAvailable")}</p>
         )}

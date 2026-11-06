@@ -429,6 +429,7 @@ export function RepositoryRowsPreview() {
             containingRefs: ["refs/heads/main"],
             shallow: false,
             signed: false,
+            signature: { status: "unsigned", format: null, reasonCode: null, diagnostics: "" },
           }}
           onSelectParent={(oid) => setCommit(COMMITS.find((item) => item.oid === oid) ?? commit)}
         />

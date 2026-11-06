@@ -90,7 +90,39 @@ export interface CommitInspection {
   containingRefs: string[];
   shallow: boolean;
   signed: boolean;
+  signature: CommitSignatureVerification;
 }
+
+export type CommitSignatureFormat = "openpgp" | "ssh" | "x509" | "unknown";
+
+export interface CommitSignatureVerification {
+  status: "verified" | "invalid" | "unverified" | "unsigned";
+  format: CommitSignatureFormat | null;
+  reasonCode:
+    | "bad-signature"
+    | "missing-key"
+    | "missing-trust"
+    | "untrusted-key"
+    | "expired-signature"
+    | "expired-key"
+    | "revoked-key"
+    | "verification-error"
+    | "unsupported-format"
+    | null;
+  signer?: string;
+  keyId?: string;
+  fingerprint?: string;
+  primaryFingerprint?: string;
+  trustLevel?: "undefined" | "never" | "marginal" | "fully" | "ultimate";
+  diagnostics: string;
+}
+
+export const UNSIGNED_COMMIT_SIGNATURE: Readonly<CommitSignatureVerification> = Object.freeze({
+  status: "unsigned",
+  format: null,
+  reasonCode: null,
+  diagnostics: "",
+});
 
 export type DiffLineType = "context" | "addition" | "deletion" | "no-newline";
 

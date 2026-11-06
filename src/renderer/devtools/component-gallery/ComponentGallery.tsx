@@ -87,6 +87,8 @@ import {
   KeysPreview,
 } from "./ComponentPreviews";
 
+const previewRelease = { name: "Eda", version: "0.0.3" };
+
 const ICONS: { name: string; icon: LucideIcon }[] = [
   { name: "BranchIcon", icon: BranchIcon },
   { name: "CheckIcon", icon: CheckIcon },
@@ -846,7 +848,9 @@ export function ComponentGallery() {
               label={t("globalGitWarning.globalGitConfigurationWarning")}
               tone="warning"
             >
-              {t("globalGitWarning.globalGitSettingsDifferFrom", { name: "Alex" })}
+              {t("globalGitWarning.globalGitSettingsDifferFrom", {
+                name: t("componentGallery.alexChen"),
+              })}
             </StatusBanner>
 
             {showStatusNotice && (
@@ -863,7 +867,9 @@ export function ComponentGallery() {
                   </Button>
                 }
               >
-                {t("appUpdateNotice.isAvailable", { value1: "Eda 0.0.3" })}
+                {t("appUpdateNotice.isAvailable", {
+                  value1: `${previewRelease.name} ${previewRelease.version}`,
+                })}
               </StatusBanner>
             )}
           </StatusBannerStack>

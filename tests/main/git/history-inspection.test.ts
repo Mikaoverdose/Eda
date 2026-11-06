@@ -5,7 +5,7 @@ import { SshService } from "@main/ssh/ssh-service";
 import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 
 describe("history visibility and inspection", () => {
-  it("detects commit signatures from headers without verifying them or mistaking message text for a signature", async () => {
+  it("detects signature headers and preserves commit details when the verifier is unavailable", async () => {
     const repo = await createTempRepo();
 
     try {
@@ -33,7 +33,9 @@ describe("history visibility and inspection", () => {
       ]);
       const signed = (await repo.run(["rev-parse", "HEAD"])).trim();
       await repo.run(["config", "gpg.ssh.program", join(repo.home, "missing-verifier")]);
-      expect((await repo.git.inspectCommit(repo.path, signed)).signed).toBe(true);
+      const inspection = await repo.git.inspectCommit(repo.path, signed);
+      expect(inspection.signed).toBe(true);
+      expect(inspection.signature.status).toBe("unverified");
       expect((await repo.git.inspectCommit(repo.path, unsigned)).signed).toBe(false);
     } finally {
       await repo.cleanup();

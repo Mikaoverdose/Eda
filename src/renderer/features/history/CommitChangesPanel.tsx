@@ -50,6 +50,7 @@ export function CommitChangesPanel() {
   const changeCount = useRepositoryStore((state) => state.status?.changes.length ?? 0);
   const truncatedChanges = useRepositoryStore((state) => state.truncatedChanges);
   const [query, setQuery] = useState("");
+  const [verificationRevision, setVerificationRevision] = useState(0);
   const [details, setDetails] = useState<{
     oid: string;
     inspection?: CommitInspection;
@@ -58,9 +59,12 @@ export function CommitChangesPanel() {
   const panel = usePanel("rail");
 
   useEffect(() => {
+    setQuery("");
+  }, [repositoryId, generation, oid]);
+
+  useEffect(() => {
     let alive = true;
 
-    setQuery("");
     setDetails(null);
 
     if (repositoryId && oid) {
@@ -77,7 +81,7 @@ export function CommitChangesPanel() {
     return () => {
       alive = false;
     };
-  }, [repositoryId, generation, oid]);
+  }, [repositoryId, generation, oid, verificationRevision]);
 
   const inspection = details?.oid === oid ? (details.inspection ?? null) : null;
   const commit =
@@ -107,31 +111,31 @@ export function CommitChangesPanel() {
           collapseDirection="right"
         />
       </header>
-      <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-accent-border bg-accent-muted px-3 py-1.5 text-xs text-text-primary">
-        <span role="status">
-          {changeCount
-            ? t(
-                truncatedChanges
-                  ? "commitChangesPanel.workingTreeChangesTruncated"
-                  : "commitChangesPanel.workingTreeChanges",
-                { count: changeCount },
-              )
-            : t("commitChangesPanel.workingTreeClean")}
-        </span>
-        <ButtonBase
-          onClick={showWorkingTree}
-          className="shrink-0 rounded-sm border border-accent-border px-1.5 py-0.5 text-xs text-accent-text hover:bg-bg-raised"
-        >
-          {changeCount
-            ? t("commitChangesPanel.viewWorkingTreeChanges")
-            : t("commitChangesPanel.workingTree")}
-        </ButtonBase>
-      </div>
+      {changeCount > 0 && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-accent-border bg-accent-muted px-3 py-1.5 text-xs text-text-primary">
+          <span role="status">
+            {t(
+              truncatedChanges
+                ? "commitChangesPanel.workingTreeChangesTruncated"
+                : "commitChangesPanel.workingTreeChanges",
+              { count: changeCount },
+            )}
+          </span>
+          <ButtonBase
+            onClick={showWorkingTree}
+            className="shrink-0 rounded-sm border border-accent-border px-1.5 py-0.5 text-xs text-accent-text hover:bg-bg-raised"
+          >
+            {t("commitChangesPanel.viewWorkingTreeChanges")}
+          </ButtonBase>
+        </div>
+      )}
       <div className="max-h-[40%] shrink-0 overflow-auto">
         {commit && (
           <CommitDetails
             commit={commit}
             inspection={inspection}
+            verifying={details?.oid !== oid}
+            onVerify={() => setVerificationRevision((revision) => revision + 1)}
             onSelectParent={(parent) => void useRepositoryStore.getState().jumpToCommit(parent)}
           />
         )}

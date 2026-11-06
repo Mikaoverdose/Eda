@@ -7,6 +7,9 @@ import {
   HISTORY_PAGE_SIZE,
   MAX_HISTORY_PAGE_SIZE,
   type CommitInspection,
+  type CommitSignatureFormat,
+  type CommitSignatureVerification,
+  UNSIGNED_COMMIT_SIGNATURE,
   type DiffArea,
   type HistoryPage,
   type RepositoryStatus,
@@ -28,6 +31,7 @@ import { ProcessSpawnError, type ProcessRunner } from "./execution/process-runne
 import { readStashHistory } from "./operations/stash-history";
 import { parseUnifiedDiff } from "./parsers/diff-parser";
 import { parseLog } from "./parsers/log-parser";
+import { commitSignatureFormat, parseCommitVerification } from "./security/commit-signature";
 
 import { parseStatus } from "./parsers/status-parser";
 import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "./validation";
@@ -445,12 +449,73 @@ export class GitService {
         ),
       });
 
+    const signature = await this.verifyCommitSignature(
+      path,
+      oid,
+      commitSignatureFormat(object.stdout),
+    );
+
     return {
       commit,
       containingRefs: refs.stdout.trim().split("\n").filter(Boolean),
       shallow: shallow.stdout.trim() === "true",
-      signed: /^gpgsig(?:-sha256)? /m.test(object.stdout.split("\n\n", 1)[0] ?? ""),
+      signed: signature.status !== "unsigned",
+      signature,
     };
+  }
+
+  private async verifyCommitSignature(
+    path: string,
+    oid: string,
+    format: CommitSignatureFormat | null,
+  ): Promise<CommitSignatureVerification> {
+    if (format === null) return UNSIGNED_COMMIT_SIGNATURE;
+
+    try {
+      const result = await this.exec(["verify-commit", "--raw", "--", oid], {
+        cwd: path,
+        operation: t("operations.verifyCommitSignature"),
+        allowedExitCodes: [0, 1, 128],
+        maxStdoutBytes: 64 * 1024,
+        maxStderrBytes: 64 * 1024,
+      });
+
+      const verification = parseCommitVerification(
+        format,
+        result.exitCode,
+        `${result.stdout}\n${result.stderr}`,
+      );
+
+      if (
+        format === "ssh" &&
+        verification.reasonCode === "verification-error" &&
+        result.exitCode !== 0 &&
+        verification.diagnostics === "Could not verify signature."
+      ) {
+        const status = await this.exec(
+          ["log", "-1", "--no-show-signature", "--format=%G?", oid, "--"],
+          {
+            cwd: path,
+            operation: t("operations.verifyCommitSignature"),
+            maxStdoutBytes: 1024,
+            maxStderrBytes: 64 * 1024,
+          },
+        );
+        if (status.stdout.trim() === "B")
+          return { ...verification, status: "invalid", reasonCode: "bad-signature" };
+      }
+
+      return verification;
+    } catch (error) {
+      if (error instanceof GitError && error.kind === "cancelled") throw error;
+      const diagnostics =
+        error instanceof GitError ? error.rawStderr || error.message : String(error);
+      return {
+        ...parseCommitVerification(format, 1, diagnostics),
+        status: "unverified",
+        reasonCode: "verification-error",
+      };
+    }
   }
 
   async workingDiff(
