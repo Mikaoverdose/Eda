@@ -22,6 +22,9 @@ vi.mock("node:fs", async (importOriginal) => ({
   mkdirSync: startup.mkdirSync,
   renameSync: startup.renameSync,
 }));
+vi.mock("@main/git/execution/shell-path", () => ({
+  restoreShellPath: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@main/services", () => ({ createServices: startup.createServices }));
 vi.mock("@main/ipc/register", () => ({ registerIpcHandlers: vi.fn() }));
 vi.mock("electron", () => ({

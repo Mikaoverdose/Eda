@@ -12,7 +12,11 @@ import {
 import type { GitService } from "../../git/git-service";
 import { readWorkflowState } from "../../git/operations/workflow-state";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
-import { workflowFingerprint } from "../workflows/workflow-fingerprint";
+import {
+  fingerprintContents,
+  readWorkflowContents,
+  workflowFingerprint,
+} from "../workflows/workflow-fingerprint";
 import { ensureRecoveryRefs } from "./rewrite-history";
 
 const invalid = (message: ErrorText) =>
@@ -84,7 +88,9 @@ export class RefHistory {
       throw invalid(errorText("main.refHistory.thereAreTooManyUnfinishedReferenceActionsInspect"));
 
     const before = await this.git.status(root);
-    const beforeFingerprint = await workflowFingerprint(this.git, root, before);
+    const contents = await readWorkflowContents(this.git, root);
+    const beforeFingerprint = fingerprintContents(before, contents);
+    const startContentFingerprint = fingerprintContents(before.changes, contents);
     const configName =
       descriptor.kind === "branch-create" || descriptor.kind === "branch-delete"
         ? descriptor.name
@@ -162,7 +168,7 @@ export class RefHistory {
         beforeHead: before.branch.oid ?? null,
         beforeBranch: before.branch.detached ? null : (before.branch.head ?? null),
         beforeFingerprint,
-        startContentFingerprint: await workflowFingerprint(this.git, root, before, true),
+        startContentFingerprint,
         cleanStart: before.changes.length === 0,
         beforeIndexFlags: (
           await this.git.exec(["ls-files", "-v", "-z"], {
@@ -473,11 +479,11 @@ export async function validateRefHistory(
   );
 
   const pendingRename = options.pendingConfiguration && operation.kind === "branch-rename";
+  const status = await git.status(record.root);
   const fingerprint = await workflowFingerprint(
     git,
     record.root,
-    await git.status(record.root),
-    !!pendingRename,
+    pendingRename ? status.changes : status,
   );
 
   if (
@@ -705,17 +711,19 @@ export async function completedRefIntent(git: GitService, record: WorkflowJourna
         throw invalid(
           errorText("main.refHistory.thisInterruptedCheckoutHasLocalChangesInspectThe"),
         );
-    } else if (
-      !operation.startContentFingerprint ||
-      operation.startContentFingerprint !==
-        (await workflowFingerprint(git, record.root, status, true)) ||
-      flags !== operation.beforeIndexFlags
+    }
+
+    const contents = await readWorkflowContents(git, record.root);
+    if (
+      !changesCheckout &&
+      (operation.startContentFingerprint !== fingerprintContents(status.changes, contents) ||
+        flags !== operation.beforeIndexFlags)
     )
       throw invalid(
         errorText("main.refHistory.repositoryContentsChangedDuringThisActionPreserveNewer"),
       );
 
-    next.afterFingerprint = await workflowFingerprint(git, record.root, status);
+    next.afterFingerprint = fingerprintContents(status, contents);
     next.afterIndexFlags = flags;
   }
 

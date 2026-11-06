@@ -269,7 +269,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     });
   };
 
-  const reloadAfterWrite = async (repositoryId: string): Promise<void> => {
+  const reloadAfterWrite = async (repositoryId: string): Promise<boolean> => {
     const { generation } = get();
     const revision = ++historyRevision;
 
@@ -290,14 +290,14 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       get().repositoryId !== repositoryId ||
       revision !== historyRevision
     )
-      return;
+      return false;
 
     if (!statusResult.ok) {
       set({
         phase: statusResult.error.kind === "not-a-repository" ? "missing" : "error",
         error: statusResult.error,
       });
-      return;
+      return false;
     }
 
     const changes = statusResult.value.changes.slice(0, MAX_STATUS_CHANGES);
@@ -336,6 +336,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       diffRequestKey = null;
       await loadDiff({ ...selected });
     }
+    return true;
   };
 
   const loadDiff = async (selection: Exclude<RepositorySelection, null>) => {
@@ -465,9 +466,15 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
         return false;
       }
 
-      await reloadAfterWrite(repositoryId);
+      const refreshed = await reloadAfterWrite(repositoryId);
 
-      if (before?.kind === "change") advanceSelection(before, successors);
+      if (
+        refreshed &&
+        get().generation === generation &&
+        before?.kind === "change" &&
+        get().selection === before
+      )
+        advanceSelection(before, successors);
 
       return true;
     } finally {

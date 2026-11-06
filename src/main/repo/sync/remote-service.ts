@@ -28,6 +28,7 @@ import type { OperationManager } from "../../operations/operation-manager";
 import type { FetchHistoryRepository } from "../../persistence/fetch-history-repository";
 import type { IdentityRepository } from "../../persistence/identity-repository";
 import type { GitHubAuth } from "../../providers/github-auth";
+import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
 
@@ -36,12 +37,11 @@ interface PreparedPush {
   request: PushRequest;
   identity: Identity;
   path: string;
-  expires: number;
 }
 
 export class RemoteService {
   private readonly remotes: GitRemotes;
-  private readonly pushes = new Map<string, PreparedPush>();
+  private readonly pushes = new PreviewStore<PreparedPush>(20);
 
   constructor(
     private readonly git: GitService,
@@ -295,11 +295,6 @@ export class RemoteService {
           mode: request.mode,
         };
 
-        for (const [key, value] of this.pushes)
-          if (value.expires < Date.now()) this.pushes.delete(key);
-
-        if (this.pushes.size >= 20) this.pushes.delete(this.pushes.keys().next().value!);
-
         const savedRequest = { ...request };
 
         delete savedRequest.credentials;
@@ -308,7 +303,6 @@ export class RemoteService {
           request: savedRequest,
           path,
           identity,
-          expires: Date.now() + 5 * 60_000,
         });
 
         return preview;
@@ -326,7 +320,6 @@ export class RemoteService {
 
     if (
       !prepared ||
-      prepared.expires < Date.now() ||
       prepared.request.repositoryId !== id ||
       prepared.identity.id !== repository.identityId ||
       prepared.path !== repository.path

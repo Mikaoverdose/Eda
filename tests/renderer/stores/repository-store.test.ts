@@ -444,6 +444,39 @@ describe("repository read store", () => {
     expect(selection).toMatchObject({ kind: "change", path: "b.ts", area: "unstaged" });
   });
 
+  it.each(["same", "different"])(
+    "keeps a newer selection in the %s repository while staging refreshes",
+    async (target) => {
+      const bridge = api(async () => ok({ commits: [], nextOffset: null }));
+      bridge.repository.stage = async () => ok(undefined);
+      Object.defineProperty(window, "eda", { configurable: true, value: bridge });
+      const store = useRepositoryStore.getState();
+      await store.open("repo", "identity", true);
+      await store.selectChange(
+        { kind: "ordinary", path: "a", index: ".", worktree: "M", submodule: "N..." },
+        "unstaged",
+      );
+
+      let finish!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const status = bridge.repository.status;
+      const refresh = vi.spyOn(bridge.repository, "status").mockImplementationOnce(async (id) => {
+        await pending;
+        return status(id);
+      });
+      const staging = store.stage(["a"]);
+      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+      if (target === "different") await store.open("other", "identity", true);
+      await store.selectCommit("selected");
+      finish();
+      await staging;
+
+      expect(useRepositoryStore.getState().selection).toEqual({ kind: "commit", oid: "selected" });
+    },
+  );
+
   it("clears the preview when the staged file was the last one in its area", async () => {
     const unstaged = (path: string) => ({
       kind: "ordinary" as const,

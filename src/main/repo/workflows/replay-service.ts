@@ -15,6 +15,7 @@ import { assertFullObjectId } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { PreviewStore } from "../preview-store";
 import { captureRewriteStart, finalizeRewrite } from "../history/rewrite-history";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
@@ -27,20 +28,16 @@ const invalid = (message: ErrorText) =>
 
 export class ReplayService {
   private readonly recovery: DiscardService;
-  private readonly reviews = new Map<
-    string,
-    {
-      review: ReplayReview;
-      root: string;
-      repositoryId: string;
-      identity: Identity;
-      workflowToken: string | null;
-      fingerprint: string;
-      record?: WorkflowJournalRecord;
-      snapshot?: OperationSnapshot;
-      expires: number;
-    }
-  >();
+  private readonly reviews = new PreviewStore<{
+    review: ReplayReview;
+    root: string;
+    repositoryId: string;
+    identity: Identity;
+    workflowToken: string | null;
+    fingerprint: string;
+    record?: WorkflowJournalRecord;
+    snapshot?: OperationSnapshot;
+  }>();
 
   constructor(
     private readonly git: GitService,
@@ -211,10 +208,7 @@ export class ReplayService {
           fingerprint: await workflowFingerprint(this.git, root, status),
           ...(record ? { record } : {}),
           ...(snapshot ? { snapshot } : {}),
-          expires: Date.now() + 300_000,
         });
-
-        while (this.reviews.size > 8) this.reviews.delete(this.reviews.keys().next().value!);
 
         return review;
       },
@@ -227,7 +221,6 @@ export class ReplayService {
 
     if (
       !pending ||
-      pending.expires < Date.now() ||
       pending.repositoryId !== repositoryId ||
       pending.root !== repository.path ||
       pending.identity.id !== repository.identityId

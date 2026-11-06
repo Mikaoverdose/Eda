@@ -30,7 +30,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
   );
   const prefixes = usePreferencesStore((state) => state.values.commitPrefixes.value);
   const [expanded, setExpanded] = useState(true);
-  const [pushAfterCommit, setPushAfterCommit] = useState(false);
+  const [pushRequest, setPushRequest] = useState(0);
   const [coauthorOpen, setCoauthorOpen] = useState(false);
   const [coauthorName, setCoauthorName] = useState("");
   const [coauthorEmail, setCoauthorEmail] = useState("");
@@ -149,7 +149,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
         current.snapshot?.context.profileId === owner &&
         useRepositoryStore.getState().repositoryId === repositoryId
       )
-        setPushAfterCommit(true);
+        setPushRequest((previous) => previous + 1);
     }
   };
 
@@ -445,8 +445,8 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
               {amend ? t("commitBox.amendAndPush") : t("commitBox.commitAndPush")}
             </Button>
           </div>
-          {pushAfterCommit && repositoryId && (
-            <DirectPush repositoryId={repositoryId} afterCommit />
+          {pushRequest > 0 && repositoryId && (
+            <DirectPush key={pushRequest} repositoryId={repositoryId} afterCommit />
           )}
         </div>
       </Disclosure>

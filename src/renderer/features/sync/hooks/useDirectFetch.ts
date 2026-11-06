@@ -5,21 +5,12 @@ import {
   type RemoteSummary,
   type TransportCredentials,
 } from "@shared/integrations/remotes";
-import { useEffect, useRef, useState } from "react";
-import { ACTION_FEEDBACK } from "../../../motion";
-import { useAppStore } from "../../../stores/app-store";
+import { useState } from "react";
 import { useRepositoryStore } from "../../../stores/repository-store";
+import { useTransportOperation } from "./useTransportOperation";
 
 export function useDirectFetch(repositoryId: string) {
-  const running = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const [busy, setBusy] = useState(false);
+  const { busy, begin } = useTransportOperation(repositoryId);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [authentication, setAuthentication] = useState<string | null>(null);
@@ -28,23 +19,14 @@ export function useDirectFetch(repositoryId: string) {
   const [remotes, setRemotes] = useState<RemoteSummary[]>([]);
 
   const fetch = async (target?: string | null, credentials?: TransportCredentials) => {
-    if (running.current) return;
-    const profileId = useAppStore.getState().activeIdentity?.id;
-    const current = () =>
-      mounted.current &&
-      useAppStore.getState().selectedRepositoryId === repositoryId &&
-      useAppStore.getState().activeIdentity?.id === profileId;
-    if (!current() || !profileId) return;
-    running.current = true;
-    setBusy(true);
+    const operation = begin();
+    if (!operation) return;
+    const { current, profileId } = operation;
     setError(null);
     setMessage(null);
     setAuthentication(null);
     setGitHubAuthentication(null);
     setGitHubAccessDenied(false);
-    const minimumPending = new Promise<void>((resolve) =>
-      setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
-    );
     try {
       const context = { profileId, repositoryId };
       const [inspected, prune, tags] = await Promise.all([
@@ -115,9 +97,7 @@ export function useDirectFetch(repositoryId: string) {
     } catch {
       if (current()) setError(t("useDirectFetch.couldNotCompleteFetchTryAgain"));
     } finally {
-      await minimumPending;
-      running.current = false;
-      if (mounted.current) setBusy(false);
+      await operation.finish();
       if (current()) await useRepositoryStore.getState().syncFromDisk();
     }
   };

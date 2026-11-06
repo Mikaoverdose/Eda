@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import { assertFullObjectId, assertValidRefName } from "../../git/validation";
 import type { WorkflowJournal } from "../../persistence/workflow-journal";
+import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
 
@@ -21,10 +22,12 @@ const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.recoverHistory"), message });
 
 export class HistoryRecoveryService {
-  private readonly inspections = new Map<
-    string,
-    { repositoryId: string; profileId: string; root: string; oid: string; expires: number }
-  >();
+  private readonly inspections = new PreviewStore<{
+    repositoryId: string;
+    profileId: string;
+    root: string;
+    oid: string;
+  }>();
 
   constructor(
     private readonly git: GitService,
@@ -197,11 +200,7 @@ export class HistoryRecoveryService {
       profileId: repository.identityId,
       root: repository.path,
       oid,
-      expires: Date.now() + 300_000,
     });
-
-    while (this.inspections.size > 8)
-      this.inspections.delete(this.inspections.keys().next().value!);
 
     return { token, inspection, diff, ...(diffNotice ? { diffNotice } : {}) };
   }
@@ -212,7 +211,6 @@ export class HistoryRecoveryService {
 
     if (
       !review ||
-      review.expires < Date.now() ||
       review.repositoryId !== repositoryId ||
       review.profileId !== repository.identityId ||
       review.root !== repository.path

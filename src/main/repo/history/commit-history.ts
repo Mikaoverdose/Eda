@@ -7,7 +7,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
 import { repositoryCommonDirectory } from "../lifecycle/repository-location";
-import { workflowFingerprint } from "../workflows/workflow-fingerprint";
+import {
+  fingerprintContents,
+  readWorkflowContents,
+  workflowFingerprint,
+} from "../workflows/workflow-fingerprint";
 import { pruneHistoryRecords } from "./history-retention";
 import { isPublishedCommit } from "./shared-history";
 
@@ -17,20 +21,13 @@ export class CommitHistory {
     private readonly journal: WorkflowJournal,
   ) {}
 
-  private async workingState(root: string) {
-    const diff = await this.git.exec(["diff", "--binary", "--no-ext-diff", "--no-textconv", "--"], {
-      cwd: root,
-      operation: t("operations.captureCommitWorkingState"),
-    });
+  private async workingState(root: string, workingDiff: Buffer) {
     const untracked = await this.git.exec(["ls-files", "--others", "--exclude-standard", "-z"], {
       cwd: root,
       operation: t("operations.captureCommitUntrackedPaths"),
     });
 
-    return createHash("sha256")
-      .update(diff.stdoutBytes)
-      .update(untracked.stdoutBytes)
-      .digest("hex");
+    return createHash("sha256").update(workingDiff).update(untracked.stdoutBytes).digest("hex");
   }
 
   async run(
@@ -41,7 +38,8 @@ export class CommitHistory {
     commit: () => Promise<string>,
   ): Promise<CommitResult> {
     const before = await this.git.status(root);
-    const fingerprint = await workflowFingerprint(this.git, root, before);
+    const beforeContents = await readWorkflowContents(this.git, root);
+    const fingerprint = fingerprintContents(before, beforeContents);
     const flags = (
       await this.git.exec(["ls-files", "-v", "-z"], {
         cwd: root,
@@ -55,7 +53,7 @@ export class CommitHistory {
         operation: t("operations.preservePreCommitIndex"),
       })
     ).stdout.trim();
-    const working = await this.workingState(root);
+    const working = await this.workingState(root, beforeContents.working);
     const expectedParents =
       amend && before.branch.oid
         ? (
@@ -146,7 +144,8 @@ export class CommitHistory {
         })
       ).stdout;
 
-      const afterFingerprint = await workflowFingerprint(this.git, root, after);
+      const afterContents = await readWorkflowContents(this.git, root);
+      const afterFingerprint = fingerprintContents(after, afterContents);
       const subject = (
         await this.git.exec(["show", "-s", "--format=%s", oid, "--"], {
           cwd: root,
@@ -169,7 +168,7 @@ export class CommitHistory {
         after.branch.oid !== oid ||
         afterTree !== indexTree ||
         afterFlags !== flags ||
-        (await this.workingState(root)) !== working ||
+        (await this.workingState(root, afterContents.working)) !== working ||
         after.branch.head !== before.branch.head ||
         after.branch.upstream !== before.branch.upstream;
 

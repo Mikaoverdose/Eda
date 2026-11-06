@@ -32,6 +32,14 @@ import { parseLog } from "./parsers/log-parser";
 import { parseStatus } from "./parsers/status-parser";
 import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "./validation";
 
+const UNIFIED_DIFF_FLAGS = [
+  "--no-ext-diff",
+  "--no-textconv",
+  "--full-index",
+  "--unified=3",
+] as const;
+const DIFF_OUTPUT_LIMITS = { maxStdoutBytes: 32 * 1024 * 1024, maxStderrBytes: 1024 * 1024 };
+
 export interface GitExecOptions {
   redactValues?: readonly string[];
   cwd?: string;
@@ -444,15 +452,7 @@ export class GitService {
     options: { area: DiffArea; paths?: readonly string[] },
   ): Promise<UnifiedDiff> {
     const paths = literalPathspecs(options.paths, t("operations.readWorkingDiff"));
-    const args = [
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--full-index",
-      "--unified=3",
-    ];
+    const args = ["-c", "core.quotePath=false", "diff", ...UNIFIED_DIFF_FLAGS];
 
     if (options.area === "staged") args.push("--cached");
 
@@ -461,8 +461,7 @@ export class GitService {
     const { stdoutBytes } = await this.exec(args, {
       cwd: path,
       operation: t("operations.readWorkingDiff"),
-      maxStdoutBytes: 32 * 1024 * 1024,
-      maxStderrBytes: 1024 * 1024,
+      ...DIFF_OUTPUT_LIMITS,
     });
 
     const diff = parseOutput(parseUnifiedDiff, stdoutBytes, path, t("operations.readWorkingDiff"));
@@ -477,7 +476,7 @@ export class GitService {
 
     if (untracked.length > 256) throw outputTooLarge(path, t("operations.readWorkingDiff"));
 
-    let remaining = 32 * 1024 * 1024 - stdoutBytes.length;
+    let remaining = DIFF_OUTPUT_LIMITS.maxStdoutBytes - stdoutBytes.length;
 
     for (const change of untracked) {
       assertRepositoryPath(change.path, t("operations.readWorkingDiff"));
@@ -491,10 +490,7 @@ export class GitService {
           "core.quotePath=false",
           "diff",
           "--no-index",
-          "--no-ext-diff",
-          "--no-textconv",
-          "--full-index",
-          "--unified=3",
+          ...UNIFIED_DIFF_FLAGS,
           "--",
           nullPath,
           change.path,
@@ -503,8 +499,8 @@ export class GitService {
           cwd: path,
           operation: t("operations.readUntrackedDiff"),
           allowedExitCodes: [0, 1],
+          ...DIFF_OUTPUT_LIMITS,
           maxStdoutBytes: remaining,
-          maxStderrBytes: 1024 * 1024,
         },
       );
 
@@ -536,10 +532,7 @@ export class GitService {
         "--no-commit-id",
         "-r",
         "-p",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--full-index",
-        "--unified=3",
+        ...UNIFIED_DIFF_FLAGS,
         oid,
         "--",
         ...safePaths,
@@ -547,8 +540,7 @@ export class GitService {
       {
         cwd: path,
         operation: t("operations.readCommitDiff"),
-        maxStdoutBytes: 32 * 1024 * 1024,
-        maxStderrBytes: 1024 * 1024,
+        ...DIFF_OUTPUT_LIMITS,
       },
     );
 
@@ -560,24 +552,11 @@ export class GitService {
     assertFullObjectId(to, t("operations.compareRevisions"));
 
     const { stdoutBytes } = await this.exec(
-      [
-        "-c",
-        "core.quotePath=false",
-        "diff",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--full-index",
-        "--unified=3",
-        from,
-        to,
-        "--",
-      ],
+      ["-c", "core.quotePath=false", "diff", "--no-color", ...UNIFIED_DIFF_FLAGS, from, to, "--"],
       {
         cwd: path,
         operation: t("operations.compareRevisions"),
-        maxStdoutBytes: 32 * 1024 * 1024,
-        maxStderrBytes: 1024 * 1024,
+        ...DIFF_OUTPUT_LIMITS,
       },
     );
 

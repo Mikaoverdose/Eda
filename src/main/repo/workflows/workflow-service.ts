@@ -22,6 +22,7 @@ import { assertFullObjectId } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import { DiscardService } from "../working-tree/discard-service";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
@@ -67,27 +68,19 @@ export function matchesNativeWorkflow(
 }
 
 export class WorkflowService {
-  private readonly starts = new Map<
-    string,
-    {
-      preview: MergeStartPreview;
-      root: string;
-      repositoryId: string;
-      identity: Identity;
-      expires: number;
-      autostash: boolean;
-    }
-  >();
+  private readonly starts = new PreviewStore<{
+    preview: MergeStartPreview;
+    root: string;
+    repositoryId: string;
+    identity: Identity;
+    autostash: boolean;
+  }>();
   private readonly recovery: DiscardService;
-  private readonly aborts = new Map<
-    string,
-    {
-      snapshot: Awaited<ReturnType<DiscardService["prepareOperation"]>>;
-      workflow: string;
-      status: string;
-      expires: number;
-    }
-  >();
+  private readonly aborts = new PreviewStore<{
+    snapshot: Awaited<ReturnType<DiscardService["prepareOperation"]>>;
+    workflow: string;
+    status: string;
+  }>(2);
 
   constructor(
     private readonly git: GitService,
@@ -446,10 +439,7 @@ export class WorkflowService {
           root,
           repositoryId,
           identity,
-          expires: Date.now() + 300_000,
         });
-
-        while (this.starts.size > 8) this.starts.delete(this.starts.keys().next().value!);
 
         return preview;
       },
@@ -462,7 +452,6 @@ export class WorkflowService {
 
     if (
       !pending ||
-      pending.expires < Date.now() ||
       pending.repositoryId !== repositoryId ||
       pending.root !== repository.path ||
       pending.identity.id !== repository.identityId
@@ -714,10 +703,7 @@ export class WorkflowService {
           snapshot,
           workflow: workflow.token,
           status: JSON.stringify(status),
-          expires: Date.now() + 300_000,
         });
-
-        while (this.aborts.size > 2) this.aborts.delete(this.aborts.keys().next().value!);
 
         return {
           token,
@@ -735,7 +721,6 @@ export class WorkflowService {
 
     if (
       !pending ||
-      pending.expires < Date.now() ||
       pending.snapshot.record.repositoryId !== repositoryId ||
       pending.snapshot.record.profileId !== repository.identityId ||
       pending.snapshot.record.root !== repository.path

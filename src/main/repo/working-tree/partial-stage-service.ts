@@ -6,20 +6,17 @@ import { createHash, randomUUID } from "node:crypto";
 import type { GitService } from "../../git/git-service";
 import { partialPatch } from "../../git/operations/partial-patch";
 import { assertRepositoryPath } from "../../git/validation";
+import { PreviewStore } from "../preview-store";
 
 export class PartialStageService {
-  private readonly previews = new Map<
-    string,
-    {
-      profileId: string;
-      repositoryId: string;
-      root: string;
-      request: PartialStageRequest;
-      fingerprint: string;
-      patch: string;
-      expires: number;
-    }
-  >();
+  private readonly previews = new PreviewStore<{
+    profileId: string;
+    repositoryId: string;
+    root: string;
+    request: PartialStageRequest;
+    fingerprint: string;
+    patch: string;
+  }>(32);
 
   constructor(private readonly git: GitService) {}
 
@@ -114,10 +111,7 @@ export class PartialStageService {
       request: structuredClone(request),
       fingerprint: source.fingerprint,
       patch: result.patch,
-      expires: Date.now() + 300_000,
     });
-
-    if (this.previews.size > 32) this.previews.delete(this.previews.keys().next().value!);
 
     return { token, ...result };
   }
@@ -129,8 +123,7 @@ export class PartialStageService {
       !preview ||
       preview.root !== root ||
       preview.profileId !== profileId ||
-      preview.repositoryId !== repositoryId ||
-      preview.expires < Date.now()
+      preview.repositoryId !== repositoryId
     )
       throw new GitError({
         kind: "invalid-input",

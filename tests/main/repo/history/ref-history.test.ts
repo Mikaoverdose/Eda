@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { createTempRepo, type TempRepo } from "../../../helpers/temp-repo";
@@ -112,6 +113,25 @@ async function interruptOriginal(operation: string, work: () => Promise<void>) {
     failure.mockRestore();
   }
 }
+
+it("writes reference fingerprints compatible with existing recovery journals", async () => {
+  const { repository, context } = await setup();
+  await repo.writeFile("base.txt", "staged\n");
+  await repo.run(["add", "base.txt"]);
+  await repo.writeFile("base.txt", "unstaged\n");
+
+  const status = await repo.git.status(repo.path);
+  const index = await repo.run(["ls-files", "--stage", "-z"]);
+  const diff = await repo.run(["diff", "--binary", "--no-ext-diff", "--no-textconv", "--"]);
+  const storedDigest = (value: unknown) =>
+    createHash("sha256").update(JSON.stringify(value)).update(index).update(diff).digest("hex");
+
+  await context.writer.createBranch(repository.id, "feature");
+  expect(context.journal.refActions(repository.path)[0]?.refOperation).toMatchObject({
+    beforeFingerprint: storedDigest(status),
+    startContentFingerprint: storedDigest(status.changes),
+  });
+});
 
 it("reverses branch creation and checkout, and refuses an externally moved HEAD", async () => {
   const run = await setup();

@@ -24,6 +24,7 @@ import { createScopedStash } from "../../git/operations/scoped-stash";
 import { assertFullObjectId, assertRepositoryPath, assertValidRefName } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
+import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import { DiscardService } from "../working-tree/discard-service";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
@@ -33,19 +34,15 @@ const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.manageStashes"), message });
 
 export class StashService {
-  private readonly previews = new Map<
-    string,
-    {
-      profileId: string;
-      repositoryId: string;
-      root: string;
-      entry: StashEntry;
-      fingerprint: string;
-      expires: number;
-      trees: Record<StashArea, string | null>;
-      paths: Record<StashArea, string[]>;
-    }
-  >();
+  private readonly previews = new PreviewStore<{
+    profileId: string;
+    repositoryId: string;
+    root: string;
+    entry: StashEntry;
+    fingerprint: string;
+    trees: Record<StashArea, string | null>;
+    paths: Record<StashArea, string[]>;
+  }>();
   private readonly filePreviews = new Map<
     string,
     {
@@ -315,7 +312,6 @@ export class StashService {
       root: repository.path,
       entry,
       fingerprint: listed.fingerprint,
-      expires: Date.now() + 300_000,
       trees: { tracked: oid, staged: parents[1]!, untracked: parents[2] ?? null },
       paths: {
         tracked: diffPaths(tracked),
@@ -323,8 +319,6 @@ export class StashService {
         untracked: diffPaths(untracked),
       },
     });
-
-    while (this.previews.size > 8) this.previews.delete(this.previews.keys().next().value!);
 
     return {
       entry,
@@ -341,7 +335,6 @@ export class StashService {
 
     if (
       !preview ||
-      preview.expires < Date.now() ||
       preview.repositoryId !== repositoryId ||
       preview.profileId !== repository.identityId ||
       preview.root !== repository.path

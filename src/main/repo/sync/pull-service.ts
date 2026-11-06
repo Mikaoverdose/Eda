@@ -14,6 +14,7 @@ import { createPullAutostash } from "../../git/operations/pull-autostash";
 import { remoteName } from "../../git/operations/remotes";
 import { assertFullObjectId, assertValidRefName } from "../../git/validation";
 import type { SettingsRepository } from "../../persistence/settings-repository";
+import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import type { RebaseService } from "../workflows/rebase-service";
 import type { WorkflowService } from "../workflows/workflow-service";
@@ -24,18 +25,14 @@ const invalid = (message: ErrorText) =>
   new GitError({ kind: "invalid-input", operation: t("operations.pull"), message });
 
 export class PullService {
-  private readonly previews = new Map<
-    string,
-    {
-      preview: PullPreview;
-      profileId: string;
-      root: string;
-      repositoryId: string;
-      operationToken: string | null;
-      fastForward: boolean;
-      expires: number;
-    }
-  >();
+  private readonly previews = new PreviewStore<{
+    preview: PullPreview;
+    profileId: string;
+    root: string;
+    repositoryId: string;
+    operationToken: string | null;
+    fastForward: boolean;
+  }>();
 
   constructor(
     private readonly git: GitService,
@@ -193,10 +190,7 @@ export class PullService {
       repositoryId: request.repositoryId,
       operationToken: operation?.token ?? null,
       fastForward,
-      expires: Date.now() + 300_000,
     });
-
-    while (this.previews.size > 8) this.previews.delete(this.previews.keys().next().value!);
 
     return preview;
   }
@@ -207,7 +201,6 @@ export class PullService {
 
     if (
       !pending ||
-      pending.expires < Date.now() ||
       pending.repositoryId !== repositoryId ||
       pending.profileId !== repository.identityId ||
       pending.root !== repository.path

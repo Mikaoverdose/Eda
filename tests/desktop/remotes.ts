@@ -2,6 +2,7 @@ import { finishOnboarding } from "./helpers/onboarding.ts";
 import { chooseSelect } from "./select-control.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
+import { expect } from "playwright/test";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
@@ -227,7 +228,7 @@ try {
   assert.ok(repository);
 
   await page.getByRole("button", { name: "Fetch options", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Manage remotes…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Manage remotes...", exact: true }).click();
   const remoteSettings = page.locator("#settings-repository-remotes");
   await remoteSettings.getByLabel("Remote name").fill("backup");
   await remoteSettings.getByLabel("Remote URL").fill(remote);
@@ -236,20 +237,20 @@ try {
   assert.equal(resolve(git(clientPath, "remote", "get-url", "backup")), resolve(remote));
   await page.getByRole("button", { name: "Settings", exact: true }).click();
 
-  const fetchAuthentication = page.getByRole("dialog", {
+  const httpsAuthentication = page.getByRole("dialog", {
     name: "HTTPS authentication",
     exact: true,
   });
   await page.getByRole("button", { name: "Fetch", exact: true }).click();
-  await fetchAuthentication.getByLabel("HTTPS username").fill("fixture");
-  await fetchAuthentication.getByLabel("HTTPS token").fill("wrong-token");
-  await fetchAuthentication.getByRole("button", { name: "Retry fetch", exact: true }).click();
-  await fetchAuthentication.getByLabel("HTTPS token").fill(token);
-  await fetchAuthentication.getByLabel("HTTPS username").fill("fixture");
+  await httpsAuthentication.getByLabel("HTTPS username").fill("fixture");
+  await httpsAuthentication.getByLabel("HTTPS token").fill("wrong-token");
+  await httpsAuthentication.getByRole("button", { name: "Retry fetch", exact: true }).click();
+  await httpsAuthentication.getByLabel("HTTPS token").fill(token);
+  await httpsAuthentication.getByLabel("HTTPS username").fill("fixture");
   git(source, "branch", "topic");
   git(source, "push", "origin", "topic");
-  await fetchAuthentication.getByRole("button", { name: "Retry fetch", exact: true }).click();
-  await fetchAuthentication.waitFor({ state: "hidden" });
+  await httpsAuthentication.getByRole("button", { name: "Retry fetch", exact: true }).click();
+  await httpsAuthentication.waitFor({ state: "hidden" });
   await page
     .getByRole("status")
     .filter({ hasText: /Fetched origin/ })
@@ -266,7 +267,7 @@ try {
   await dialog.getByRole("tab", { name: "Tracking", exact: true }).click();
   await chooseSelect(dialog.getByLabel("Upstream", { exact: true }), "refs/remotes/origin/topic");
   await dialog.getByRole("button", { name: "Set upstream", exact: true }).click();
-  await dialog.getByText(/origin\/topic — up to date/).waitFor();
+  await dialog.getByText(/origin\/topic up to date/).waitFor();
   assert.equal(git(clientPath, "config", "branch.main.merge"), "refs/heads/topic");
 
   await dialog.getByRole("tab", { name: "Push", exact: true }).click();
@@ -307,10 +308,10 @@ try {
   git(clientPath, "tag", "-a", "release", "-m", "release notes");
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Fetch", exact: true }).click();
-  await fetchAuthentication.getByLabel("HTTPS username").fill("fixture");
-  await fetchAuthentication.getByLabel("HTTPS token").fill(token);
-  await fetchAuthentication.getByRole("button", { name: "Retry fetch", exact: true }).click();
-  await fetchAuthentication.waitFor({ state: "hidden" });
+  await httpsAuthentication.getByLabel("HTTPS username").fill("fixture");
+  await httpsAuthentication.getByLabel("HTTPS token").fill(token);
+  await httpsAuthentication.getByRole("button", { name: "Retry fetch", exact: true }).click();
+  await httpsAuthentication.waitFor({ state: "hidden" });
   await page
     .getByRole("status")
     .filter({ hasText: /Fetched origin/ })
@@ -348,8 +349,11 @@ try {
   await page
     .getByRole("textbox", { name: "Commit title", exact: true })
     .fill("Commit and push acceptance");
-  await page.getByRole("button", { name: "Commit and Push…", exact: true }).click();
-  await dialog.getByText(/Local commit saved/).waitFor();
+  await page.getByRole("button", { name: "Commit and Push", exact: true }).click();
+  // Commit and Push attempts the upstream immediately. Switch to the reviewed
+  // push flow so the fixture can advance the remote after the preview.
+  await httpsAuthentication.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("button", { name: "Remotes", exact: true }).click();
   await chooseSelect(dialog.getByLabel("Remote", { exact: true }), "origin");
 
   const committedHead = git(clientPath, "rev-parse", "HEAD");
@@ -465,10 +469,9 @@ try {
   git(clientPath, "branch", "--set-upstream-to=origin/main", "main");
   await page.getByRole("button", { name: "Pull strategies", exact: true }).click();
   await page.getByRole("menuitem", { name: "Fast-forward only", exact: true }).click();
-  const authentication = page.getByRole("dialog", { name: "HTTPS authentication", exact: true });
-  await authentication.getByLabel("HTTPS username").fill("fixture");
-  await authentication.getByLabel("HTTPS token").fill(token);
-  await authentication.getByRole("button", { name: "Retry pull", exact: true }).click();
+  await httpsAuthentication.getByLabel("HTTPS username").fill("fixture");
+  await httpsAuthentication.getByLabel("HTTPS token").fill(token);
+  await httpsAuthentication.getByRole("button", { name: "Retry pull", exact: true }).click();
   await page
     .getByRole("button", { name: "Pull", exact: true })
     .filter({ has: page.locator(".ui-action-visible .lucide-x") })
@@ -483,37 +486,28 @@ try {
 
   await page.getByRole("button", { name: "Pull strategies", exact: true }).click();
   await page.getByRole("menuitem", { name: "Rebase local commits", exact: true }).click();
-  await authentication.getByLabel("HTTPS username").fill("fixture");
-  await authentication.getByLabel("HTTPS token").fill(token);
-  await authentication.getByRole("button", { name: "Retry pull", exact: true }).click();
+  await httpsAuthentication.getByLabel("HTTPS username").fill("fixture");
+  await httpsAuthentication.getByLabel("HTTPS token").fill(token);
+  await httpsAuthentication.getByRole("button", { name: "Retry pull", exact: true }).click();
   await page.getByRole("status").filter({ hasText: "Pull completed." }).waitFor();
   assert.equal(git(clientPath, "rev-parse", "HEAD^"), git(source, "rev-parse", "HEAD"));
   assert.equal(git(clientPath, "status", "--porcelain"), "");
 
-  const finalPush = await page.evaluate(
-    async ({ id, token }) => {
-      const preview = await window.eda.remotes.preparePush({
-        repositoryId: id,
-        remote: "origin",
-        branch: "main",
-        destination: "main",
-        setUpstream: false,
-        mode: "normal",
-        credentials: { username: "fixture", password: token },
-      });
-
-      if (!preview.ok) return preview;
-
-      return window.eda.remotes.push(id, preview.value.token, {
-        username: "fixture",
-        password: token,
-      });
-    },
-    { id: repository.id, token },
+  await writeFile(join(clientPath, "second-commit.txt"), "push from the same panel\n");
+  const secondStage = await page.evaluate(
+    (id) => window.eda.repository.stage({ repositoryId: id }),
+    repository.id,
   );
-
-  assert.equal(finalPush.ok, true);
-  assert.equal(git(remote, "rev-parse", "main"), git(clientPath, "rev-parse", "HEAD"));
+  assert.ok(secondStage.ok);
+  await page.getByRole("textbox", { name: "Commit title", exact: true }).fill("Second push");
+  await page.getByRole("button", { name: "Commit and Push", exact: true }).click();
+  await httpsAuthentication.getByLabel("Username", { exact: true }).fill("fixture");
+  await httpsAuthentication.getByLabel("Access token", { exact: true }).fill(token);
+  await httpsAuthentication.getByRole("button", { name: "Retry push", exact: true }).click();
+  assert.equal(git(clientPath, "log", "-1", "--format=%s"), "Second push");
+  await expect
+    .poll(() => git(remote, "rev-parse", "main"))
+    .toBe(git(clientPath, "rev-parse", "HEAD"));
 
   git(source, "branch", "scheduled-only");
   git(source, "push", "origin", "scheduled-only");
@@ -523,7 +517,7 @@ try {
 
   await writeFile(join(clientPath, "scheduled-local.txt"), "preserve unsaved work\n");
   await page.getByRole("button", { name: "Fetch options", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Fetch settings…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Fetch settings...", exact: true }).click();
   const fetchSettings = page.locator("#settings-repository-fetch");
   await chooseSelect(
     fetchSettings.getByRole("combobox", { name: "Background fetch interval" }),

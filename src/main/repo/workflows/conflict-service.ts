@@ -15,6 +15,7 @@ import type { GitService } from "../../git/git-service";
 import { readWorkflowState } from "../../git/operations/workflow-state";
 import { assertRepositoryPath } from "../../git/validation";
 import type { SettingsRepository } from "../../persistence/settings-repository";
+import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
 import type { WorkflowService } from "./workflow-service";
@@ -48,11 +49,10 @@ interface Snapshot {
   index: string;
   fileHash: string;
   entries: Entry[];
-  expires: number;
 }
 
 export class ConflictService {
-  private readonly previews = new Map<string, Snapshot>();
+  private readonly previews = new PreviewStore<Snapshot>(8, 30 * 60_000);
 
   constructor(
     private readonly git: GitService,
@@ -275,11 +275,6 @@ export class ConflictService {
       newline: file.bytes.includes(Buffer.from("\r\n")) ? "crlf" : "lf",
     };
 
-    for (const [token, saved] of this.previews)
-      if (saved.expires < Date.now()) this.previews.delete(token);
-
-    while (this.previews.size >= 8) this.previews.delete(this.previews.keys().next().value!);
-
     this.previews.set(preview.token, {
       preview,
       root: repository.path,
@@ -288,7 +283,6 @@ export class ConflictService {
       index: index.raw,
       entries: index.entries,
       fileHash: file.hash,
-      expires: Date.now() + 30 * 60_000,
     });
 
     return preview;
@@ -307,7 +301,6 @@ export class ConflictService {
 
     if (
       !snapshot ||
-      snapshot.expires < Date.now() ||
       snapshot.repositoryId !== repositoryId ||
       snapshot.root !== repository.path ||
       snapshot.profileId !== repository.identityId
@@ -377,7 +370,6 @@ export class ConflictService {
 
     if (
       !snapshot ||
-      snapshot.expires < Date.now() ||
       snapshot.repositoryId !== request.repositoryId ||
       snapshot.root !== repository.path ||
       snapshot.profileId !== repository.identityId

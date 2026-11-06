@@ -11,10 +11,9 @@ import {
 import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Field, Input } from "../../components/ui/index";
-import { ACTION_FEEDBACK } from "../../motion";
-import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { TransferProgress } from "./TransportFields";
+import { useTransportOperation } from "./hooks/useTransportOperation";
 
 export function DirectPush({
   repositoryId,
@@ -25,15 +24,7 @@ export function DirectPush({
   afterCommit?: boolean;
   disabled?: boolean;
 }) {
-  const running = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const [busy, setBusy] = useState(false);
+  const { busy, begin } = useTransportOperation(repositoryId);
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showError, setShowError] = useState(false);
@@ -47,18 +38,9 @@ export function DirectPush({
   const writing = useRepositoryStore((state) => state.writing);
 
   const runPush = async (mode: PushRequest["mode"], auth?: TransportCredentials) => {
-    if (running.current) return;
-    const identityId = useAppStore.getState().activeIdentity?.id;
-    const current = () =>
-      mounted.current &&
-      useAppStore.getState().selectedRepositoryId === repositoryId &&
-      useAppStore.getState().activeIdentity?.id === identityId;
-    if (!current() || !identityId) return;
-    running.current = true;
-    const minimumPending = new Promise<void>((resolve) =>
-      setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
-    );
-    setBusy(true);
+    const operation = begin();
+    if (!operation) return;
+    const { current } = operation;
     setShowError(false);
     setError(null);
     setMessage(null);
@@ -119,9 +101,7 @@ export function DirectPush({
     } catch {
       if (current()) setError(t("directPush.couldNotCompletePushTryAgain"));
     } finally {
-      await minimumPending;
-      running.current = false;
-      if (current()) setBusy(false);
+      await operation.finish();
     }
   };
 
@@ -133,18 +113,10 @@ export function DirectPush({
   }, [afterCommit]);
 
   const confirmLease = async () => {
-    if (!preview || running.current) return;
-    const identityId = useAppStore.getState().activeIdentity?.id;
-    const current = () =>
-      mounted.current &&
-      useAppStore.getState().selectedRepositoryId === repositoryId &&
-      useAppStore.getState().activeIdentity?.id === identityId;
-    if (!current() || !identityId) return;
-    running.current = true;
-    const minimumPending = new Promise<void>((resolve) =>
-      setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
-    );
-    setBusy(true);
+    if (!preview) return;
+    const operation = begin();
+    if (!operation) return;
+    const { current } = operation;
     setError(null);
     try {
       const result = await window.eda.remotes.push(
@@ -164,11 +136,35 @@ export function DirectPush({
     } catch {
       if (current()) setError(t("directPush.couldNotCompletePushTryAgain"));
     } finally {
-      await minimumPending;
-      running.current = false;
-      if (current()) setBusy(false);
+      await operation.finish();
     }
   };
+
+  const credentialFields = needsAuth && (
+    <div className="mt-3 space-y-3">
+      <Field label={t("directPush.username")}>
+        {(field) => (
+          <Input
+            {...field}
+            value={credentials.username}
+            onChange={(event) => setCredentials({ ...credentials, username: event.target.value })}
+            autoComplete="off"
+          />
+        )}
+      </Field>
+      <Field label={t("directPush.accessToken")}>
+        {(field) => (
+          <Input
+            {...field}
+            type="password"
+            value={credentials.password}
+            onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
+            autoComplete="off"
+          />
+        )}
+      </Field>
+    </div>
+  );
 
   return (
     <>
@@ -226,35 +222,7 @@ export function DirectPush({
           <p role="alert" className="text-sm text-git-deleted">
             {error}
           </p>
-          {needsAuth && (
-            <div className="mt-3 space-y-3">
-              <Field label={t("directPush.username")}>
-                {(field) => (
-                  <Input
-                    {...field}
-                    value={credentials.username}
-                    onChange={(event) =>
-                      setCredentials({ ...credentials, username: event.target.value })
-                    }
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-              <Field label={t("directPush.accessToken")}>
-                {(field) => (
-                  <Input
-                    {...field}
-                    type="password"
-                    value={credentials.password}
-                    onChange={(event) =>
-                      setCredentials({ ...credentials, password: event.target.value })
-                    }
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-            </div>
-          )}
+          {credentialFields}
         </Dialog>
       )}
       {preview && (
@@ -293,35 +261,7 @@ export function DirectPush({
               {error}
             </p>
           )}
-          {needsAuth && (
-            <div className="mt-3 space-y-3">
-              <Field label={t("directPush.username")}>
-                {(field) => (
-                  <Input
-                    {...field}
-                    value={credentials.username}
-                    onChange={(event) =>
-                      setCredentials({ ...credentials, username: event.target.value })
-                    }
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-              <Field label={t("directPush.accessToken")}>
-                {(field) => (
-                  <Input
-                    {...field}
-                    type="password"
-                    value={credentials.password}
-                    onChange={(event) =>
-                      setCredentials({ ...credentials, password: event.target.value })
-                    }
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-            </div>
-          )}
+          {credentialFields}
           {busy && (
             <TransferProgress repositoryId={repositoryId} kindKey="operationTitles.pushBranch" />
           )}

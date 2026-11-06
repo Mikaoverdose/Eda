@@ -125,3 +125,18 @@ it("does not send a push after the component closes while its preview is pending
   await finish();
   expect(push).not.toHaveBeenCalled();
 });
+
+it("releases the busy state when the repository changes during a push preview", async () => {
+  let resolve!: (value: Result<typeof preview>) => void;
+  preparePush.mockReturnValueOnce(
+    new Promise<Result<typeof preview>>((done) => {
+      resolve = done;
+    }),
+  );
+  await act(async () => button().click());
+  useAppStore.setState({ selectedRepositoryId: "other" });
+  await act(async () => resolve(ok(preview)));
+  await finish();
+  expect(push).not.toHaveBeenCalled();
+  expect(button().disabled).toBe(false);
+});

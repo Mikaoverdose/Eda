@@ -8,13 +8,18 @@ import type { GitService } from "../../git/git-service";
 import { assertFullObjectId } from "../../git/validation";
 import type { ContentRecoveryRepository } from "../../persistence/content-recovery-repository";
 import type { WorkflowJournal, WorkflowJournalRecord } from "../../persistence/workflow-journal";
+import { PreviewStore } from "../preview-store";
 import { pruneHistoryRecords } from "../history/history-retention";
 import { publishedRangeCount } from "../history/shared-history";
 import { repositoryCommonDirectory } from "../lifecycle/repository-location";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
 import { DiscardService, type OperationSnapshot } from "../working-tree/discard-service";
 import type { RepositoryWriter } from "../working-tree/repository-writer";
-import { workflowFingerprint } from "./workflow-fingerprint";
+import {
+  fingerprintContents,
+  readWorkflowContents,
+  workflowFingerprint,
+} from "./workflow-fingerprint";
 import type { WorkflowService } from "./workflow-service";
 
 const invalid = (message: ErrorText) =>
@@ -82,18 +87,14 @@ export async function protectResetPaths(
 
 export class ResetService {
   private readonly recovery: DiscardService;
-  private readonly reviews = new Map<
-    string,
-    {
-      review: ResetReview;
-      root: string;
-      repositoryId: string;
-      identity: Identity;
-      fingerprint: string;
-      snapshot?: OperationSnapshot;
-      expires: number;
-    }
-  >();
+  private readonly reviews = new PreviewStore<{
+    review: ResetReview;
+    root: string;
+    repositoryId: string;
+    identity: Identity;
+    fingerprint: string;
+    snapshot?: OperationSnapshot;
+  }>();
 
   constructor(
     private readonly git: GitService,
@@ -176,18 +177,15 @@ export class ResetService {
     if (mode === "hard" && workingPaths.length)
       await protectResetPaths(this.git, root, target, workingPaths);
 
-    const working = await this.git.exec(
-      ["diff", "--binary", "--no-ext-diff", "--no-textconv", "--"],
-      { cwd: root, operation: t("operations.reviewResetWorkingFiles") },
-    );
+    const contents = await readWorkflowContents(this.git, root);
 
     return {
       status,
       flags: flags.stdout,
       indexPaths,
       workingPaths,
-      working: createHash("sha256").update(working.stdoutBytes).digest("hex"),
-      fingerprint: `${await workflowFingerprint(this.git, root, status)}:${flags.stdout}`,
+      working: createHash("sha256").update(contents.working).digest("hex"),
+      fingerprint: `${fingerprintContents(status, contents)}:${flags.stdout}`,
     };
   }
 
@@ -236,10 +234,7 @@ export class ResetService {
           identity,
           fingerprint: state.fingerprint,
           ...(snapshot ? { snapshot } : {}),
-          expires: Date.now() + 300_000,
         });
-
-        while (this.reviews.size > 8) this.reviews.delete(this.reviews.keys().next().value!);
 
         return review;
       },
@@ -252,7 +247,6 @@ export class ResetService {
 
     if (
       !pending ||
-      pending.expires < Date.now() ||
       pending.repositoryId !== repositoryId ||
       pending.root !== repository.path ||
       pending.identity.id !== repository.identityId

@@ -3,21 +3,12 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { remoteForTrackingRef, type TransportCredentials } from "@shared/integrations/remotes";
 import type { PullStrategy } from "@shared/workflows/pull";
-import { useEffect, useRef, useState } from "react";
-import { ACTION_FEEDBACK } from "../../../motion";
-import { useAppStore } from "../../../stores/app-store";
+import { useState } from "react";
 import { useRepositoryStore } from "../../../stores/repository-store";
+import { useTransportOperation } from "./useTransportOperation";
 
 export function useDirectPull(repositoryId: string) {
-  const running = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const [busy, setBusy] = useState(false);
+  const { busy, begin } = useTransportOperation(repositoryId);
   const [error, setError] = useState<string | null>(null);
   const [authentication, setAuthentication] = useState<PullStrategy | null>(null);
   const [githubAuthentication, setGitHubAuthentication] = useState<PullStrategy | null>(null);
@@ -25,18 +16,9 @@ export function useDirectPull(repositoryId: string) {
   const [message, setMessage] = useState<string | null>(null);
 
   const pull = async (override?: PullStrategy, credentials?: TransportCredentials) => {
-    if (running.current) return;
-    const identityId = useAppStore.getState().activeIdentity?.id;
-    const current = () =>
-      mounted.current &&
-      useAppStore.getState().selectedRepositoryId === repositoryId &&
-      useAppStore.getState().activeIdentity?.id === identityId;
-    if (!current() || !identityId) return;
-    running.current = true;
-    const minimumPending = new Promise<void>((resolve) =>
-      setTimeout(resolve, ACTION_FEEDBACK.minimumPending),
-    );
-    setBusy(true);
+    const operation = begin();
+    if (!operation) return;
+    const { current } = operation;
     setError(null);
     setMessage(null);
     setAuthentication(null);
@@ -96,9 +78,7 @@ export function useDirectPull(repositoryId: string) {
     } catch {
       if (current()) setError(t("useDirectPull.couldNotCompletePullTryAgain"));
     } finally {
-      await minimumPending;
-      running.current = false;
-      if (mounted.current) setBusy(false);
+      await operation.finish();
       if (current()) await useRepositoryStore.getState().syncFromDisk();
     }
   };
