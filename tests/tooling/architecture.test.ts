@@ -90,16 +90,19 @@ for (const file of [
   "renderer/app/App.tsx",
   "renderer/tutorial/TourGuide.tsx",
   "renderer/features/settings/Settings.tsx",
+  "renderer/features/history/CommitRow.tsx",
 ]) {
-  for (const tag of ["button", "input", "select", "textarea"]) {
-    test(`${file} requires shared primitives for ${tag}`, async () => {
-      const [result] = await eslint.lintText(`const Control = () => <${tag} />;`, {
-        filePath: `src/${file}`,
-      });
-      assert.ok(result);
-      assert.ok(result.messages.some((message) => message.ruleId === "no-restricted-syntax"));
+  test(`${file} requires shared form controls`, async () => {
+    const tags = ["button", "input", "select", "textarea"];
+    const source = tags.map((tag) => `<${tag} />`).join("\n");
+    const [result] = await eslint.lintText(`const Control = () => <>\n${source}\n</>;`, {
+      filePath: `src/${file}`,
     });
-  }
+    assert.deepEqual(
+      result?.messages.filter((m) => m.ruleId === "no-restricted-syntax").map((m) => m.line),
+      [2, 3, 4, 5],
+    );
+  });
 }
 
 test("renderer animation definitions stay in the shared motion stylesheet", async () => {
@@ -121,17 +124,19 @@ for (const file of [
   "renderer/features/changes/CommitPrefixPicker.tsx",
   "renderer/commands/hooks/useShellCommands.ts",
 ]) {
-  for (const source of [
-    "document.querySelector('[role=dialog]');",
-    "root.current?.querySelectorAll('button');",
-    "document.getElementById('owned-control');",
-    "window.dispatchEvent(new CustomEvent('eda:settings'));",
-  ]) {
-    test(`${file} rejects imperative UI discovery or global app events: ${source}`, async () => {
-      const [result] = await eslint.lintText(source, { filePath: `src/${file}` });
-      assert.ok(result?.messages.some((message) => message.ruleId === "no-restricted-syntax"));
-    });
-  }
+  test(`${file} rejects imperative discovery and global events`, async () => {
+    const source = [
+      "document.querySelector('[role=dialog]');",
+      "root.current?.querySelectorAll('button');",
+      "document.getElementById('owned-control');",
+      "window.dispatchEvent(new CustomEvent('eda:settings'));",
+    ].join("\n");
+    const [result] = await eslint.lintText(source, { filePath: `src/${file}` });
+    assert.deepEqual(
+      result?.messages.filter((m) => m.ruleId === "no-restricted-syntax").map((m) => m.line),
+      [1, 2, 3, 4],
+    );
+  });
 }
 
 test("shared menu primitives may discover composed focus targets", async () => {

@@ -37,10 +37,16 @@ try {
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
   await mkdir("screenshots", { recursive: true });
   await page.keyboard.press(`${modifier}+,`);
-  await page.getByRole("button", { name: "Failure simulations", exact: true }).click();
-  await page.getByRole("heading", { name: "Failure simulations", exact: true }).waitFor();
+  await page.getByRole("button", { name: "About", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Enable developer settings", exact: true }).check();
+  await page.getByRole("button", { name: "Resilience testing", exact: true }).click();
+  await page.getByRole("heading", { name: "Resilience testing", exact: true }).waitFor();
   await page.getByRole("button", { name: "Fail IPC request", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "Something went wrong inside Eda." }).waitFor();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "Eda debug simulation: unexpected IPC error." })
+    .waitFor();
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click();
 
   const runtimeError = page.waitForEvent("pageerror");
 
@@ -54,7 +60,7 @@ try {
 
   await page.screenshot({ path: resolve("screenshots/failure-simulations.png") });
 
-  await page.getByRole("button", { name: "Trigger render error…", exact: true }).click();
+  await page.getByRole("button", { name: "Trigger render error...", exact: true }).click();
   await page.getByRole("button", { name: "Trigger render error", exact: true }).click();
   await page
     .getByRole("heading", { name: "Eda could not display this screen", exact: true })
@@ -82,7 +88,7 @@ try {
     }
   });
   await page.keyboard.press(`${modifier}+,`);
-  await page.getByRole("button", { name: "Failure simulations", exact: true }).click();
+  await page.getByRole("button", { name: "Resilience testing", exact: true }).click();
 
   const crashed = app.evaluate(
     ({ BrowserWindow }) =>
@@ -102,7 +108,7 @@ try {
   );
 
   await page
-    .getByRole("button", { name: "Crash renderer…", exact: true })
+    .getByRole("button", { name: "Crash renderer...", exact: true })
     .click()
     .catch((error: unknown) => {
       if (!(error instanceof Error) || !error.message.includes("Target crashed")) throw error;

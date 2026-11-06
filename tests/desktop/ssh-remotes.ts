@@ -180,6 +180,7 @@ try {
 
   await trustFixture(app, root);
   const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1440, height: 900 });
   const errors: string[] = [];
 
   page.on("pageerror", (error) => errors.push(error.message));

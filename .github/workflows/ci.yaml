@@ -189,6 +189,8 @@ jobs:
         include:
           - name: Commands and update notifications
             suites: commands updates
+          - name: HTTPS and SSH remotes
+            suites: remotes ssh-remotes
           - name: Workspace and diffs
             suites: workspace
           - name: Profiles and tab persistence

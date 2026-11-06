@@ -53,6 +53,7 @@ try {
   await trustFixture(app, root);
   const page = await app.firstWindow();
 
+  await page.setViewportSize({ width: 1440, height: 900 });
   page.setDefaultTimeout(20000);
   await page.getByRole("button", { name: "Get started", exact: true }).waitFor();
   await assertCompositorMotion(page);

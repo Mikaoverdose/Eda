@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { accentComponents } from "../../src/shared/preferences/accent.ts";
 import { defaultCommitPrefixes } from "../../src/shared/preferences/commit-prefix.ts";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -153,10 +154,11 @@ try {
     };
   }, imagePath);
   await page.getByRole("button", { name: "Choose background image", exact: true }).click();
-  await page.getByAltText("Selected background").or(page.getByRole("alert")).waitFor();
+  const preview = page.getByRole("img", { name: "Selected background", exact: true });
+  await preview.or(page.getByRole("alert")).waitFor();
   assert.deepEqual(await page.getByRole("alert").allTextContents(), []);
 
-  const selectedImage = await page.getByAltText("Selected background").getAttribute("src");
+  const selectedImage = await preview.getAttribute("src");
 
   assert.ok(selectedImage?.startsWith("data:image/jpeg;base64,"));
   assert.equal(
@@ -356,16 +358,18 @@ try {
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
 
-  const previewHue = await page.evaluate(() =>
-    document.documentElement.style.getPropertyValue("--identity-hue"),
-  );
-
+  const waitForAccent = (hex: `#${string}`) =>
+    page.waitForFunction(
+      (hue) => {
+        const rendered = document.documentElement.style.getPropertyValue("--identity-hue");
+        return rendered !== "" && Math.abs(Number(rendered) - hue) < 0.0001;
+      },
+      accentComponents(hex).hue,
+      { timeout: 10_000 },
+    );
+  await waitForAccent("#638f86");
   await page.getByRole("button", { name: "Profile: Appearance", exact: true }).click();
-  await page.waitForFunction(
-    (previewHue) =>
-      document.documentElement.style.getPropertyValue("--identity-hue") !== previewHue,
-    previewHue,
-  );
+  await waitForAccent("#ac799f");
   await page.getByRole("combobox", { name: "Accent color source", exact: true }).click();
   await page.getByRole("option", { name: "Follow global", exact: true }).click();
   await page.waitForFunction(async () => {
