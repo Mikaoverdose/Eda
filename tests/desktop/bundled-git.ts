@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
@@ -38,6 +39,7 @@ const launch = async () => {
 
   app = running;
 
+  await trustFixture(running, root);
   const page = await running.firstWindow();
 
   await page.waitForLoadState("domcontentloaded");

@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
@@ -37,6 +38,7 @@ try {
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
   await app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
 
+  await trustFixture(app, root);
   const page = await app.firstWindow();
 
   page.on("pageerror", (error) => errors.push(error.message));

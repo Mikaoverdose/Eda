@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
@@ -93,6 +94,7 @@ let app: ElectronApplication | undefined;
 const errors: string[] = [];
 const launch = async () => {
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
+  await trustFixture(app, root);
   const page = await app.firstWindow();
   page.setDefaultTimeout(30_000);
   await page.setViewportSize({ width: 1440, height: 900 });

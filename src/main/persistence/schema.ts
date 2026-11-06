@@ -310,3 +310,8 @@ export const fetchHistory = sqliteTable(
 
 export type IdentityRow = typeof identities.$inferSelect;
 export type RepositoryRow = typeof repositories.$inferSelect;
+
+export const repositoryTrust = sqliteTable("repository_trust", {
+  path: text("path").primaryKey().notNull(),
+  fingerprint: text("fingerprint").notNull(),
+});

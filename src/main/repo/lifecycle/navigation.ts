@@ -30,6 +30,7 @@ export function parseRepositoryLink(value: string): RepositoryNavigation | null 
     if (
       !path ||
       !isAbsolute(path) ||
+      /^[\\/]{2}/.test(path) ||
       path.length > 4096 ||
       /[\x00-\x1f]/.test(path) ||
       (commit && ref)

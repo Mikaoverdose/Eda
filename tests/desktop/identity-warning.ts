@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
@@ -33,6 +34,7 @@ let app: ElectronApplication | undefined;
 const errors: string[] = [];
 try {
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
+  await trustFixture(app, root);
   const page = await app.firstWindow();
   page.setDefaultTimeout(20_000);
   page.on("pageerror", (error) => errors.push(error.message));

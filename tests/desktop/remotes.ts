@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import { chooseSelect } from "./select-control.ts";
 import assert from "node:assert/strict";
@@ -179,6 +180,7 @@ try {
     env,
   });
 
+  await trustFixture(app, root);
   const page = await app.firstWindow();
 
   page.on("pageerror", (error) => errors.push(error.message));

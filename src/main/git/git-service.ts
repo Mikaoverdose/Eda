@@ -15,6 +15,9 @@ import {
   type RepositoryStatus,
   type UnifiedDiff,
 } from "@shared/repository/repository-read";
+import { dirname, join } from "node:path";
+import { devNull } from "node:os";
+import type { RepositoryTrust } from "./security/repository-trust";
 import { existsSync } from "node:fs";
 import type { OperationManager } from "../operations/operation-manager";
 
@@ -121,6 +124,7 @@ export class GitService {
     private readonly engine: GitEngine,
     private readonly baseEnv: Readonly<Record<string, string>> = {},
     private readonly operations?: OperationManager,
+    readonly trust?: RepositoryTrust,
   ) {}
 
   get gitVersion(): string {
@@ -154,6 +158,63 @@ export class GitService {
       env["GIT_SSH_COMMAND"] = `${env["GIT_SSH_COMMAND"] ?? "ssh"} -o IdentityAgent=SSH_AUTH_SOCK`;
     }
 
+    let cwd = options.cwd ?? this.trust?.neutralDirectory;
+    const repositoryArgs: string[] = [];
+    if (this.trust) {
+      if (options.cwd) {
+        if (args[0] === "init" && !(await this.trust.findRoot(options.cwd))) {
+          repositoryArgs.push(
+            `--git-dir=${join(options.cwd, ".git")}`,
+            `--work-tree=${options.cwd}`,
+            "-c",
+            "init.templateDir=",
+          );
+        } else {
+          const repository = await this.trust.checked(options.cwd);
+          // Let Git discover the approved metadata so its native ownership check still runs.
+          cwd = repository.root;
+          env["GIT_CEILING_DIRECTORIES"] = dirname(repository.root);
+          repositoryArgs.push(
+            `--work-tree=${repository.root}`,
+            "-c",
+            "safe.bareRepository=explicit",
+          );
+          repositoryArgs.push(
+            "-c",
+            `core.hooksPath=${env["EDA_SSH_HOST_TRUST"] ? "/dev/null" : join(repository.commonDir, "hooks")}`,
+          );
+        }
+      } else {
+        env["GIT_CEILING_DIRECTORIES"] = dirname(this.trust.neutralDirectory);
+      }
+    }
+    if (args[0] === "clone") {
+      // An attribute in the first checkout can select a global filter that executes a tracked file.
+      const remote = args[args.indexOf("--") + 1];
+      if (remote?.startsWith("https://") && this.trust) {
+        for (const [key, variable] of [
+          ["http.sslCAInfo", "GIT_SSL_CAINFO"],
+          ["http.sslBackend", ""],
+        ] as const) {
+          const { stdout, exitCode } = await this.exec(["config", "--get-urlmatch", key, remote], {
+            operation: options.operation,
+            allowedExitCodes: [0, 1],
+            maxStdoutBytes: 16 * 1024,
+          });
+          if (exitCode === 0) {
+            const value = stdout.replace(/\r?\n$/, "");
+            if (variable) env[variable] = value;
+            else repositoryArgs.push("-c", `${key}=${value}`);
+          }
+        }
+      }
+      env["GIT_CONFIG_NOSYSTEM"] = "1";
+      env["GIT_CONFIG_GLOBAL"] = devNull;
+      env["GIT_TEMPLATE_DIR"] = "";
+    }
+    env["GIT_NO_LAZY_FETCH"] = "1";
+    env["GIT_ALLOW_PROTOCOL"] ??= "https:ssh:file";
+
     let result;
 
     try {
@@ -161,15 +222,11 @@ export class GitService {
         executable: this.engine.path,
         args: [
           "--no-pager",
+          ...repositoryArgs,
+          "-c",
+          "core.fsmonitor=false",
           ...(args[0] === "clone"
-            ? [
-                "-c",
-                "core.hooksPath=/dev/null",
-                "-c",
-                "core.fsmonitor=false",
-                "-c",
-                "init.templateDir=",
-              ]
+            ? ["-c", "core.hooksPath=/dev/null", "-c", "init.templateDir="]
             : []),
           "-c",
           "submodule.recurse=false",
@@ -181,7 +238,7 @@ export class GitService {
           "diff.ignoreSubmodules=dirty",
           ...args,
         ],
-        ...(options.cwd !== undefined && { cwd: options.cwd }),
+        ...(cwd !== undefined && { cwd }),
         env,
         ...(options.stdin !== undefined && { stdin: options.stdin }),
         ...(signal !== undefined && { signal }),
@@ -986,7 +1043,7 @@ export class GitService {
       cwd: path,
       operation: t("operations.openRepository"),
     });
-    return stdout.trim();
+    return stdout.replace(/\r?\n$/, "");
   }
 
   async isRefNameValid(ref: string): Promise<boolean> {

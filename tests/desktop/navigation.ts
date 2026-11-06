@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
@@ -49,6 +50,7 @@ try {
     },
   });
 
+  await trustFixture(app, root);
   const page = await app.firstWindow();
 
   page.setDefaultTimeout(20000);

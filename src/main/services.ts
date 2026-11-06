@@ -4,8 +4,8 @@ import { GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { IPC_EVENTS } from "@shared/ipc";
 import { updateFeedUrl, type UpdateCapability, type UpdatePlatform } from "@shared/updates";
-import { app, net, powerMonitor } from "electron";
-import { rm } from "node:fs/promises";
+import { app, dialog, net, powerMonitor } from "electron";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVelopackUpdater, type VelopackUpdater } from "./application/velopack-updater";
@@ -26,6 +26,7 @@ import { NodeProcessRunner } from "./git/execution/node-process-runner";
 import { ExternalMergeTool } from "./git/external-merge-tool";
 import { GitService } from "./git/git-service";
 import { GpgKeyService } from "./git/security/gpg-keys";
+import { RepositoryTrust } from "./git/security/repository-trust";
 import { SshAgent } from "./git/security/ssh-agent";
 import { SshHostTrustRunner } from "./git/security/ssh-host-trust";
 import { IdentityManager } from "./identity/identity-manager";
@@ -131,7 +132,28 @@ export async function createServices(): Promise<Services> {
     const transportEnvironment = Object.assign(sshAgent.environment, sshEnvironment);
     const sshHostTrust = new SshHostTrustPrompts();
     const transportRunner = new SshHostTrustRunner(runner, sshHostTrust.confirm);
-    const git = new GitService(transportRunner, engine, transportEnvironment, operations);
+    const neutralDirectory = join(app.getPath("userData"), "git-cwd");
+    await mkdir(neutralDirectory, { recursive: true, mode: 0o700 });
+    const trust = new RepositoryTrust(
+      db,
+      async (path, source) => {
+        const result = await dialog.showMessageBox({
+          type: "warning",
+          title: t("main.repositoryTrust.title"),
+          message: t("main.repositoryTrust.message"),
+          detail: source
+            ? t("main.repositoryTrust.cloneDetail", { source, path })
+            : t("main.repositoryTrust.detail", { path }),
+          buttons: [t("common.cancel"), t("main.repositoryTrust.allow")],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+        return result.response === 1;
+      },
+      neutralDirectory,
+    );
+    const git = new GitService(transportRunner, engine, transportEnvironment, operations, trust);
 
     const identities = new IdentityRepository(db, preferences);
     const identity = new IdentityManager(identities, git, preferences);

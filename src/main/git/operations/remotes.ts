@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { redactDiagnostic } from "@shared/diagnostics";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
@@ -150,7 +151,11 @@ export function transportOptions(
   remoteUrl(url);
 
   const overrides: Record<string, string> = {
-    GIT_ALLOW_PROTOCOL: "https:ssh:file",
+    GIT_ALLOW_PROTOCOL: url.startsWith("https://")
+      ? "https"
+      : isAbsolute(url) || url.startsWith("file://")
+        ? "file"
+        : "ssh",
     GCM_INTERACTIVE: "never",
     GIT_SSH_COMMAND: `${identity.sshKeyPath ? buildSshCommand(identity.sshKeyPath) : "ssh"} ${SSH_HOST_TRUST_OPTIONS.join(" ")}`,
     EDA_SSH_HOST_TRUST: "1",

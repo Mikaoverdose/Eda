@@ -12,7 +12,8 @@ import type {
   RemoteState,
 } from "@shared/integrations/remotes";
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir } from "node:fs/promises";
+import { lstat, mkdir, realpath } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { basename, isAbsolute, join } from "node:path";
 import type { GitService } from "../../git/git-service";
 import {
@@ -351,6 +352,18 @@ export class RemoteService {
             ),
           );
 
+        if (this.git.trust && (isAbsolute(url) || url.startsWith("file://"))) {
+          const target = isAbsolute(url) ? url : fileURLToPath(url);
+          const worktree = await lstat(join(target, ".git")).then(
+            () => true,
+            (error: NodeJS.ErrnoException) => {
+              if (error.code !== "ENOENT") throw error;
+              return false;
+            },
+          );
+          await this.git.trust.authorize(target, !worktree);
+        }
+
         const result = await this.git
           .exec(
             [
@@ -431,8 +444,10 @@ export class RemoteService {
           if (!(await lstat(request.parent)).isDirectory())
             throw remoteError(errorText("main.remoteService.theCloneParentMustBeADirectory"));
 
+          const destination = join(await realpath(request.parent), request.name);
+          await this.git.trust?.approveCreation(destination, request.url);
           try {
-            await mkdir(path);
+            await mkdir(destination);
           } catch {
             throw remoteError(
               errorText(
@@ -445,12 +460,13 @@ export class RemoteService {
             await this.git.exec(
               [
                 "clone",
+                "--no-local",
                 "--upload-pack=git-upload-pack",
                 "--progress",
                 "--no-recurse-submodules",
                 "--",
                 request.url,
-                path,
+                destination,
               ],
               {
                 operation: t("operations.cloneRepository"),
@@ -458,7 +474,8 @@ export class RemoteService {
               },
             );
 
-            return await this.repositories.open(path, captured);
+            await this.git.trust?.rememberCreated(destination);
+            return await this.repositories.open(destination, captured);
           } catch (error) {
             this.operations.progress(
               t(

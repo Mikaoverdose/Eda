@@ -81,6 +81,8 @@ export function assertAllowedRemoteUrl(value: string, operation: string): void {
   if (!value || value.length > 4096 || /[\x00-\x1f\x7f]/.test(value) || value.startsWith("-"))
     throw remoteError(errorText("main.git.validation.enterAnHttpssshOrAbsoluteLocalRepositoryUrl"));
 
+  if (/^[\\/]{2}/.test(value))
+    throw remoteError(errorText("main.git.validation.enterAnHttpssshOrAbsoluteLocalRepositoryUrl"));
   if (isAbsolute(value) && !value.includes("://")) return;
   if (/\s/.test(value))
     throw remoteError(errorText("main.git.validation.encodeSpacesInRemoteUrLs"));
@@ -97,10 +99,14 @@ export function assertAllowedRemoteUrl(value: string, operation: string): void {
   }
 
   if (
+    !/^(?:https|ssh|file):\/\//.test(value) ||
+    value.includes("\\") ||
     !["https:", "ssh:", "file:"].includes(url.protocol) ||
     url.password ||
     url.search ||
     url.hash ||
+    (url.protocol === "file:" &&
+      (url.hostname || /^\/{2}/.test(url.pathname) || /%(?:2f|5c)/i.test(url.pathname))) ||
     (url.protocol === "https:" && url.username)
   )
     throw remoteError(errorText("main.git.validation.useHttpssshOrFileUrLsWithoutEmbedded"));

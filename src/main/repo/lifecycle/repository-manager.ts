@@ -56,6 +56,7 @@ export class RepositoryManager {
 
     if (entry?.isFile()) path = dirname(path);
 
+    path = await this.authorizeOpen(path);
     if (!(await this.git.isRepository(path))) {
       throw new GitError({
         kind: "not-a-repository",
@@ -71,6 +72,14 @@ export class RepositoryManager {
     const root = await this.git.resolveRepositoryRoot(path);
 
     return this.register(root, active);
+  }
+
+  private async authorizeOpen(path: string): Promise<string> {
+    if (!this.git.trust) return path;
+    const root = await this.git.trust.findRoot(path);
+    if (!root) return path;
+    await this.git.trust.authorize(root);
+    return root;
   }
 
   async init(
@@ -101,7 +110,10 @@ export class RepositoryManager {
           message: errorText("main.repositoryManager.headIsReservedChooseABranchName"),
         });
 
-      if (await this.git.isRepository(path)) {
+      if (
+        (this.git.trust && (await this.git.trust.findRoot(path))) ||
+        (await this.git.isRepository(path))
+      ) {
         throw new GitError({
           kind: "invalid-input",
           operation: t("operations.createRepository"),
@@ -132,6 +144,7 @@ export class RepositoryManager {
           });
       }
 
+      await this.git.trust?.approveCreation(path);
       await this.git.exec(["init", "-b", options.branch], {
         cwd: path,
         operation: t("operations.createRepository"),
@@ -140,6 +153,7 @@ export class RepositoryManager {
       for (const [name, content] of Object.entries(files))
         await writeFile(join(path, name), content, { flag: "wx" });
 
+      await this.git.trust?.rememberCreated(path);
       const root = await this.git.resolveRepositoryRoot(path);
 
       await this.identity.applyToRepository(root, active);
@@ -172,6 +186,7 @@ export class RepositoryManager {
         });
       }
 
+      path = await this.authorizeOpen(path);
       if (!(await this.git.isRepository(path))) {
         throw new GitError({
           kind: "not-a-repository",

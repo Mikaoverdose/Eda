@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import type { OperationState } from "../../src/shared/operations.ts";
 import assert from "node:assert/strict";
@@ -71,6 +72,7 @@ async function waitForOperation(page: Page, kind: string, state: OperationState)
 try {
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
 
+  await trustFixture(app, root);
   const page = await app.firstWindow();
 
   page.setDefaultTimeout(20_000);

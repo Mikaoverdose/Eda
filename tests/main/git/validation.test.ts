@@ -112,6 +112,10 @@ describe("assertAllowedRemoteUrl", () => {
     "http://internal.example/repo.git",
     "git://example.com/repo.git",
     "ftp://example.com/repo.git",
+    "file://external.example/share",
+    "file:////external.example/share",
+    "//external.example/share",
+    String.raw`\\external.example\share`,
     "javascript:alert(1)",
     "data:text/plain,hello",
   ])("rejects %s", (url) => {

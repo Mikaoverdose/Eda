@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
@@ -90,6 +91,7 @@ const launch = async () => {
   app = running;
   running.process().stderr?.on("data", (chunk) => process.stderr.write(chunk));
 
+  await trustFixture(running, root);
   const page = await running.firstWindow();
 
   page.on("pageerror", (error) => errors.push(error.message));

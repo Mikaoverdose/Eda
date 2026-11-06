@@ -1,3 +1,4 @@
+import repositoryTrustSql from "@main/persistence/migrations/20261107000000_repository-trust/migration.sql?raw";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -136,4 +137,23 @@ it("rejects duplicate or unordered migration IDs", () => {
   expect(() => applyMigrations(db, [{ id: "002_later", sql: "SELECT 1" }, initial])).toThrow(
     /unique and ordered/,
   );
+});
+
+it("opens the earlier repository trust schema while rejecting other edits to the same migration", () => {
+  const db = setup();
+  const id = "20261107000000_repository-trust";
+  const earlierSql =
+    "CREATE TABLE repository_trust (\n  path TEXT PRIMARY KEY NOT NULL,\n  fingerprint TEXT NOT NULL\n);\n";
+  applyMigrations(db, [initial, { id, sql: earlierSql }]);
+  db.exec("INSERT INTO repository_trust VALUES ('/fixture', 'saved')");
+
+  applyMigrations(db, [initial, { id, sql: repositoryTrustSql }]);
+  expect(
+    db.prepare("SELECT fingerprint FROM repository_trust WHERE path = '/fixture'").get(),
+  ).toEqual({
+    fingerprint: "saved",
+  });
+  expect(() =>
+    applyMigrations(db, [initial, { id, sql: repositoryTrustSql + "\nSELECT 1;" }]),
+  ).toThrow(/history does not match/);
 });

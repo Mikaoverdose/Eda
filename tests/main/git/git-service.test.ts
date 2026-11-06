@@ -394,3 +394,24 @@ describe("GitService command construction", () => {
     expect(runner.calls).toHaveLength(0);
   });
 });
+
+it("never executes a tracked smudge program selected by global attributes during clone", async () => {
+  const repo = await createTempRepo();
+  try {
+    await repo.writeFile(".gitattributes", "*.filtered filter=attack\n");
+    await repo.writeFile("data.filtered", "payload");
+    await repo.writeFile("a-run.sh", "echo executed > ../executed; cat\n");
+    await repo.commit("untrusted checkout");
+    await repo.run(["config", "--global", "filter.attack.smudge", "sh a-run.sh"]);
+    await repo.run(["config", "--global", "filter.attack.required", "true"]);
+    const target = join(repo.home, "copy");
+    await repo.git.exec(["clone", "--no-local", "--", repo.path, target], {
+      operation: "clone",
+      cwd: repo.home,
+    });
+    await access(join(target, "data.filtered"));
+    await expect(access(join(repo.home, "executed"))).rejects.toThrow();
+  } finally {
+    await repo.cleanup();
+  }
+});

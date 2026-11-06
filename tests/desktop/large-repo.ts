@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { _electron as electron, type Page, type Locator } from "playwright";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -43,6 +44,7 @@ const app = await electron.launch({
 });
 
 try {
+  await trustFixture(app, repository);
   const page = await app.firstWindow();
 
   await page.setViewportSize({ width: 1440, height: 900 });

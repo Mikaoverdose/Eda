@@ -1,3 +1,4 @@
+import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import { chooseSelect } from "./select-control.ts";
 import type { ProfileSession } from "../../src/shared/identity/profile-session.ts";
@@ -53,6 +54,7 @@ const modifier = process.platform === "darwin" ? "Meta" : "Control";
 
 async function foundationWindow(running: ElectronApplication): Promise<Page> {
   await running.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
+  await trustFixture(running, root);
   const page = await running.firstWindow();
 
   await page.setViewportSize({ width: 1440, height: 900 });

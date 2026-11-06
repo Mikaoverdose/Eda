@@ -935,7 +935,8 @@ it.each([
       if (preview) {
         const local = [...args];
         local[local.indexOf("--") + 1] = ctx.server.path;
-        return execute(local, options);
+        expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
+        return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
       }
 
       return execute(args, options);
@@ -992,7 +993,8 @@ it.each([false, true])(
       expect(options.redactValues).toContain(expected.password);
       const local = [...args];
       local[local.indexOf("--") + 1] = ctx.server.path;
-      return execute(local, options);
+      expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
+      return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
     });
     try {
       const preview = await ctx.service.preparePush({
@@ -1066,7 +1068,8 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
       );
     const local = [...args];
     local[index] = ctx.server.path;
-    return execute(local, options);
+    expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
+    return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
   });
   try {
     const review = await ctx.pull.prepare({ repositoryId: ctx.client.id, strategy: "ff-only" });
