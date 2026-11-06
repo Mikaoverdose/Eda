@@ -1,7 +1,7 @@
 import { t } from "@shared/i18n";
 import { MAINTAINER_GITHUB_LOGIN, type GitHubAccountProfile } from "@shared/integrations/github";
 import { UPDATE_DOWNLOAD_PAGE } from "@shared/updates";
-import { ExternalLink, Heart, Mail } from "lucide-react";
+import { ExternalLink, Heart, Mail, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -215,16 +215,30 @@ export function AboutSettings() {
             </p>
           </div>
 
-          <ExternalLinkButton
-            href={`https://github.com/sponsors/${maintainer}`}
-            variant="primary"
-            size="md"
-            className="bg-[var(--sponsor-bg)]! text-white!"
-            icon={<Heart size={16} aria-hidden="true" className="ui-heartbeat fill-current" />}
-          >
-            {t("settings.aboutSettings.sponsorOnGitHub")}
-            <ExternalLink size={12} aria-hidden="true" />
-          </ExternalLinkButton>
+          <div className="flex flex-col gap-2">
+            <ExternalLinkButton
+              href={`https://github.com/sponsors/${maintainer}`}
+              variant="primary"
+              size="md"
+              block
+              className="bg-[var(--sponsor-bg)]! text-white!"
+              icon={<Heart size={16} aria-hidden="true" className="ui-heartbeat fill-current" />}
+            >
+              {t("settings.aboutSettings.sponsorOnGitHub")}
+              <ExternalLink size={12} aria-hidden="true" />
+            </ExternalLinkButton>
+
+            <ExternalLinkButton
+              href={repositoryUrl}
+              variant="secondary"
+              size="md"
+              block
+              icon={<Star size={16} aria-hidden="true" />}
+            >
+              {t("settings.aboutSettings.starTheRepo")}
+              <ExternalLink size={12} aria-hidden="true" />
+            </ExternalLinkButton>
+          </div>
         </div>
       </section>
 
