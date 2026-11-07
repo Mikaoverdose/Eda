@@ -190,6 +190,31 @@ describe("tags against real Git", () => {
     expect(tags.map((t) => t.name)).toEqual(["v1.0.0"]);
   });
 
+  it("preserves exact tag names when branches have the same names", async () => {
+    const repo = await seeded();
+    await repo.run(["branch", "release"]);
+    await repo.git.createTag(repo.path, "release", { message: "Release notes" });
+    await repo.git.createTag(repo.path, "main");
+    await repo.git.createTag(repo.path, "tags/release");
+    expect((await repo.git.listTags(repo.path)).map((tag) => tag.name)).toEqual([
+      "main",
+      "release",
+      "tags/release",
+    ]);
+    expect((await repo.git.listBranches(repo.path)).map((branch) => branch.name)).toEqual([
+      "main",
+      "release",
+    ]);
+    await repo.git.deleteTag(repo.path, "release");
+    expect((await repo.git.listTags(repo.path)).map((tag) => tag.name)).toEqual([
+      "main",
+      "tags/release",
+    ]);
+    expect((await repo.run(["rev-parse", "refs/heads/release"])).trim()).toBe(
+      (await repo.run(["rev-parse", "HEAD"])).trim(),
+    );
+  });
+
   it("lists several tags without newline contamination", async () => {
     const repo = await seeded();
     for (const name of ["v1.0.0", "v1.1.0", "v2.0.0"]) await repo.git.createTag(repo.path, name);

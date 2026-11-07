@@ -862,8 +862,7 @@ export class GitService {
       const fullRef = fields[index + 4]!;
 
       branches.push({
-        // for-each-ref adds a newline after each NUL-terminated record.
-        name: fields[index]!.replace(/^\n/, ""),
+        name: fullRef.replace(/^refs\/(?:heads|remotes)\//, ""),
         oid: fields[index + 1]!,
         isHead: fields[index + 2] === "*",
         remote: fullRef.startsWith("refs/remotes/"),
@@ -999,7 +998,7 @@ export class GitService {
     const fields = await this.execFields(
       [
         "for-each-ref",
-        "--format=%(refname:short)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(taggername)%00%(contents)%00",
+        "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(taggername)%00%(contents)%00",
         "refs/tags",
       ],
       { cwd: path, operation: t("operations.listTags"), maxStdoutBytes: 4 * 1024 * 1024 },
@@ -1009,7 +1008,7 @@ export class GitService {
 
     for (let index = 0; index + 5 < fields.length; index += 6) {
       tags.push({
-        name: fields[index]!.replace(/^\n/, ""),
+        name: fields[index]!.replace(/^\n/, "").slice("refs/tags/".length),
         oid: fields[index + 2] || fields[index + 1]!,
         ...(fields[index + 3] === "tag"
           ? { annotated: true, tagger: fields[index + 4]!, message: fields[index + 5]! }
