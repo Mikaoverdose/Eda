@@ -182,6 +182,7 @@ try {
 
   await trustFixture(app, root);
   const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   page.on("pageerror", (error) => errors.push(error.message));
   await page.getByRole("button", { name: "Get started", exact: true }).click();
