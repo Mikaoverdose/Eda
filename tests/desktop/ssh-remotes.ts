@@ -1,5 +1,6 @@
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
+import { expect } from "playwright/test";
 import { chooseSelect } from "./select-control.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
@@ -386,19 +387,27 @@ try {
   const exactSigner = `${fingerprint}!`;
   await picker.getByRole("radio", { name: /Primary key · exact selection/ }).check();
   assert.match((await picker.textContent()) ?? "", /test@eda.invalid/);
+  await expect(signing).toHaveAttribute("aria-busy", "false");
 
-  await page.waitForFunction(async (expected) => {
-    const result = await window.eda.identity.getActive();
-    return (
-      result.ok &&
-      result.value?.signing.format === "gpg" &&
-      result.value.signing.keyRef === expected
-    );
-  }, exactSigner);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (expected) => {
+          const result = await window.eda.identity.getActive();
+          return (
+            result.ok &&
+            result.value?.signing.format === "gpg" &&
+            result.value.signing.keyRef === expected
+          );
+        }, exactSigner),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
 
   const gpgProfile = await page.evaluate(() => window.eda.identity.getActive());
 
-  assert.ok(gpgProfile.ok && gpgProfile.value?.signing.keyRef === exactSigner);
+  assert.ok(gpgProfile.ok && gpgProfile.value, JSON.stringify(gpgProfile));
+  assert.equal(gpgProfile.value.signing.keyRef, exactSigner);
   assert.equal(gpgProfile.value.signing.format, "gpg");
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();

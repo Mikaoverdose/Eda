@@ -1,3 +1,4 @@
+import { expect } from "playwright/test";
 import { trustFixture } from "./helpers/trust.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
@@ -147,10 +148,16 @@ try {
   );
 
   await page.getByRole("radio", { name: "System Git (PATH)", exact: true }).check();
-  await page.waitForFunction(async () => {
-    const setting = await window.eda.settings.resolve("gitEngine", {});
-    return setting.ok && setting.value.value === "system";
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const setting = await window.eda.settings.resolve("gitEngine", {});
+          return setting.ok && setting.value.value === "system";
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
 
   const selectedEngine = await page.evaluate(() => window.eda.app.getGitEngine());
 

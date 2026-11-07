@@ -1,3 +1,4 @@
+import { expect } from "playwright/test";
 import assert from "node:assert/strict";
 import { accentComponents } from "../../src/shared/preferences/accent.ts";
 import { defaultCommitPrefixes } from "../../src/shared/preferences/commit-prefix.ts";
@@ -340,10 +341,16 @@ try {
   await openCustomAccent(page);
   picker = page.getByRole("dialog", { name: "Custom accent color", exact: true });
   await picker.getByRole("textbox", { name: "Hex color", exact: true }).fill("#638f86");
-  await page.waitForFunction(async () => {
-    const result = await window.eda.settings.resolve("accentHue", {});
-    return result.ok && result.value.value === "#638f86";
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const result = await window.eda.settings.resolve("accentHue", {});
+          return result.ok && result.value.value === "#638f86";
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Profile: Appearance", exact: true }).click();
   await page.getByRole("combobox", { name: "Accent color source", exact: true }).click();
@@ -351,10 +358,16 @@ try {
   await openCustomAccent(page);
   picker = page.getByRole("dialog", { name: "Custom accent color", exact: true });
   await picker.getByRole("textbox", { name: "Hex color", exact: true }).fill("#ac799f");
-  await page.waitForFunction(async () => {
-    const profile = await window.eda.identity.getActive();
-    return profile.ok && profile.value?.hue === "#ac799f";
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const profile = await window.eda.identity.getActive();
+          return profile.ok && profile.value?.hue === "#ac799f";
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
 
@@ -372,14 +385,24 @@ try {
   await waitForAccent("#ac799f");
   await page.getByRole("combobox", { name: "Accent color source", exact: true }).click();
   await page.getByRole("option", { name: "Follow global", exact: true }).click();
-  await page.waitForFunction(async () => {
-    const profile = await window.eda.identity.getActive();
-    if (!profile.ok || !profile.value) return false;
-    const result = await window.eda.settings.resolve("accentHue", { profileId: profile.value.id });
-    return (
-      result.ok && result.value.value === "#638f86" && result.value.source.kind === "application"
-    );
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const profile = await window.eda.identity.getActive();
+          if (!profile.ok || !profile.value) return false;
+          const result = await window.eda.settings.resolve("accentHue", {
+            profileId: profile.value.id,
+          });
+          return (
+            result.ok &&
+            result.value.value === "#638f86" &&
+            result.value.source.kind === "application"
+          );
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
   await page.getByRole("button", { name: "Remove image", exact: true }).click();
   await page.waitForFunction(

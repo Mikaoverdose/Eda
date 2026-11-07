@@ -181,27 +181,39 @@ try {
     .getByRole("radio", { name: "Dark", exact: true })
     .check();
   await page.getByRole("radio", { name: "Nord Dark", exact: true }).click();
-  await page.waitForFunction(async () => {
-    const active = await window.eda.identity.getActive();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const active = await window.eda.identity.getActive();
 
-    if (!active.ok || !active.value) return false;
+          if (!active.ok || !active.value) return false;
 
-    const theme = await window.eda.settings.resolve("theme", { profileId: active.value.id });
+          const theme = await window.eda.settings.resolve("theme", { profileId: active.value.id });
 
-    return (
-      theme.ok &&
-      (typeof theme.value.value === "string"
-        ? theme.value.value === "nord"
-        : theme.value.value.dark === "nord")
-    );
-  });
+          return (
+            theme.ok &&
+            (typeof theme.value.value === "string"
+              ? theme.value.value === "nord"
+              : theme.value.value.dark === "nord")
+          );
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await mkdir("screenshots", { recursive: true });
   await section("Global settings: Appearance");
   await page.getByRole("checkbox", { name: "Reduce motion", exact: true }).click();
-  await page.waitForFunction(async () => {
-    const result = await window.eda.settings.resolve("reducedMotion", {});
-    return result.ok && result.value.value;
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const result = await window.eda.settings.resolve("reducedMotion", {});
+          return result.ok && result.value.value;
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
 
   const firstWork = await page.evaluate(async () => {
     const result = await window.eda.identity.getActive();
@@ -248,19 +260,25 @@ try {
 
   await page.getByRole("button", { name: "Use this profile", exact: true }).click();
   await page.getByText("Profile saved for this repository.", { exact: true }).waitFor();
-  await page.waitForFunction(async (id) => {
-    const result = await window.eda.identity.inspectGit(id);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (id) => {
+          const result = await window.eda.identity.inspectGit(id);
 
-    return (
-      result.ok &&
-      result.value.repository?.some(
-        (entry) =>
-          entry.key === "user.email" &&
-          entry.value === "work@example.com" &&
-          entry.scope === "local",
-      )
-    );
-  }, alpha.id);
+          return (
+            result.ok &&
+            result.value.repository?.some(
+              (entry) =>
+                entry.key === "user.email" &&
+                entry.value === "work@example.com" &&
+                entry.scope === "local",
+            )
+          );
+        }, alpha.id),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   assert.equal(
     execFileSync("git", ["-C", paths.alpha, "config", "--local", "--get", "user.email"], {
       env: fixtureEnv,
@@ -275,26 +293,38 @@ try {
   assert.equal(await authorSettings.getByText("This repository", { exact: true }).count(), 2);
 
   await page.getByRole("button", { name: "Remove local author", exact: true }).click();
-  await page.waitForFunction(async (id) => {
-    const result = await window.eda.identity.inspectGit(id);
-    return result.ok && result.value.localOverrides?.join(",") === "commit.gpgsign";
-  }, alpha.id);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (id) => {
+          const result = await window.eda.identity.inspectGit(id);
+          return result.ok && result.value.localOverrides?.join(",") === "commit.gpgsign";
+        }, alpha.id),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await authorSettings.getByText("Global Git configuration", { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "Remove local signing", exact: true }).click();
-  await page.waitForFunction(async (id) => {
-    const result = await window.eda.identity.inspectGit(id);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (id) => {
+          const result = await window.eda.identity.inspectGit(id);
 
-    return (
-      result.ok &&
-      result.value.localOverrides?.length === 0 &&
-      result.value.repository?.some(
-        (entry) =>
-          entry.key === "user.email" &&
-          entry.value === "work@example.com" &&
-          entry.scope === "global",
-      )
-    );
-  }, alpha.id);
+          return (
+            result.ok &&
+            result.value.localOverrides?.length === 0 &&
+            result.value.repository?.some(
+              (entry) =>
+                entry.key === "user.email" &&
+                entry.value === "work@example.com" &&
+                entry.scope === "global",
+            )
+          );
+        }, alpha.id),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await page
     .getByText("No local author or signing overrides in this repository.", { exact: true })
     .waitFor();
@@ -534,23 +564,37 @@ try {
 
   await section("Profile: Git configuration");
   await page.getByLabel("Sync this profile’s identity to Git").uncheck();
-  await page.waitForFunction(async (id) => {
-    const result = await window.eda.settings.resolve("syncGlobalGitConfig", { profileId: id });
-    if (!result.ok) return false;
-    return result.value.value === false;
-  }, home.id);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (id) => {
+          const result = await window.eda.settings.resolve("syncGlobalGitConfig", {
+            profileId: id,
+          });
+          if (!result.ok) return false;
+          return result.value.value === false;
+        }, home.id),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await section("Global settings: Appearance");
   await page
     .getByRole("radiogroup", { name: "Appearance mode", exact: true })
     .getByRole("radio", { name: "Light", exact: true })
     .click();
-  await page.waitForFunction(async () => {
-    const result = await window.eda.settings.resolve("theme", {});
-    if (!result.ok) return false;
-    return typeof result.value.value === "string"
-      ? result.value.value === "eda-light"
-      : result.value.value.mode === "light" && result.value.value.light === "eda-light";
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const result = await window.eda.settings.resolve("theme", {});
+          if (!result.ok) return false;
+          return typeof result.value.value === "string"
+            ? result.value.value === "eda-light"
+            : result.value.value.mode === "light" && result.value.value.light === "eda-light";
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await section("Profiles");
   await page.getByRole("button", { name: "Switch", exact: true }).click();
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();

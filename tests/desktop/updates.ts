@@ -1,3 +1,4 @@
+import { expect } from "playwright/test";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -83,10 +84,16 @@ try {
   });
   assert.equal(await prereleases.isChecked(), true);
   await prereleases.click();
-  await page.waitForFunction(async () => {
-    const result = await window.eda.settings.resolve("includePrereleaseUpdates", {});
-    return result.ok && result.value.value === false;
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const result = await window.eda.settings.resolve("includePrereleaseUpdates", {});
+          return result.ok && result.value.value === false;
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await page
     .getByRole("checkbox", { name: "Check for updates automatically", exact: true })
     .click();

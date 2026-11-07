@@ -1,3 +1,4 @@
+import { expect } from "playwright/test";
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
@@ -108,15 +109,21 @@ try {
     .getByRole("textbox", { name: "Commit author email", exact: true })
     .fill("repo@example.invalid");
   await page.getByRole("button", { name: "Save repository identity", exact: true }).click();
-  await page.waitForFunction(async (id) => {
-    const active = await window.eda.identity.getActive();
-    if (!active.ok || !active.value) return false;
-    const result = await window.eda.settings.resolve("repositoryCommitIdentity", {
-      profileId: active.value.id,
-      repositoryId: id,
-    });
-    return result.ok && result.value.value?.email === "repo@example.invalid";
-  }, opened.value.id);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (id) => {
+          const active = await window.eda.identity.getActive();
+          if (!active.ok || !active.value) return false;
+          const result = await window.eda.settings.resolve("repositoryCommitIdentity", {
+            profileId: active.value.id,
+            repositoryId: id,
+          });
+          return result.ok && result.value.value?.email === "repo@example.invalid";
+        }, opened.value.id),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
   await page
     .getByLabel("Commit identity: Repository Author <repo@example.invalid>", { exact: true })

@@ -562,10 +562,16 @@ try {
     fetchSettings.getByRole("combobox", { name: "Background fetch interval" }),
     "0",
   );
-  await page.waitForFunction(async (id) => {
-    const state = await window.eda.backgroundFetch.inspect(id);
-    return state.ok && state.value.intervalMinutes === 0;
-  }, repository.id);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (id) => {
+          const state = await window.eda.backgroundFetch.inspect(id);
+          return state.ok && state.value.intervalMinutes === 0;
+        }, repository.id),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await app.close();
   app = await electron.launch({
     args: ["dist/main/index.js", `--user-data-dir=${join(root, "user-data")}`],
