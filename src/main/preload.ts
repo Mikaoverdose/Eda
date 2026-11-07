@@ -111,6 +111,7 @@ const api: EdaApi = {
   },
   remotes: {
     inspect: (id) => ipcRenderer.invoke(IPC_CHANNELS.remotesInspect, id),
+    listTags: (request) => ipcRenderer.invoke(IPC_CHANNELS.remotesListTags, request),
     change: (id, change) => ipcRenderer.invoke(IPC_CHANNELS.remotesChange, id, change),
     track: (id, branch, upstream) =>
       ipcRenderer.invoke(IPC_CHANNELS.remotesTrack, id, branch, upstream),

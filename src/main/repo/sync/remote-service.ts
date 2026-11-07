@@ -11,6 +11,8 @@ import type {
   PushRequest,
   RemoteChange,
   RemoteState,
+  RemoteTagsRequest,
+  RemoteTagSummary,
 } from "@shared/integrations/remotes";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, realpath } from "node:fs/promises";
@@ -99,6 +101,37 @@ export class RemoteService {
         upstreamState: states.get(branch.name) ?? "",
       })),
     };
+  }
+
+  async listTags(request: RemoteTagsRequest): Promise<RemoteTagSummary[]> {
+    remoteName(request.remote);
+    const { path, identityId } = this.repositories.resolveActiveRepository(request.repositoryId);
+    const identity = this.identities.findById(identityId);
+    if (!identity)
+      throw remoteError(errorText("main.remoteService.theOriginatingProfileNoLongerExists"));
+    const url = await this.remotes.destination(path, request.remote, true);
+    const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
+    const result = await this.git
+      .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--tags", "--", url], {
+        cwd: path,
+        operation: t("main.remoteService.inspectRemoteTags"),
+        maxStdoutBytes: 4 * 1024 * 1024,
+        ...transportOptions(url, identity, credentials),
+      })
+      .catch((error: unknown) => {
+        throw this.githubFailure(error, url, !!request.credentials);
+      });
+    return result.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [oid, ref] = line.split("\t");
+        if (!oid || !isFullObjectId(oid) || !ref?.startsWith("refs/tags/"))
+          throw remoteError(errorText("main.remoteService.theRemoteReturnedAnInvalidObjectId"));
+        const name = ref.slice("refs/tags/".length);
+        assertValidRefName(name, t("main.remoteService.inspectRemoteTags"));
+        return { name, oid };
+      });
   }
 
   async fetchStates(id: string) {

@@ -35,6 +35,17 @@ export type PushMode = (typeof PUSH_MODES)[number];
 export const REMOTE_REF_KINDS = ["branch", "tag"] as const;
 export type RemoteRefKind = (typeof REMOTE_REF_KINDS)[number];
 
+export interface RemoteTagsRequest {
+  repositoryId: string;
+  remote: string;
+  credentials?: TransportCredentials;
+}
+
+export interface RemoteTagSummary {
+  name: string;
+  oid: string;
+}
+
 export interface PushRequest {
   repositoryId: string;
   remote: string;

@@ -96,6 +96,19 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
     ok(await remotes.inspect(requireId(id))),
   );
 
+  handle(IPC_CHANNELS.remotesListTags, async (_event, raw) => {
+    const input = requireRecord(raw, t("main.remoteService.inspectRemoteTags"));
+    return ok(
+      await remotes.listTags({
+        repositoryId: requireId(input["repositoryId"]),
+        remote: requireString(input["remote"], t("fields.remoteName"), 100),
+        ...(input["credentials"] === undefined
+          ? {}
+          : { credentials: credentials(input["credentials"])! }),
+      }),
+    );
+  });
+
   handle(IPC_CHANNELS.remotesChange, async (_event, rawId, rawChange) => {
     const id = requireId(rawId);
     const value = requireRecord(rawChange, t("main.remoteHandlers.remoteChange"));

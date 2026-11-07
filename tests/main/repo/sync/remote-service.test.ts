@@ -1122,3 +1122,27 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
     spy.mockRestore();
   }
 });
+
+it("lists remote tags without fetching them, keeping annotated tag object IDs and using the push destination", async () => {
+  const { service, source, server, client, run, operations, profile } = await setup();
+  await source.run(["tag", "-a", "annotated", "-m", "release notes"]);
+  await source.run(["tag", "lightweight"]);
+  await source.run(["push", "origin", "--tags"]);
+  await run(["tag", "private"]);
+  const before = await run(["show-ref"]);
+  const operationCount = operations.list(profile.id).length;
+  const tags = await service.listTags({ repositoryId: client.id, remote: "origin" });
+  expect(tags).toEqual([
+    { name: "annotated", oid: (await server.run(["rev-parse", "refs/tags/annotated"])).trim() },
+    { name: "lightweight", oid: (await server.run(["rev-parse", "refs/tags/lightweight"])).trim() },
+  ]);
+  expect(await run(["show-ref"])).toBe(before);
+  expect(operations.list(profile.id)).toHaveLength(operationCount);
+  expect(await run(["tag", "--list"])).toBe("private\n");
+  await service.change(client.id, { kind: "url", name: "origin", url: client.path, push: false });
+  await service.change(client.id, { kind: "url", name: "origin", url: server.path, push: true });
+  expect(await service.listTags({ repositoryId: client.id, remote: "origin" })).toEqual(tags);
+  await expect(
+    service.listTags({ repositoryId: client.id, remote: "--all" }),
+  ).rejects.toMatchObject({ kind: "invalid-input" });
+});

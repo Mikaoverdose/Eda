@@ -43,6 +43,8 @@ import type {
   PushRequest,
   RemoteChange,
   RemoteState,
+  RemoteTagsRequest,
+  RemoteTagSummary,
   TransportCredentials,
 } from "./integrations/remotes";
 import type { ReferenceLinkKind } from "./repository/reference-link";
@@ -256,6 +258,7 @@ export interface EdaApi {
   };
   remotes: {
     inspect(id: string): Promise<Result<RemoteState>>;
+    listTags(request: RemoteTagsRequest): Promise<Result<RemoteTagSummary[]>>;
     change(id: string, change: RemoteChange): Promise<Result<void>>;
     track(id: string, branch: string, upstream: string | null): Promise<Result<void>>;
     fetch(request: FetchRequest): Promise<Result<string>>;
@@ -517,6 +520,7 @@ export const IPC_CHANNELS = {
   conflictExternal: "conflict:external",
   conflictResolve: "conflict:resolve",
   remotesInspect: "remotes:inspect",
+  remotesListTags: "remotes:list-tags",
   remotesChange: "remotes:change",
   remotesTrack: "remotes:track",
   remotesFetch: "remotes:fetch",

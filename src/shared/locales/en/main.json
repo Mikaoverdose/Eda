@@ -947,5 +947,6 @@
   "main.workflowService.theseBranchesHaveDivergedFastForwardOnlyCannotMergeThem": "These branches have diverged. Fast-forward-only cannot merge them.",
   "main.workflowService.thisMergeReviewExpiredOrBelongsToAnotherContextReviewAgain": "This merge review expired or belongs to another context. Review again.",
   "main.workflowService.thisOperationBelongsToAnotherProfileSwitchTo": "This operation belongs to another profile. Switch to its originating profile to continue or abort it.",
-  "main.workflowService.unsupportedStashStructure": "Unsupported stash structure."
+  "main.workflowService.unsupportedStashStructure": "Unsupported stash structure.",
+  "main.remoteService.inspectRemoteTags": "Inspect remote tags"
 }
