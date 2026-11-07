@@ -57,7 +57,7 @@ it("deduplicates normalized authors, persists images across restarts, and refres
 
     const url = String(fetchImage.mock.calls[0]![0]);
 
-    expect(url).toMatch(/^https:\/\/www.gravatar.com\/avatar\/[a-f0-9]{64}\?/);
+    expect(url).toMatch(/^https:\/\/www\.gravatar\.com\/avatar\/[a-f0-9]{64}\?/);
     expect(await readFile(join(file, "index"), "utf8")).not.toContain("user@example.com");
 
     const restarted = new AvatarCache(file, fetchImage, () => now);

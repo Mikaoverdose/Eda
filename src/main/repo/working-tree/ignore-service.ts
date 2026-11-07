@@ -20,7 +20,7 @@ export function ignoreRule(path: string, kind: IgnoreKind): string {
       errorText("main.ignoreService.thisPathCannotBeRepresentedSafelyByThisIgnoreEditor"),
     );
 
-  const escape = (value: string) => value.replace(/[\[\]*?!# ]/g, "\\$&");
+  const escape = (value: string) => value.replace(/[\\[\]*?!# ]/g, "\\$&");
 
   if (kind === "extension") {
     const extension = posix.extname(path);

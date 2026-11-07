@@ -16,7 +16,21 @@ describe("Git ignore rules", () => {
     expect(ignoreRule("build/file.txt", "directory")).toBe("/build/");
     expect(ignoreRule("build/file.txt", "extension")).toBe("*.txt");
     expect(() => ignoreRule("../outside", "path")).toThrow();
+    for (const kind of ["path", "directory", "extension"] as const)
+      expect(() => ignoreRule("build/file\\name.txt", kind)).toThrow();
     expect(() => ignoreRule("file.txt", "directory")).toThrow();
+  });
+
+  it("ignores literal metacharacters without matching similarly named paths", async () => {
+    repo = await createTempRepo();
+    const path = "build/[a]*?!# .log";
+    await new IgnoreService(repo.git).add(repo.path, path, "path");
+    const result = await repo.git.exec(["check-ignore", "--no-index", "-z", "--stdin"], {
+      cwd: repo.path,
+      operation: "check literal ignore rule",
+      stdin: `${path}\0build/aX!# .log\0`,
+    });
+    expect(result.stdout).toBe(`${path}\0`);
   });
 
   it("asks Git to explain nested, local and global exclusions including negation", async () => {
