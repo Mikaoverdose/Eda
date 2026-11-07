@@ -17,7 +17,6 @@ import {
   type UnifiedDiff,
 } from "@shared/repository/repository-read";
 import { dirname, join } from "node:path";
-import { devNull } from "node:os";
 import type { RepositoryTrust } from "./security/repository-trust";
 import { existsSync } from "node:fs";
 import type { OperationManager } from "../operations/operation-manager";
@@ -207,7 +206,7 @@ export class GitService {
         }
       }
       env["GIT_CONFIG_NOSYSTEM"] = "1";
-      env["GIT_CONFIG_GLOBAL"] = devNull;
+      env["GIT_CONFIG_GLOBAL"] = "/dev/null";
       env["GIT_TEMPLATE_DIR"] = "";
     }
     env["GIT_NO_LAZY_FETCH"] = "1";

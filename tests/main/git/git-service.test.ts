@@ -249,6 +249,16 @@ describe("GitService command construction", () => {
     expect(env["GIT_COMMITTER_EMAIL"]).toBeUndefined();
   });
 
+  it("isolates clone configuration using Git's portable null path", async () => {
+    const runner = new FakeProcessRunner().otherwise({ exitCode: 0 });
+    await service(runner).exec(["clone", "--", "/source", "/destination"], { operation: "clone" });
+    expect(runner.lastCall?.env["GIT_CONFIG_GLOBAL"]).toBe("/dev/null");
+    expect(runner.lastCall?.env["GIT_CONFIG_NOSYSTEM"]).toBe("1");
+    expect(runner.lastCall?.args).toEqual(
+      expect.arrayContaining(["core.hooksPath=/dev/null", "init.templateDir="]),
+    );
+  });
+
   it("pins SSH to one key so the agent cannot offer another identity's", async () => {
     const runner = new FakeProcessRunner().otherwise({ stdout: "" });
 
