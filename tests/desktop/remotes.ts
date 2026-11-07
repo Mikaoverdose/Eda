@@ -6,7 +6,7 @@ import { _electron as electron, type ElectronApplication } from "playwright";
 import { expect } from "playwright/test";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, writeFile, rm } from "node:fs/promises";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -465,7 +465,7 @@ try {
 
   const before = git(clientPath, "rev-parse", "HEAD");
 
-  assert.equal(repository.path.replaceAll("\\", "/"), clientPath.replaceAll("\\", "/"));
+  assert.equal(await realpath(repository.path), await realpath(clientPath));
   assert.equal(before, committedHead);
 
   git(clientPath, "branch", "--set-upstream-to=origin/main", "main");
