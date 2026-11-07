@@ -2443,5 +2443,18 @@
   "fingerprint.copy": "Copy {label}",
   "settings.componentGallery.gpgFingerprint": "GPG fingerprint",
   "settings.componentGallery.sshFingerprint": "SSH fingerprint",
-  "settings.componentGallery.fingerprint": "Fingerprint"
+  "settings.componentGallery.fingerprint": "Fingerprint",
+  "referenceMenu.deleteTagFrom": "Delete tag from",
+  "referenceMenu.fetchTagFirst": "Fetch this tag before checking it out, verifying its signature, or pushing it.",
+  "referenceMenu.pushTag": "Push tag...",
+  "referenceMenu.remoteTagDeleted": "Remote tag deleted. {value1}",
+  "referenceMenu.tagNoLongerExists": "This tag is no longer available locally or on the selected remote.",
+  "referenceMenu.tagRemoteWarning": "This removes the tag from the selected remote repository for everyone.",
+  "remotesDialog.chooseATag": "Choose a tag...",
+  "referenceSidebar.localLocation": "Local",
+  "referenceSidebar.localTagIndicator": "Local tag",
+  "referenceSidebar.remoteTagIndicator": "Remote tag: {remotes}",
+  "referenceSidebar.remoteTagUnavailable": "Remote status unavailable: {remotes}",
+  "referenceMenu.loadingTagTargets": "Loading tag targets...",
+  "referenceMenu.localTagActions": "Checkout and signature verification use the local copy. Local and remote tags with the same name may differ."
 }

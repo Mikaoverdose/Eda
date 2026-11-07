@@ -308,6 +308,7 @@ try {
   assert.equal(git(clientPath, "branch", "--show-current"), "main");
 
   git(clientPath, "tag", "-a", "release", "-m", "release notes");
+  git(clientPath, "tag", "unpublished");
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Fetch", exact: true }).click();
   await httpsAuthentication.getByLabel("HTTPS username").fill("fixture");
@@ -319,11 +320,18 @@ try {
     .filter({ hasText: /Fetched origin/ })
     .first()
     .waitFor();
-  await page.getByRole("button", { name: "Remotes", exact: true }).click();
-  await dialog.getByRole("tab", { name: "Push", exact: true }).click();
-  await chooseSelect(dialog.getByLabel("Ref type"), "tag");
-  await chooseSelect(dialog.getByLabel("Push mode"), "normal");
-  await chooseSelect(dialog.getByLabel("Local tag"), "release");
+  git(remote, "tag", "server-only", "refs/heads/main");
+  git(clientPath, "branch", "release");
+  await page
+    .getByRole("button", { name: "Inspect tag release", exact: true })
+    .click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Verify tag signature...", exact: true }).locator("svg"),
+  ).toHaveCount(1);
+  await page.screenshot({ path: join(tmpdir(), "eda-tag-menu.png") });
+  await page.getByRole("menuitem", { name: "Push tag...", exact: true }).click();
+  await expect(dialog.getByLabel("Local tag", { exact: true })).toContainText("release");
+  await expect(dialog.getByLabel("Destination tag", { exact: true })).toHaveValue("release");
   await dialog.getByText("HTTPS authentication", { exact: true }).click();
   await dialog.getByLabel("HTTPS username").fill("fixture");
   await dialog.getByLabel("HTTPS token").fill(token);
@@ -339,6 +347,92 @@ try {
   );
 
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  const tagsSection = page
+    .locator("details")
+    .filter({ has: page.locator("summary").getByText("Tags", { exact: true }) });
+  await expect(tagsSection).toHaveCount(1);
+  await expect(page.getByText("Local tags", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Remote tags", { exact: true })).toHaveCount(0);
+  const remoteOnlyTag = tagsSection.getByRole("button", {
+    name: "Inspect tag server-only",
+    exact: true,
+  });
+  await remoteOnlyTag.waitFor();
+  await expect(
+    tagsSection.getByRole("button", { name: "Inspect tag release", exact: true }),
+  ).toHaveCount(1);
+  await expect(remoteOnlyTag).toHaveText("backup/server-only");
+  await expect(remoteOnlyTag).toHaveAttribute("title", /Remote tag: backup/);
+  await expect(remoteOnlyTag.locator("svg")).toHaveCount(0);
+  await expect(
+    tagsSection.getByRole("button", { name: "Inspect tag release", exact: true }),
+  ).toHaveText("release");
+  await expect(page.getByRole("button", { name: "Inspect branch main", exact: true })).toHaveText(
+    "main",
+  );
+  await expect(
+    page.getByRole("button", { name: "Inspect branch origin/main", exact: true }),
+  ).toHaveText("origin/main");
+  assert.equal(git(clientPath, "tag", "--list", "server-only"), "");
+  await page.screenshot({ path: join(tmpdir(), "eda-tag-references.png") });
+  await page
+    .locator('[data-tour="references"]')
+    .screenshot({ path: join(tmpdir(), "eda-reference-locations.png") });
+  await remoteOnlyTag.click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Verify tag signature...", exact: true }),
+  ).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "Inspect tag unpublished", exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete tag...", exact: true }).click();
+  const localTagDelete = page.getByRole("dialog", { name: "Delete tag", exact: true });
+  await chooseSelect(localTagDelete.getByLabel("Remote", { exact: true }), "backup");
+  await expect(localTagDelete.getByRole("radio", { name: "Remote only", exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    localTagDelete.getByRole("radio", { name: "Local and remote", exact: true }),
+  ).toHaveCount(0);
+  await expect(localTagDelete.getByText("Remote: backup/unpublished", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.screenshot({ path: join(tmpdir(), "eda-tag-delete-local-only.png") });
+  await localTagDelete.getByRole("button", { name: "Delete locally", exact: true }).click();
+  await localTagDelete.waitFor({ state: "hidden" });
+  assert.equal(git(clientPath, "tag", "--list", "unpublished"), "");
+
+  await page
+    .getByRole("button", { name: "Inspect tag release", exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete tag...", exact: true }).click();
+  const deleteTagDialog = page.getByRole("dialog", { name: "Delete tag", exact: true });
+  await chooseSelect(deleteTagDialog.getByLabel("Remote", { exact: true }), "backup");
+  await expect(deleteTagDialog).not.toHaveAttribute("aria-modal", "true");
+  await expect(deleteTagDialog).toHaveClass(/ui-popover-in/);
+  await expect(deleteTagDialog.getByText("Check remote tags", { exact: true })).toHaveCount(0);
+  await expect(deleteTagDialog.locator('input[type="password"]')).toHaveCount(0);
+  await deleteTagDialog.getByRole("radio", { name: "Local and remote", exact: true }).check();
+  await page.screenshot({ path: join(tmpdir(), "eda-tag-delete-compact.png") });
+  await chooseSelect(deleteTagDialog.getByLabel("Remote", { exact: true }), "origin");
+  await deleteTagDialog.getByLabel("HTTPS username").fill("fixture");
+  await deleteTagDialog.getByLabel("Access token").fill(token);
+  await deleteTagDialog.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    deleteTagDialog.getByRole("radio", { name: "Local and remote", exact: true }),
+  ).toBeEnabled();
+  await deleteTagDialog.getByRole("radio", { name: "Local and remote", exact: true }).check();
+  await page.screenshot({ path: join(tmpdir(), "eda-tag-delete.png") });
+  await deleteTagDialog
+    .getByRole("button", { name: "Delete local and remote", exact: true })
+    .click();
+  await deleteTagDialog.waitFor({ state: "hidden" });
+  assert.equal(git(remote, "tag", "--list", "release"), "");
+  assert.equal(git(clientPath, "tag", "--list", "release"), "");
+  assert.notEqual(git(clientPath, "branch", "--list", "release"), "");
+  assert.notEqual(git(remote, "tag", "--list", "server-only"), "");
+
   await writeFile(join(clientPath, "commit-and-push.txt"), "committed locally first\n");
 
   const staged = await page.evaluate(

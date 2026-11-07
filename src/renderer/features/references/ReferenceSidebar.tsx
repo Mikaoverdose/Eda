@@ -14,10 +14,10 @@ import {
   SearchField,
   TextButton,
 } from "../../components/ui/index";
-import { referenceLabel } from "../../repository/reference-label";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { useSessionStore } from "../../stores/session-store";
+import { useTagReferences } from "./hooks/useTagReferences";
 import { ManageReferencesDialog } from "./ManageReferencesDialog";
 import { ReferenceMenu, type ReferenceTarget } from "./ReferenceMenu";
 
@@ -45,12 +45,13 @@ export function ReferenceSidebar({
     (state) => state.snapshot?.session.views[repositoryId]?.references ?? defaults,
   );
   const [branches, setBranches] = useState<BranchSummary[]>([]);
-  const [tags, setTags] = useState<TagSummary[]>([]);
+  const [localTags, setTags] = useState<TagSummary[]>([]);
   const [query, setQuery] = useState("");
   const [actions, setActions] = useState<ReferenceTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const tags = useTagReferences(repositoryId, profileId, localTags, revision, pending);
 
   useEffect(() => {
     if (pending) return;
@@ -243,6 +244,7 @@ export function ReferenceSidebar({
             repositoryId={repositoryId}
             target={actions}
             onClose={() => setActions(null)}
+            onChanged={() => setRevision((value) => value + 1)}
           />
         )}
         {manageOpen && (
@@ -308,18 +310,55 @@ export function ReferenceSidebar({
                   ) : (
                     <>
                       {items.slice(0, 200).map((item) => {
+                        const tag = "isHead" in item ? null : item;
+                        const tagTarget = tag
+                          ? {
+                              kind: "tag" as const,
+                              ref: tag,
+                              local: tag.local,
+                              remoteNames: tag.remotes.map((remote) => remote.name),
+                              ...(!tag.local && tag.remotes[0]
+                                ? { remoteName: tag.remotes[0].name, remoteOid: tag.remotes[0].oid }
+                                : {}),
+                            }
+                          : null;
+                        const tagStatus = tag
+                          ? [
+                              tag.local ? t("referenceSidebar.localTagIndicator") : "",
+                              tag.remotes.length
+                                ? t("referenceSidebar.remoteTagIndicator", {
+                                    remotes: tag.remotes.map((remote) => remote.name).join(", "),
+                                  })
+                                : "",
+                              tag.unknownRemotes.length
+                                ? t("referenceSidebar.remoteTagUnavailable", {
+                                    remotes: tag.unknownRemotes.join(", "),
+                                  })
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join("\n")
+                          : "";
                         const head = "isHead" in item && item.isHead === true;
                         const selected = selection?.kind === "commit" && selection.oid === item.oid;
-                        const label = referenceLabel(item.name);
+                        const displayName =
+                          tag && !tag.local && tag.remotes[0]
+                            ? `${tag.remotes[0].name}/${item.name}`
+                            : item.name;
 
                         return (
                           <ListItemButton
                             key={item.name}
-                            title={t("referenceSidebar.inspect", {
-                              name: item.name,
-                              value2: head ? t("referenceSidebar.currentBranch") : "",
-                              oid: item.oid.slice(0, 8),
-                            })}
+                            title={[
+                              t("referenceSidebar.inspect", {
+                                name: item.name,
+                                value2: head ? t("referenceSidebar.currentBranch") : "",
+                                oid: item.oid.slice(0, 8),
+                              }),
+                              tagStatus,
+                            ]
+                              .filter(Boolean)
+                              .join("\n")}
                             aria-label={t("referenceSidebar.inspectReference", {
                               value1:
                                 group.key === "tags"
@@ -328,9 +367,12 @@ export function ReferenceSidebar({
                               name: item.name,
                             })}
                             aria-pressed={selected}
-                            onClick={() =>
-                              void useRepositoryStore.getState().jumpToCommit(item.oid)
-                            }
+                            onClick={(event) => {
+                              if (tagTarget && !tagTarget.local) {
+                                const bounds = event.currentTarget.getBoundingClientRect();
+                                setActions({ ...tagTarget, x: bounds.right, y: bounds.top });
+                              } else void useRepositoryStore.getState().jumpToCommit(item.oid);
+                            }}
                             onMouseEnter={() =>
                               useRepositoryStore.setState({ hoveredRefOid: item.oid })
                             }
@@ -349,7 +391,7 @@ export function ReferenceSidebar({
                                       x: event.clientX,
                                       y: event.clientY,
                                     }
-                                  : { kind: "tag", ref: item, x: event.clientX, y: event.clientY },
+                                  : { ...tagTarget!, x: event.clientX, y: event.clientY },
                               );
                             }}
                             onKeyDown={(event) => {
@@ -362,34 +404,29 @@ export function ReferenceSidebar({
                                 setActions(
                                   "isHead" in item
                                     ? { kind: "branch", ref: item, x: bounds.right, y: bounds.top }
-                                    : { kind: "tag", ref: item, x: bounds.right, y: bounds.top },
+                                    : { ...tagTarget!, x: bounds.right, y: bounds.top },
                                 );
                               }
                             }}
                             selected={selected}
-                            className="py-1.5 text-xs"
+                            className="py-1.5 pl-[51px] text-xs"
                           >
-                            <group.icon
-                              size={13}
-                              className={cx("ml-[22px] shrink-0", head && "text-accent-text")}
-                              aria-hidden="true"
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate">{label.name}</span>
-                              {label.path && (
-                                <span className="mt-0.5 block truncate text-xs text-text-tertiary">
-                                  {label.path}
-                                </span>
+                            <span
+                              className={cx(
+                                "min-w-0 flex-1 truncate",
+                                head && "font-medium text-accent-text",
                               )}
+                            >
+                              {displayName}
                             </span>
-                            <span className="flex h-4 w-6 shrink-0 items-center justify-center">
-                              {head && (
-                                <span
-                                  className="size-1.5 rounded-full bg-accent"
-                                  title={t("referenceSidebar.currentBranchLabel")}
-                                />
-                              )}
-                            </span>
+                            {tag?.localOnly && (
+                              <span
+                                className="shrink-0 rounded-sm bg-bg-raised px-1.5 py-0.5 text-xs leading-none text-text-secondary"
+                                title={tagStatus}
+                              >
+                                {t("referenceSidebar.localLocation")}
+                              </span>
+                            )}
                           </ListItemButton>
                         );
                       })}

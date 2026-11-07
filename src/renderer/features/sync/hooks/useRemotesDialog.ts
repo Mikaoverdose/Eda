@@ -16,7 +16,12 @@ import type { RejectedPush } from "../RejectedPushNotice";
 
 export type RemoteTab = "push" | "tracking" | "configure";
 
-export function useRemotesDialog(repositoryId: string, initialTab?: RemoteTab) {
+export function useRemotesDialog(
+  repositoryId: string,
+  initialTab?: RemoteTab,
+  initialTag?: string,
+  initialRemote?: string,
+) {
   const loadRevision = useRef(0);
   const running = useRef(false);
   const mounted = useRef(false);
@@ -62,13 +67,17 @@ export function useRemotesDialog(repositoryId: string, initialTab?: RemoteTab) {
       const preferred = preferredRemote(result.value);
 
       setRemote((old) =>
-        result.value.remotes.some((item) => item.name === old) ? old : (preferred?.name ?? ""),
+        result.value.remotes.some((item) => item.name === old)
+          ? old
+          : result.value.remotes.some((item) => item.name === initialRemote)
+            ? initialRemote!
+            : (preferred?.name ?? ""),
       );
 
       const current = result.value.branches.find((item) => item.isHead)?.name ?? "";
 
-      setBranch((old) => old || current);
-      setDestination((old) => old || current);
+      setBranch((old) => old || initialTag || current);
+      setDestination((old) => old || initialTag || current);
     } catch (error) {
       if (revision === loadRevision.current) setError(errorMessage(error));
     }
@@ -86,7 +95,7 @@ export function useRemotesDialog(repositoryId: string, initialTab?: RemoteTab) {
     setTagNames([]);
     setPublish(true);
     setMode("normal");
-    setRefKind("branch");
+    setRefKind(initialTag ? "tag" : "branch");
     setTab(initialTab ?? "push");
     setPreview(null);
     setAuth({ username: "", password: "" });
@@ -102,7 +111,7 @@ export function useRemotesDialog(repositoryId: string, initialTab?: RemoteTab) {
       loadRevision.current++;
       contextRevision.current++;
     };
-  }, [repositoryId]);
+  }, [repositoryId, initialTag, initialRemote]);
 
   const run = async <T>(
     kindKey: MessageKey,

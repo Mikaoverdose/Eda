@@ -1,4 +1,5 @@
 import { ERROR_CODE, errorText } from "@shared/error-codes";
+import { referenceLink } from "@shared/repository/reference-link";
 import type { Result } from "@shared/errors";
 import { AppError, errorAction, errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -7,7 +8,17 @@ import type {
   TagSummary,
   TagVerification,
 } from "@shared/repository/repository-write";
-import { Copy, GitBranch, GitMerge, GitPullRequestArrow, Link, Pencil, Trash2 } from "lucide-react";
+import {
+  Copy,
+  GitBranch,
+  GitMerge,
+  GitPullRequestArrow,
+  Link,
+  Pencil,
+  ShieldCheck,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -30,11 +41,21 @@ import { ModalSurfaceContext } from "../../components/ui/overlays/ModalSurface";
 import { branchDeleteTargets } from "../../repository/branch-delete-targets";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { copyText } from "../../utils/clipboard";
+import { RemotesDialog } from "../sync/RemotesDialog";
+import { TagDeletePanel } from "./TagDeletePanel";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { RebaseDialog } from "../workflows/RebaseDialog";
 
 export type ReferenceTarget = (
-  { kind: "branch"; ref: BranchSummary } | { kind: "tag"; ref: TagSummary }
+  | { kind: "branch"; ref: BranchSummary }
+  | {
+      kind: "tag";
+      ref: TagSummary;
+      remoteName?: string;
+      remoteNames?: string[];
+      remoteOid?: string;
+      local?: boolean;
+    }
 ) & { x: number; y: number };
 
 type DeleteScope = "local" | "remote" | "both";
@@ -47,16 +68,19 @@ const actionTitleKeys = {
     tag: "referenceMenu.createLocalTagTitle",
   },
   verify: { branch: "referenceMenu.verifyBranchTitle", tag: "referenceMenu.verifyTagTitle" },
+  push: { branch: "remotesDialog.pushTab", tag: "referenceMenu.pushTag" },
 } as const;
 
 export function ReferenceMenu({
   repositoryId,
   target,
   onClose,
+  onChanged,
 }: {
   repositoryId: string;
   target: ReferenceTarget;
   onClose: () => void;
+  onChanged?: (() => void) | undefined;
 }) {
   const modalSurface = useContext(ModalSurfaceContext)?.current;
   const [context] = useState(() => captureRepositoryCommand(repositoryId));
@@ -64,12 +88,13 @@ export function ReferenceMenu({
   useRepositoryStore((state) => state.writing);
   const unavailable = repositoryCommandReason(context);
   const [mode, setMode] = useState<
-    "menu" | "rename" | "create" | "delete" | "verify" | "merge" | "rebase"
+    "menu" | "rename" | "create" | "delete" | "verify" | "merge" | "rebase" | "push"
   >("menu");
   const [name, setName] = useState(target.ref.name);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
+  const tagRunning = useRef(false);
   const [verification, setVerification] = useState<TagVerification | null>(null);
   const [targets, setTargets] = useState<ReturnType<typeof branchDeleteTargets> | null>(null);
   const [scope, setScope] = useState<DeleteScope>(
@@ -86,8 +111,21 @@ export function ReferenceMenu({
   const blocked = target.kind === "branch" && !!target.ref.worktreePath && !target.ref.isHead;
   const includesLocal = scope !== "remote";
   const includesRemote = scope !== "local";
+  const branchChoices = targets
+    ? (
+        [
+          ["local", t("referenceMenu.localOnly"), !!targets.local && !targets.localBlocked],
+          ["remote", t("referenceMenu.remoteOnly"), !!targets.remote && !remoteDeleted],
+          [
+            "both",
+            t("referenceMenu.localAndRemote"),
+            !!targets.local && !targets.localBlocked && !!targets.remote && !remoteDeleted,
+          ],
+        ] as const
+      ).filter(([, , available]) => available)
+    : [];
   const close = () => {
-    if (!running.current) onClose();
+    if (!running.current && !tagRunning.current) onClose();
   };
   const assertContext = () => {
     const reason = repositoryCommandReason(context);
@@ -131,11 +169,6 @@ export function ReferenceMenu({
   };
   const deleteRef = () =>
     run(async () => {
-      if (target.kind === "tag") {
-        requireResult(await dispatch("deleteTag", { repositoryId, name: target.ref.name }));
-        await refresh();
-        return;
-      }
       if (!targets) throw new AppError(ERROR_CODE.BRANCH_TARGETS_NOT_READY);
       if (includesLocal && (!targets.local || targets.localBlocked))
         throw new AppError(
@@ -161,6 +194,7 @@ export function ReferenceMenu({
           assertContext();
           requireResult(await window.eda.remotes.push(repositoryId, preview.token, credentials));
           setRemoteDeleted(true);
+          if (includesLocal) setScope("local");
         }
         if (includesLocal && targets.local) {
           assertContext();
@@ -177,6 +211,16 @@ export function ReferenceMenu({
       }
     });
 
+  if (mode === "push" && target.kind === "tag")
+    return (
+      <RemotesDialog
+        repositoryId={repositoryId}
+        initialTag={target.ref.name}
+        onChanged={onChanged}
+        {...(target.remoteName ? { initialRemote: target.remoteName } : {})}
+        onClose={onClose}
+      />
+    );
   if (mode === "merge")
     return (
       <MergeStartDialog repositoryId={repositoryId} source={target.ref.oid} onClose={onClose} />
@@ -222,7 +266,10 @@ export function ReferenceMenu({
         <>
           <MenuItem
             disabled={
-              busy || !!unavailable || (target.kind === "branch" && (target.ref.isHead || blocked))
+              busy ||
+              !!unavailable ||
+              (target.kind === "tag" && target.local === false) ||
+              (target.kind === "branch" && (target.ref.isHead || blocked))
             }
             onClick={() =>
               void run(async () => {
@@ -280,7 +327,17 @@ export function ReferenceMenu({
             <Copy size={13} />
             {t("referenceMenu.copyName")}
           </MenuItem>
-          <MenuItem onClick={() => void run(() => copyText(target.ref.oid), { write: false })}>
+          <MenuItem
+            onClick={() =>
+              void run(
+                () =>
+                  copyText(
+                    target.kind === "tag" ? (target.remoteOid ?? target.ref.oid) : target.ref.oid,
+                  ),
+                { write: false },
+              )
+            }
+          >
             <Copy size={13} />
             {t("referenceMenu.copySha")}
           </MenuItem>
@@ -288,13 +345,25 @@ export function ReferenceMenu({
             onClick={() =>
               void run(
                 async () => {
-                  const url = requireResult(
-                    await window.eda.repository.referenceUrl(
-                      repositoryId,
-                      target.kind === "branch" && target.ref.remote ? "remote-branch" : target.kind,
-                      target.ref.name,
-                    ),
-                  );
+                  const url =
+                    target.kind === "tag" && target.remoteName
+                      ? referenceLink(
+                          requireResult(
+                            await window.eda.remotes.inspect(repositoryId),
+                          ).remotes.find((remote) => remote.name === target.remoteName)
+                            ?.pushUrls[0] ?? "",
+                          "tag",
+                          target.ref.name,
+                        )
+                      : requireResult(
+                          await window.eda.repository.referenceUrl(
+                            repositoryId,
+                            target.kind === "branch" && target.ref.remote
+                              ? "remote-branch"
+                              : target.kind,
+                            target.ref.name,
+                          ),
+                        );
                   if (!url) throw new AppError(ERROR_CODE.REMOTE_BROWSER_URL_UNAVAILABLE);
                   await copyText(url);
                 },
@@ -306,27 +375,47 @@ export function ReferenceMenu({
             {t("referenceMenu.copyBrowserUrl")}
           </MenuItem>
           {target.kind === "tag" && (
-            <MenuItem
-              disabled={busy || !!unavailable}
-              onClick={() => {
-                setMode("verify");
-                void run(
-                  async () => {
-                    setVerification(
-                      requireResult(
-                        await window.eda.repository.verifyTag({
-                          repositoryId,
-                          name: target.ref.name,
-                        }),
-                      ),
-                    );
-                  },
-                  { dismiss: false },
-                );
-              }}
-            >
-              {t("referenceMenu.verifyTagSignature")}
-            </MenuItem>
+            <>
+              <MenuItem
+                disabled={busy || !!unavailable || target.local === false}
+                onClick={() => setMode("push")}
+              >
+                <Upload size={13} />
+                {t("referenceMenu.pushTag")}
+              </MenuItem>
+              <MenuItem
+                disabled={busy || !!unavailable || target.local === false}
+                onClick={() => {
+                  setMode("verify");
+                  void run(
+                    async () => {
+                      setVerification(
+                        requireResult(
+                          await window.eda.repository.verifyTag({
+                            repositoryId,
+                            name: target.ref.name,
+                          }),
+                        ),
+                      );
+                    },
+                    { dismiss: false },
+                  );
+                }}
+              >
+                <ShieldCheck size={13} />
+                {t("referenceMenu.verifyTagSignature")}
+              </MenuItem>
+              {target.remoteName && target.local !== false && (
+                <p className="px-2 py-1 text-xs text-text-tertiary">
+                  {t("referenceMenu.localTagActions")}
+                </p>
+              )}
+              {target.local === false && (
+                <p className="px-2 py-1 text-xs text-text-tertiary">
+                  {t("referenceMenu.fetchTagFirst")}
+                </p>
+              )}
+            </>
           )}
           <MenuItem
             disabled={busy || !!unavailable}
@@ -411,52 +500,52 @@ export function ReferenceMenu({
           </Button>
         </form>
       )}
-      {mode === "delete" && (
+      {mode === "delete" && target.kind === "tag" && (
+        <TagDeletePanel
+          repositoryId={repositoryId}
+          name={target.ref.name}
+          remoteOnly={target.local === false}
+          {...((target.remoteName ?? target.remoteNames?.[0])
+            ? { initialRemote: (target.remoteName ?? target.remoteNames?.[0])! }
+            : {})}
+          onChanged={onChanged}
+          onClose={onClose}
+          onBusyChange={(busy) => {
+            tagRunning.current = busy;
+          }}
+        />
+      )}
+      {mode === "delete" && target.kind === "branch" && (
         <div ref={review} tabIndex={-1} className="space-y-3 p-2 text-xs">
-          {target.kind === "tag" ? (
-            <p>{t("referenceMenu.deleteThisLocalTagRemoteTagsAreUnaffected")}</p>
-          ) : (
+          {target.kind === "branch" && (
             <>
               {busy && !targets && <p role="status">{t("referenceMenu.loadingBranchTargets")}</p>}
               {targets && (
                 <>
-                  <fieldset className="space-y-2" disabled={busy || remoteDeleted}>
-                    <legend className="mb-2 font-medium">
-                      {t("referenceMenu.deleteBranchFrom")}
-                    </legend>
-                    {(
-                      [
-                        [
-                          "local",
-                          t("referenceMenu.localOnly"),
-                          !targets.local || !!targets.localBlocked,
-                        ],
-                        ["remote", t("referenceMenu.remoteOnly"), !targets.remote],
-                        [
-                          "both",
-                          t("referenceMenu.localAndRemote"),
-                          !targets.local || !!targets.localBlocked || !targets.remote,
-                        ],
-                      ] as const
-                    ).map(([value, label, disabled]) => (
-                      <label key={value} className="flex items-center gap-2">
-                        <Radio
-                          name="delete-scope"
-                          value={value}
-                          checked={scope === value}
-                          disabled={disabled}
-                          onChange={() => setScope(value)}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </fieldset>
+                  {branchChoices.length > 0 && (
+                    <fieldset className="space-y-2" disabled={busy}>
+                      <legend className="mb-2 font-medium">
+                        {t("referenceMenu.deleteBranchFrom")}
+                      </legend>
+                      {branchChoices.map(([value, label]) => (
+                        <label key={value} className="flex items-center gap-2">
+                          <Radio
+                            name="delete-scope"
+                            value={value}
+                            checked={scope === value}
+                            onChange={() => setScope(value)}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
                   {targets.local && (
                     <p className="break-all">
                       {t("referenceMenu.local", { name: targets.local.name })}
                     </p>
                   )}
-                  {targets.remote && (
+                  {targets.remote && !remoteDeleted && (
                     <p className="break-all">
                       {t("referenceMenu.remote", {
                         name: targets.remote.name,
@@ -522,31 +611,33 @@ export function ReferenceMenu({
             <Button size="sm" autoFocus disabled={busy} onClick={close}>
               {t("common.cancel")}
             </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              busy={busy}
-              disabled={
-                !!unavailable ||
-                (target.kind === "branch" &&
-                  (!targets ||
-                    (includesLocal && (!targets.local || !!targets.localBlocked)) ||
-                    (includesRemote && !targets.remote))) ||
-                (needsAuth &&
-                  includesRemote &&
-                  !remoteDeleted &&
-                  (!auth.username.trim() || !auth.password))
-              }
-              onClick={() => void deleteRef()}
-            >
-              {t(
-                scope === "both"
-                  ? "referenceMenu.deleteBoth"
-                  : scope === "local"
-                    ? "referenceMenu.deleteLocal"
-                    : "referenceMenu.deleteRemote",
-              )}
-            </Button>
+            {branchChoices.some(([value]) => value === scope) && (
+              <Button
+                size="sm"
+                variant="danger"
+                busy={busy}
+                disabled={
+                  !!unavailable ||
+                  (target.kind === "branch" &&
+                    (!targets ||
+                      (includesLocal && (!targets.local || !!targets.localBlocked)) ||
+                      (includesRemote && !targets.remote))) ||
+                  (needsAuth &&
+                    includesRemote &&
+                    !remoteDeleted &&
+                    (!auth.username.trim() || !auth.password))
+                }
+                onClick={() => void deleteRef()}
+              >
+                {t(
+                  scope === "both"
+                    ? "referenceMenu.deleteBoth"
+                    : scope === "local"
+                      ? "referenceMenu.deleteLocal"
+                      : "referenceMenu.deleteRemote",
+                )}
+              </Button>
+            )}
           </div>
         </div>
       )}

@@ -171,6 +171,7 @@ export const FEATURE_COMPONENTS = [
       "features/references/ManageReferencesDialog.tsx",
       "features/references/ReferenceMenu.tsx",
       "features/references/ReferenceSidebar.tsx",
+      "features/references/TagDeletePanel.tsx",
     ],
   },
   {
@@ -448,6 +449,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/references/ManageReferencesDialog.tsx": ["ManageReferencesDialog"],
   "features/references/ReferenceMenu.tsx": ["ReferenceMenu"],
   "features/references/ReferenceSidebar.tsx": ["ReferenceSidebar"],
+  "features/references/TagDeletePanel.tsx": ["TagDeletePanel"],
   "features/repositories/CloneRepositoryDialog.tsx": ["CloneRepositoryDialog"],
   "features/repositories/InitRepositoryDialog.tsx": ["InitRepositoryDialog"],
   "features/repositories/MissingRepository.tsx": ["MissingRepository"],

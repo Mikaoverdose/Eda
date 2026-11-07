@@ -16,11 +16,17 @@ export function RemotesDialog({
   onClose,
   afterCommit = false,
   initialTab,
+  initialTag,
+  initialRemote,
+  onChanged,
 }: {
   repositoryId: string;
   onClose: () => void;
   afterCommit?: boolean;
   initialTab?: RemoteTab;
+  initialTag?: string;
+  initialRemote?: string;
+  onChanged?: (() => void) | undefined;
 }) {
   const {
     state,
@@ -58,7 +64,7 @@ export function RemotesDialog({
     credentials,
     selectedRemote,
     selectedBranch,
-  } = useRemotesDialog(repositoryId, initialTab);
+  } = useRemotesDialog(repositoryId, initialTab, initialTag, initialRemote);
 
   return (
     <Dialog
@@ -165,7 +171,11 @@ export function RemotesDialog({
                 }}
               >
                 <option value="" disabled>
-                  {t("remotesDialog.chooseABranch")}
+                  {t(
+                    tab === "push" && refKind === "tag"
+                      ? "remotesDialog.chooseATag"
+                      : "remotesDialog.chooseABranch",
+                  )}
                 </option>
                 {(tab === "push" && refKind === "tag"
                   ? tagNames
@@ -271,8 +281,13 @@ export function RemotesDialog({
                   onConfirm={() => {
                     const token = preview.token;
                     setPreview(null);
-                    void run("operationTitles.pushBranch", () =>
-                      window.eda.remotes.push(repositoryId, token, credentials.credentials),
+                    void run(
+                      "operationTitles.pushBranch",
+                      () => window.eda.remotes.push(repositoryId, token, credentials.credentials),
+                      (value) => {
+                        setMessage(value);
+                        onChanged?.();
+                      },
                     ).finally(() => setAuth({ username: "", password: "" }));
                   }}
                   onBack={() => setPreview(null)}
