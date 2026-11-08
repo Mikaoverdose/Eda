@@ -1,5 +1,3 @@
-export const GITHUB_INSTALLATION_POLL_MS = 5000;
-export const GITHUB_INSTALLATION_WAIT_MS = 15 * 60_000;
 export const MAINTAINER_GITHUB_LOGIN = "YuzuZensai";
 
 export interface GitHubAccount {
@@ -9,16 +7,8 @@ export interface GitHubAccount {
 }
 
 export interface GitHubStatus {
-  configured: boolean;
   secureStorage: boolean;
-  installationAvailable: boolean;
   account: GitHubAccount | null;
-  pendingAccountId?: string | null;
-}
-
-export interface GitHubRepositoryAccess {
-  accountId: string;
-  accounts: string[];
 }
 
 export interface GitHubAccountProfile {
@@ -38,8 +28,7 @@ export interface GitHubSignIn {
 }
 
 export type GitHubSignInResult =
-  | { state: "pending"; intervalMs: number }
-  | { state: "authorized" | "connected"; status: GitHubStatus };
+  { state: "pending"; intervalMs: number } | { state: "connected"; status: GitHubStatus };
 
 export function isGitHubHttps(url: string): boolean {
   try {

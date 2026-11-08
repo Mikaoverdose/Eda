@@ -193,8 +193,7 @@ function setup() {
         bio: "Public bio",
         location: "Japan / Thailand",
       })),
-      repositoryAccess: vi.fn(async () => ({ accountId: "7", accounts: ["work-user"] })),
-      status: vi.fn(() => ({ configured: true, secureStorage: true, account: null })),
+      status: vi.fn(() => ({ secureStorage: true, account: null })),
       profile: vi.fn(async () => ({
         id: "7",
         login: "work-user",
@@ -208,8 +207,6 @@ function setup() {
       cancel: vi.fn(),
       disconnect: vi.fn(),
       verifyPending: vi.fn(() => "ABCD-EFGH"),
-      onInstallationChanged: vi.fn(() => () => {}),
-      startInstallation: vi.fn(() => "https://github.com/apps/eda-fixture/installations/new"),
     },
     avatars: { getGitHub: vi.fn(async () => ({ dataUrl: "data:image/png;base64,AQID" })) },
     navigation: { onChange: vi.fn(), take: vi.fn(() => []) },
@@ -292,15 +289,6 @@ describe("IPC registration", () => {
   });
   it("loads the connected GitHub profile and cached avatar for the active owner, and opens its verified profile link", async () => {
     const { github, avatars } = setup();
-    expect(await invoke(IPC_CHANNELS.githubRepositoryAccess, repositoryId)).toMatchObject({
-      ok: false,
-    });
-    expect(github.repositoryAccess).not.toHaveBeenCalled();
-    expect(await invoke(IPC_CHANNELS.githubRepositoryAccess, profile.id)).toMatchObject({
-      ok: true,
-      value: { accountId: "7", accounts: ["work-user"] },
-    });
-    expect(github.repositoryAccess).toHaveBeenCalledExactlyOnceWith(profile.id);
     expect(await invoke(IPC_CHANNELS.githubProfile, repositoryId)).toMatchObject({ ok: false });
     expect(github.profile).not.toHaveBeenCalled();
     expect(await invoke(IPC_CHANNELS.githubProfile, profile.id)).toMatchObject({

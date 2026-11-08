@@ -1,10 +1,10 @@
 import { t } from "@shared/i18n";
 import { clipboard, shell } from "electron";
 import { ok } from "@shared/errors";
-import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
+import { IPC_CHANNELS } from "@shared/ipc";
 import type { Services } from "../../services";
 import { GITHUB_VERIFICATION_URL } from "../../providers/github-auth";
-import { handle, broadcast } from "../transport";
+import { handle } from "../transport";
 import { captureProfile } from "../profile-context";
 import { requireId } from "../validate";
 import { missingIdentity } from "../request-errors";
@@ -22,10 +22,6 @@ export function registerGitHubHandlers(services: Services): void {
     return ok({ ...details, avatarDataUrl: avatar.dataUrl });
   });
 
-  github.onInstallationChanged((profileId) => {
-    if (identity.getActive()?.id === profileId)
-      broadcast(IPC_EVENTS.githubInstallationChanged, profileId);
-  });
   const work = async <T>(rawProfile: unknown, action: (id: string) => Promise<T> | T) => {
     const captured = captureProfile(identity, requireId(rawProfile));
     return identity.serialize(async () => {
@@ -36,9 +32,6 @@ export function registerGitHubHandlers(services: Services): void {
   };
   handle(IPC_CHANNELS.githubStatus, async (_event, profile) =>
     work(profile, (id) => github.status(id)),
-  );
-  handle(IPC_CHANNELS.githubRepositoryAccess, async (_event, profile) =>
-    work(profile, (id) => github.repositoryAccess(id)),
   );
   handle(IPC_CHANNELS.githubProfile, async (_event, profile) =>
     work(profile, async (id) => {
@@ -68,11 +61,6 @@ export function registerGitHubHandlers(services: Services): void {
   });
   handle(IPC_CHANNELS.githubDisconnect, async (_event, profile) =>
     work(profile, (id) => github.disconnect(id)),
-  );
-  handle(IPC_CHANNELS.githubOpenInstallations, async (_event, profile) =>
-    work(profile, async (id) => {
-      await shell.openExternal(await github.startInstallation(id));
-    }),
   );
   handle(IPC_CHANNELS.githubOpenVerification, async (_event, profile, rawId) => {
     const id = requireId(rawId);

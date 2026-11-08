@@ -1,12 +1,12 @@
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { isOneOf, isRecord } from "@shared/validation";
+import { isRecord } from "@shared/validation";
+import { INTEGRATIONS } from "@shared/integrations/config";
 import {
   isGitHubHttps,
   MAINTAINER_GITHUB_LOGIN,
   type GitHubAccountProfile,
-  type GitHubRepositoryAccess,
   type GitHubSignIn,
   type GitHubSignInResult,
   type GitHubStatus,
@@ -18,7 +18,6 @@ import type {
   SavedGitHubAccount,
 } from "../persistence/github-account-repository";
 import { secretKeys, type SecretStore } from "../secrets/secret-store";
-import { GitHubInstallationCallback } from "./github-installation-callback";
 import { GitHubProfileCache } from "./github-profile-cache";
 
 const DEVICE_URL = "https://github.com/login/device/code";
@@ -56,15 +55,7 @@ interface Pending {
 }
 
 export class GitHubAuth {
-  private readonly installationListeners = new Set<(profileId: string) => void>();
-  private readonly installationCallback = new GitHubInstallationCallback(
-    (profileId) => {
-      if (!this.authorized.has(profileId) && this.accounts.find(profileId)?.state !== "connected")
-        return;
-      for (const listener of this.installationListeners) listener(profileId);
-    },
-    () => this.now(),
-  );
+  private readonly clientId = INTEGRATIONS.github.clientId;
   private readonly authorized = new Map<string, Authorized>();
   private readonly committing = new Map<string, Promise<void>>();
   private readonly pending = new Map<string, Pending>();
@@ -74,21 +65,17 @@ export class GitHubAuth {
   constructor(
     private readonly accounts: GitHubAccountRepository,
     private readonly secrets: SecretStore,
-    private readonly clientId: string,
     private readonly fetch: typeof globalThis.fetch,
     private readonly now = Date.now,
-    private readonly appSlug = "",
   ) {
     this.profiles = new GitHubProfileCache((url) => this.request(url), now);
   }
 
   status(profileId: string): GitHubStatus {
-    const account = this.accounts.find(profileId);
+    const saved = this.accounts.find(profileId);
+    const account = saved && this.ownsCredential(saved) ? saved : undefined;
     return {
-      configured: /^[A-Za-z0-9_.-]{1,128}$/.test(this.clientId),
       secureStorage: this.secrets.available,
-      installationAvailable: /^[a-z0-9][a-z0-9-]{0,99}$/.test(this.appSlug),
-      pendingAccountId: this.authorized.get(profileId)?.accountId ?? null,
       account:
         account && !this.authorized.has(profileId)
           ? { id: account.accountId, login: account.login, state: account.state }
@@ -99,7 +86,8 @@ export class GitHubAuth {
   async profile(profileId: string): Promise<Omit<GitHubAccountProfile, "avatarDataUrl"> | null> {
     const account = this.accounts.find(profileId);
     if (this.authorized.has(profileId)) return null;
-    if (!account || !/^[1-9][0-9]{0,15}$/.test(account.accountId)) return null;
+    if (!account || !this.ownsCredential(account) || !/^[1-9][0-9]{0,15}$/.test(account.accountId))
+      return null;
     return this.profiles.get({ id: account.accountId, login: account.login });
   }
 
@@ -109,7 +97,7 @@ export class GitHubAuth {
 
   profileUrl(profileId: string): string {
     const account = this.accounts.find(profileId);
-    if (!account || this.authorized.has(profileId))
+    if (!account || !this.ownsCredential(account) || this.authorized.has(profileId))
       throw fail(errorText("main.providers.githubAuth.connectAGitHubAccountFirst"));
     const login = this.profiles.peek(account.accountId)?.login ?? account.login;
     if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(login))
@@ -117,107 +105,8 @@ export class GitHubAuth {
     return `https://github.com/${login}`;
   }
 
-  async repositoryAccess(profileId: string): Promise<GitHubRepositoryAccess> {
-    const account = this.accounts.find(profileId);
-    const authorized = this.authorized.get(profileId);
-    if (!account && !authorized)
-      throw fail(
-        errorText("main.providers.githubAuth.signInWithGitHubFirst"),
-        "github-auth-required",
-      );
-    if (authorized?.tokens.expiresAt !== undefined && authorized.tokens.expiresAt <= this.now()) {
-      this.authorized.delete(profileId);
-      throw fail(
-        errorText("main.providers.githubAuth.yourGitHubLoginExpiredSignInAgain"),
-        "github-auth-required",
-      );
-    }
-    const accessToken = authorized
-      ? authorized.tokens.accessToken
-      : (await this.credentials(account!)).password;
-    const valid = () =>
-      authorized
-        ? this.authorized.get(profileId) === authorized
-        : this.accounts.find(profileId)?.credentialRef === account!.credentialRef &&
-          !this.authorized.has(profileId);
-    const accounts = new Set<string>();
-    for (let page = 1; page <= 10; page++) {
-      let response: Record<string, unknown>;
-      try {
-        response = await this.request(
-          `https://api.github.com/user/installations?per_page=10&page=${page}`,
-          undefined,
-          undefined,
-          accessToken,
-        );
-      } catch (error) {
-        if (error instanceof GitError && error.kind === "github-auth-required") {
-          if (authorized) {
-            if (valid()) this.authorized.delete(profileId);
-          } else return this.expired(account!);
-        }
-        throw error;
-      }
-      if (!valid())
-        throw fail(
-          errorText("main.providers.githubAuth.theGitHubAccountChangedCheckAccessAgain"),
-          "github-auth-required",
-        );
-      const installations = response["installations"];
-      const total = response["total_count"];
-      if (
-        !Array.isArray(installations) ||
-        installations.length > 10 ||
-        typeof total !== "number" ||
-        !Number.isSafeInteger(total) ||
-        total < installations.length
-      )
-        throw fail(
-          errorText("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"),
-        );
-      for (const value of installations) {
-        if (!isRecord(value))
-          throw fail(
-            errorText("main.providers.githubAuth.gitHubReturnedInvalidRepositoryAccessDetails"),
-          );
-        const installation = value;
-        const owner = installation["account"];
-        const permissions = installation["permissions"];
-        if (
-          installation["suspended_at"] === null &&
-          isRecord(permissions) &&
-          isOneOf(permissions["contents"], ["read", "write"]) &&
-          isRecord(owner) &&
-          typeof owner["login"] === "string" &&
-          /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner["login"])
-        )
-          accounts.add(owner["login"]);
-      }
-      if (page * 10 >= total) {
-        if (authorized && accounts.size) await this.commit(authorized);
-        return {
-          accountId: authorized?.accountId ?? account!.accountId,
-          accounts: [...accounts].sort(),
-        };
-      }
-      if (installations.length !== 10)
-        throw fail(
-          errorText(
-            "main.providers.githubAuth.gitHubReturnedIncompleteRepositoryAccessDetailsCheckAccessAgain",
-          ),
-        );
-    }
-    throw fail(
-      errorText(
-        "main.providers.githubAuth.thereAreTooManyGitHubInstallationsToVerifyManageAccessOnGitHub",
-      ),
-    );
-  }
-
   async begin(profileId: string): Promise<GitHubSignIn> {
     this.requireStorage();
-    if (!this.status(profileId).configured)
-      throw fail(errorText("main.providers.githubAuth.gitHubSignInIsNotConfiguredIn"));
     this.cancelProfile(profileId);
     for (const [id, pending] of this.pending)
       if (pending.signIn.expiresAt <= this.now()) this.cancel(pending.profileId, id);
@@ -227,7 +116,7 @@ export class GitHubAuth {
       );
     const response = await this.request(DEVICE_URL, {
       client_id: this.clientId,
-      scope: "offline_access",
+      scope: "repo offline_access",
     });
     if (response["error"]) throw this.oauthError(response["error"]);
     const deviceCode = text(response["device_code"]);
@@ -309,7 +198,8 @@ export class GitHubAuth {
         login: user["login"] as string,
         tokens,
       });
-      return { state: "authorized", status: this.status(profileId) };
+      await this.commit(this.authorized.get(profileId)!);
+      return { state: "connected", status: this.status(profileId) };
     } catch (error) {
       this.cancel(profileId, id);
       throw error;
@@ -320,52 +210,9 @@ export class GitHubAuth {
     return this.requirePending(profileId, id).signIn.userCode;
   }
 
-  installationUrl(state?: string, accountId?: string): string {
-    if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(this.appSlug))
-      throw fail(
-        errorText(
-          "main.providers.githubAuth.theGitHubAppInstallationLinkIsNotConfiguredInThisBuild",
-        ),
-      );
-    const url = new URL(`https://github.com/apps/${this.appSlug}/installations/new`);
-    if (accountId) {
-      if (!/^[1-9][0-9]{0,15}$/.test(accountId))
-        throw fail(errorText("main.providers.githubAuth.theGitHubAccountIdentityIsInvalid"));
-      url.pathname += "/permissions";
-      url.searchParams.set("target_id", accountId);
-      url.searchParams.set("target_type", "User");
-    }
-    if (state) url.searchParams.set("state", state);
-    return url.toString();
-  }
-
-  async startInstallation(profileId: string): Promise<string> {
-    const status = this.status(profileId);
-    const accountId =
-      status.pendingAccountId ??
-      (status.account?.state === "connected" ? status.account.id : undefined);
-    if (!accountId)
-      throw fail(
-        errorText("main.providers.githubAuth.signInWithGitHubFirst"),
-        "github-auth-required",
-      );
-    const url = this.installationUrl(undefined, accountId);
-    try {
-      return this.installationUrl(await this.installationCallback.begin(profileId), accountId);
-    } catch {
-      return url;
-    }
-  }
-
-  onInstallationChanged(listener: (profileId: string) => void): () => void {
-    this.installationListeners.add(listener);
-    return () => this.installationListeners.delete(listener);
-  }
-
   cancel(profileId: string, id: string): void {
     if (this.authorized.get(profileId)?.signInId === id) {
       this.authorized.delete(profileId);
-      this.installationCallback.cancel(profileId);
     }
     const pending = this.pending.get(id);
     if (pending?.profileId !== profileId) return;
@@ -375,14 +222,12 @@ export class GitHubAuth {
 
   cancelProfile(profileId: string): void {
     this.authorized.delete(profileId);
-    this.installationCallback.cancel(profileId);
     for (const [id, pending] of this.pending)
       if (pending.profileId === profileId) this.cancel(profileId, id);
   }
 
   cancelAll(): void {
     this.authorized.clear();
-    this.installationCallback.close();
     for (const [id, pending] of this.pending) this.cancel(pending.profileId, id);
   }
 
@@ -430,7 +275,7 @@ export class GitHubAuth {
     const { profileId, accountId, login, tokens } = candidate;
     const previous = this.accounts.find(profileId);
     const credentialRef =
-      secretKeys.provider(profileId, "github", "github.com", accountId) + ":" + randomUUID();
+      secretKeys.provider(profileId, "github-oauth", "github.com", accountId) + ":" + randomUUID();
     await this.secrets.set(credentialRef, JSON.stringify(tokens));
     try {
       if (this.authorized.get(profileId) !== candidate)
@@ -440,7 +285,6 @@ export class GitHubAuth {
         );
       this.accounts.save({ profileId, accountId, login, credentialRef, state: "connected" });
       this.authorized.delete(profileId);
-      this.installationCallback.cancel(profileId);
     } catch (error) {
       await this.secrets.delete(credentialRef);
       throw error;
@@ -527,8 +371,8 @@ export class GitHubAuth {
         const refreshToken = text(value["refreshToken"]);
         const refreshExpiresAt = value["refreshExpiresAt"];
         if (
-          accessToken &&
-          clientId &&
+          accessToken?.startsWith("gho_") &&
+          clientId === this.clientId &&
           (expiresAt === undefined ||
             (typeof expiresAt === "number" && Number.isSafeInteger(expiresAt))) &&
           (value["refreshToken"] === undefined || refreshToken !== undefined) &&
@@ -549,7 +393,7 @@ export class GitHubAuth {
 
   private ownsCredential(account: SavedGitHubAccount): boolean {
     return account.credentialRef.startsWith(
-      secretKeys.provider(account.profileId, "github", "github.com", account.accountId) + ":",
+      secretKeys.provider(account.profileId, "github-oauth", "github.com", account.accountId) + ":",
     );
   }
 
@@ -559,7 +403,9 @@ export class GitHubAuth {
     const expires = secondsValue(response["expires_in"]);
     const refreshExpires = secondsValue(response["refresh_token_expires_in"]);
     if (
-      !accessToken?.startsWith("ghu_") ||
+      !accessToken?.startsWith("gho_") ||
+      typeof response["scope"] !== "string" ||
+      !response["scope"].split(/[ ,]+/).includes("repo") ||
       response["token_type"] !== "bearer" ||
       (response["expires_in"] !== undefined && !expires) ||
       (response["refresh_token"] !== undefined && !refreshToken) ||
@@ -635,7 +481,6 @@ export class GitHubAuth {
         method: form ? "POST" : "GET",
         redirect: "error",
         credentials: "omit",
-        // Avoid cached API responses from before the GitHub App was installed.
         cache: "no-store",
         signal: signal
           ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])

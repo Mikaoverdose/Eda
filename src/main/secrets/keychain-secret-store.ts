@@ -8,6 +8,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { SecretStore } from "./secret-store";
 import { secretKeys } from "./secret-store";
+import { applyVaultMigrations } from "../persistence/migrate-vault";
 import { isSecureStorageBackend } from "./storage-security";
 
 export class KeychainSecretStore implements SecretStore {
@@ -48,7 +49,9 @@ export class KeychainSecretStore implements SecretStore {
       );
     }
 
-    return new KeychainSecretStore(vaultPath, true);
+    const store = new KeychainSecretStore(vaultPath, true);
+    await store.migrate();
+    return store;
   }
 
   async get(key: string): Promise<string | undefined> {
@@ -97,6 +100,13 @@ export class KeychainSecretStore implements SecretStore {
       }
 
       if (changed) await this.write(vault);
+    });
+  }
+
+  private async migrate(): Promise<void> {
+    await this.mutate(async () => {
+      const vault = await this.read();
+      if (applyVaultMigrations(vault)) await this.write(vault);
     });
   }
 

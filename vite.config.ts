@@ -44,14 +44,6 @@ export default defineConfig(async ({ command }) => {
               .pipe(process.stderr, { end: false });
           },
           vite: {
-            define: {
-              __EDA_GITHUB_CLIENT_ID__: JSON.stringify(
-                process.env["EDA_GITHUB_CLIENT_ID"] ?? "Iv23liejwZS2ySIUwhyG",
-              ),
-              __EDA_GITHUB_APP_SLUG__: JSON.stringify(
-                process.env["EDA_GITHUB_APP_SLUG"] ?? "eda-desktop",
-              ),
-            },
             resolve: {
               alias: {
                 "@shared": resolve("./src/shared"),

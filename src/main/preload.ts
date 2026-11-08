@@ -12,8 +12,6 @@ const api: EdaApi = {
   github: {
     maintainerProfile: () => ipcRenderer.invoke(IPC_CHANNELS.githubMaintainerProfile),
     status: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubStatus, profileId),
-    repositoryAccess: (profileId) =>
-      ipcRenderer.invoke(IPC_CHANNELS.githubRepositoryAccess, profileId),
     profile: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubProfile, profileId),
     openProfile: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubOpenProfile, profileId),
     begin: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubBegin, profileId),
@@ -22,8 +20,6 @@ const api: EdaApi = {
     openVerification: (profileId, id) =>
       ipcRenderer.invoke(IPC_CHANNELS.githubOpenVerification, profileId, id),
     disconnect: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubDisconnect, profileId),
-    openInstallations: (profileId) =>
-      ipcRenderer.invoke(IPC_CHANNELS.githubOpenInstallations, profileId),
   },
   avatars: { get: (email) => ipcRenderer.invoke(IPC_CHANNELS.avatarGet, email) },
   backgroundFetch: {
@@ -269,8 +265,6 @@ const api: EdaApi = {
 
   events: {
     onUpdateChanged: (handler) => subscribe(IPC_EVENTS.updateChanged, handler),
-    onGitHubInstallationChanged: (handler) =>
-      subscribe(IPC_EVENTS.githubInstallationChanged, handler),
     onSshHostTrustChanged: (handler) => subscribe(IPC_EVENTS.sshHostTrustChanged, handler),
     onNavigation: (handler) => subscribe(IPC_EVENTS.navigation, handler),
     onOperationsChanged: (handler) => subscribe(IPC_EVENTS.operationsChanged, handler),

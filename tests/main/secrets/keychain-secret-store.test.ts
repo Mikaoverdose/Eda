@@ -84,9 +84,9 @@ it("refuses to overwrite an unreadable vault during profile deletion or credenti
   try {
     const path = join(root, "vault");
 
-    await writeFile(path, "{damaged");
-
     const vault = await KeychainSecretStore.create(path);
+
+    await writeFile(path, "{damaged");
 
     await expect(vault.deleteForIdentity("work")).rejects.toMatchObject({
       kind: "keychain-unavailable",
@@ -110,6 +110,69 @@ it("clears queued vault writes and allows new credentials after a reset", async 
     await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" });
     await vault.set("new", "fresh");
     expect(await vault.get("new")).toBe("fresh");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("migrates legacy GitHub App vault entries across profiles, including orphans, preserving other credentials", async () => {
+  vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue("gnome_libsecret");
+  const root = await mkdtemp(join(tmpdir(), "eda-oauth-vault-"));
+  try {
+    const path = join(root, "vault");
+    const vault = await KeychainSecretStore.create(path);
+    const legacy = secretKeys.provider("work", "github", "github.com", "7") + ":old";
+    const orphan = secretKeys.provider("deleted-profile", "github", "github.com", "8") + ":orphan";
+    const oauth = secretKeys.provider("work", "github-oauth", "github.com", "7") + ":new";
+    const ssh = secretKeys.sshPassphrase("work");
+    const signing = secretKeys.signingPassphrase("work");
+    const otherHost = secretKeys.provider("work", "github", "enterprise.example.com", "7");
+    for (const key of [legacy, orphan, oauth, ssh, signing, otherHost])
+      await vault.set(key, "secret");
+    await KeychainSecretStore.create(path);
+    expect(await vault.get(legacy)).toBeUndefined();
+    expect(await vault.get(orphan)).toBeUndefined();
+    for (const key of [oauth, ssh, signing, otherHost]) expect(await vault.get(key)).toBe("secret");
+    const migrated = await readFile(path, "utf8");
+    await KeychainSecretStore.create(path);
+    expect(await readFile(path, "utf8")).toBe(migrated);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("preserves an unreadable vault when OAuth migration fails", async () => {
+  vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue("gnome_libsecret");
+  const root = await mkdtemp(join(tmpdir(), "eda-oauth-vault-"));
+  try {
+    const path = join(root, "vault");
+    await writeFile(path, "damaged vault");
+    await expect(KeychainSecretStore.create(path)).rejects.toMatchObject({
+      kind: "keychain-unavailable",
+    });
+    expect(await readFile(path, "utf8")).toBe("damaged vault");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("defers pending vault migrations while storage is locked and runs them when it becomes available", async () => {
+  vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue("gnome_libsecret");
+  const root = await mkdtemp(join(tmpdir(), "eda-vault-locked-"));
+  try {
+    const path = join(root, "vault");
+    const legacy = secretKeys.provider("work", "github", "github.com", "7") + ":old";
+    const original = JSON.stringify({ [legacy]: Buffer.from("legacy token").toString("base64") });
+    await writeFile(path, original);
+    vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
+    expect((await KeychainSecretStore.create(path)).available).toBe(false);
+    expect(await readFile(path, "utf8")).toBe(original);
+    const unlocked = await KeychainSecretStore.create(path);
+    expect(unlocked.available).toBe(true);
+    expect(await unlocked.get(legacy)).toBeUndefined();
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+      __eda_migrations: JSON.stringify(["20261108000000_github_oauth"]),
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

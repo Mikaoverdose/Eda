@@ -1,4 +1,4 @@
-import repositoryTrustSql from "@main/persistence/migrations/20261107000000_repository-trust/migration.sql?raw";
+import repositoryTrustSql from "@main/persistence/migrations/20261107000000_repository_trust/migration.sql?raw";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -156,4 +156,71 @@ it("opens the earlier repository trust schema while rejecting other edits to the
   expect(() =>
     applyMigrations(db, [initial, { id, sql: repositoryTrustSql + "\nSELECT 1;" }]),
   ).toThrow(/history does not match/);
+});
+
+it("removes legacy GitHub connections through the SQL migration and preserves OAuth connections on reruns", async () => {
+  const { default: initialSql } =
+    await import("@main/persistence/migrations/20261030212245_initial_schema/migration.sql?raw");
+  const { default: oauthSql } =
+    await import("@main/persistence/migrations/20261108000000_github_oauth/migration.sql?raw");
+  const db = new DatabaseSync(":memory:");
+  databases.push(db);
+  const initial = { id: "20261030212245_initial-schema", sql: initialSql };
+  const upgrade = { id: "20261108000000_github-oauth", sql: oauthSql };
+  applyMigrations(db, [initial]);
+  for (const [id, provider, state] of [
+    ["work", "github", "connected"],
+    ["personal", "github", "expired"],
+    ["old", "github", "revoked"],
+    ["new", "github-oauth", "connected"],
+  ]) {
+    db.prepare(
+      "INSERT INTO identities (id, name, name_key, git_name, git_email, created_at, updated_at) VALUES (?, ?, ?, 'Eda', 'eda@example.test', 'now', 'now')",
+    ).run(id!, id!, id!);
+    const ref = `identity:${id}:provider:${JSON.stringify([id, provider, "github.com", "7"])}:token`;
+    db.prepare("INSERT INTO github_accounts VALUES (?, '7', 'user', ?, ?)").run(id!, ref, state!);
+  }
+  db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run(
+    "theme",
+    JSON.stringify("saved"),
+  );
+  applyMigrations(db, [initial, upgrade]);
+  expect(db.prepare("SELECT profile_id FROM github_accounts").all()).toEqual([
+    { profile_id: "new" },
+  ]);
+  expect(db.prepare("SELECT COUNT(*) AS count FROM identities").get()).toEqual({ count: 4 });
+  expect(db.prepare("SELECT value FROM settings WHERE key = 'theme'").get()).toEqual({
+    value: JSON.stringify("saved"),
+  });
+  applyMigrations(db, [initial, upgrade]);
+  expect(db.prepare("SELECT profile_id FROM github_accounts").all()).toEqual([
+    { profile_id: "new" },
+  ]);
+});
+
+it("accepts underscore names for applied migrations without rewriting history or rerunning SQL", () => {
+  const db = setup();
+  const legacy = { id: "002_cleanup-old", sql: "DELETE FROM children;" };
+  applyMigrations(db, [initial, legacy]);
+  db.exec("INSERT INTO children VALUES ('after-cleanup', 'parent')");
+  applyMigrations(db, [initial, { ...legacy, id: "002_cleanup_old" }]);
+  expect(db.prepare("SELECT id FROM children").all()).toEqual([{ id: "after-cleanup" }]);
+  expect(db.prepare("SELECT id FROM __drizzle_migrations ORDER BY id").all()).toEqual([
+    { id: initial.id },
+    { id: legacy.id },
+  ]);
+  expect(() => applyMigrations(db, [initial, { id: "002_cleanup_old", sql: "SELECT 1;" }])).toThrow(
+    /history does not match/,
+  );
+});
+
+it("rejects migration names that differ only by separators", () => {
+  const db = setup();
+  expect(() =>
+    applyMigrations(db, [
+      initial,
+      { id: "002_cleanup-old", sql: "SELECT 1;" },
+      { id: "002_cleanup_old", sql: "SELECT 1;" },
+    ]),
+  ).toThrow(/unique and ordered/);
 });

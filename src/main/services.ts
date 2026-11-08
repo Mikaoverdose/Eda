@@ -63,9 +63,6 @@ import { KeychainSecretStore, vaultPathFor } from "./secrets/keychain-secret-sto
 import type { SecretStore } from "./secrets/secret-store";
 import { SshService } from "./ssh/ssh-service";
 
-declare const __EDA_GITHUB_CLIENT_ID__: string;
-declare const __EDA_GITHUB_APP_SLUG__: string;
-
 export interface Services {
   installation: InstallationInfo;
   updates: UpdateService;
@@ -161,13 +158,8 @@ export async function createServices(): Promise<Services> {
     const secrets = await KeychainSecretStore.create(vaultPathFor(app.getPath("userData")));
     const ssh = new SshService(transportRunner, undefined, transportEnvironment, sshAgent);
     const credentials = new CredentialService(identities, secrets, ssh);
-    const github = new GitHubAuth(
-      new GitHubAccountRepository(db),
-      secrets,
-      __EDA_GITHUB_CLIENT_ID__,
-      (url, options) => net.fetch(url instanceof URL ? url.href : url, options),
-      Date.now,
-      __EDA_GITHUB_APP_SLUG__,
+    const github = new GitHubAuth(new GitHubAccountRepository(db), secrets, (url, options) =>
+      net.fetch(url instanceof URL ? url.href : url, options),
     );
     identity.onChange(() => github.cancelAll());
     const recovery = new ContentRecoveryRepository(db);

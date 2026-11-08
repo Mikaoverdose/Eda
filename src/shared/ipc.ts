@@ -5,7 +5,6 @@ import type { BuildInfo } from "./version";
 import type { UpdateState } from "./updates";
 import type {
   GitHubStatus,
-  GitHubRepositoryAccess,
   GitHubSignIn,
   GitHubSignInResult,
   GitHubAccountProfile,
@@ -274,7 +273,6 @@ export interface EdaApi {
   github: {
     maintainerProfile(): Promise<Result<GitHubAccountProfile | null>>;
     status(profileId: string): Promise<Result<GitHubStatus>>;
-    repositoryAccess(profileId: string): Promise<Result<GitHubRepositoryAccess>>;
     profile(profileId: string): Promise<Result<GitHubAccountProfile | null>>;
     openProfile(profileId: string): Promise<Result<void>>;
     begin(profileId: string): Promise<Result<GitHubSignIn>>;
@@ -282,7 +280,6 @@ export interface EdaApi {
     cancel(profileId: string, id: string): Promise<Result<void>>;
     openVerification(profileId: string, id: string): Promise<Result<void>>;
     disconnect(profileId: string): Promise<Result<void>>;
-    openInstallations(profileId: string): Promise<Result<void>>;
   };
   app: {
     readonly version: BuildInfo;
@@ -445,7 +442,6 @@ export interface EdaApi {
 
   events: {
     onUpdateChanged(handler: (state: UpdateState) => void): () => void;
-    onGitHubInstallationChanged(handler: (profileId: string) => void): () => void;
     onSshHostTrustChanged(handler: (request: SshHostTrustRequest | null) => void): () => void;
     onNavigation(handler: () => void): () => void;
     onOperationsChanged(handler: () => void): () => void;
@@ -463,7 +459,6 @@ export const IPC_CHANNELS = {
   updatesDownload: "updates:download",
   updatesInstall: "updates:install",
   githubStatus: "github:status",
-  githubRepositoryAccess: "github:repository-access",
   githubProfile: "github:profile",
   githubMaintainerProfile: "github:maintainer-profile",
   githubOpenProfile: "github:open-profile",
@@ -472,7 +467,6 @@ export const IPC_CHANNELS = {
   githubCancel: "github:cancel",
   githubOpenVerification: "github:open-verification",
   githubDisconnect: "github:disconnect",
-  githubOpenInstallations: "github:open-installations",
   avatarGet: "avatar:get",
   identityListGpgSigningKeys: "identity:listGpgSigningKeys",
   backgroundFetchInspect: "background-fetch:inspect",
@@ -636,7 +630,6 @@ export const IPC_CHANNELS = {
 
 export const IPC_EVENTS = {
   updateChanged: "updates:changed",
-  githubInstallationChanged: "github:installation-changed",
   sshHostTrustChanged: "event:sshHostTrustChanged",
   navigation: "app:navigation",
   operationsChanged: "event:operationsChanged",
@@ -651,7 +644,6 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
 type EventSubscriptions = {
   [IPC_EVENTS.updateChanged]: EdaApi["events"]["onUpdateChanged"];
-  [IPC_EVENTS.githubInstallationChanged]: EdaApi["events"]["onGitHubInstallationChanged"];
   [IPC_EVENTS.sshHostTrustChanged]: EdaApi["events"]["onSshHostTrustChanged"];
   [IPC_EVENTS.navigation]: EdaApi["events"]["onNavigation"];
   [IPC_EVENTS.operationsChanged]: EdaApi["events"]["onOperationsChanged"];

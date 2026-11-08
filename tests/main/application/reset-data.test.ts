@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { applyMigrations } from "@main/persistence/migrate";
-import initialSql from "@main/persistence/migrations/20261030212245_initial-schema/migration.sql?raw";
+import initialSql from "@main/persistence/migrations/20261030212245_initial_schema/migration.sql?raw";
 import { openDatabase } from "@main/persistence/database";
 import { clearDatabase } from "@main/application/reset-data";
 import { expect, it } from "vitest";

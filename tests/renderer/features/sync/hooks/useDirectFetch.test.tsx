@@ -147,7 +147,7 @@ it.each(["github-auth-required", "github-access-required"] as const)(
     });
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Open Settings");
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-      kind === "github-access-required" ? "Enable GitHub repository access" : "Sign in with GitHub",
+      kind === "github-access-required" ? "GitHub repository access denied" : "Sign in with GitHub",
     );
     expect(document.querySelector('[aria-label="GitHub connection"]')).toBeNull();
     expect(useShellStore.getState().request).toBeNull();

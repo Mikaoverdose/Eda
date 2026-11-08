@@ -51,14 +51,17 @@ export function applyMigrations(
     }));
 
     if (
-      new Set(expected.map((migration) => migration.id)).size !== expected.length ||
+      new Set(expected.map((migration) => migration.id.replaceAll("-", "_"))).size !==
+        expected.length ||
       expected.some((migration, i) => i > 0 && migration.id <= expected[i - 1]!.id)
     )
       throw new AppError(ERROR_CODE.INVALID_MIGRATION_ORDER);
 
     if (
       applied.some(
-        (migration, i) => migration.id !== expected[i]?.id || migration.hash !== expected[i]?.hash,
+        (migration, i) =>
+          migration.id.replaceAll("-", "_") !== expected[i]?.id.replaceAll("-", "_") ||
+          migration.hash !== expected[i]?.hash,
       )
     )
       throw new AppError(ERROR_CODE.MIGRATION_HISTORY_MISMATCH);
