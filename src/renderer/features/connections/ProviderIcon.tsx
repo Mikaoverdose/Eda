@@ -6,7 +6,9 @@ import { cx } from "../../components/ui/cx";
 
 const PROVIDERS = {
   GitHub: { icon: github, color: "text-text-primary" },
+  "GitHub Enterprise": { icon: github, color: "text-text-primary" },
   GitLab: { icon: gitlab, color: "text-[#fc6d26]" },
+  "GitLab Self-Hosted": { icon: gitlab, color: "text-[#fc6d26]" },
   Bitbucket: { icon: bitbucket, color: "text-[#2684ff]" },
   "Azure DevOps": { icon: azureDevOps, color: "text-[#2684ff]" },
 } as const;

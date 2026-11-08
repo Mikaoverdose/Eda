@@ -7,7 +7,9 @@ export function IntegrationsSettings({ profileId }: { profileId: string }) {
   return (
     <div className="grid max-w-[76rem] grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] items-start gap-4">
       <GitHubConnection key={profileId} profileId={profileId} />
-      {(["GitLab", "Bitbucket", "Azure DevOps"] as const).map((provider) => (
+      {(
+        ["GitHub Enterprise", "GitLab", "GitLab Self-Hosted", "Bitbucket", "Azure DevOps"] as const
+      ).map((provider) => (
         <ServiceAccountCard
           key={provider}
           provider={provider}

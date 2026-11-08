@@ -1894,7 +1894,7 @@
   "settings.profiles": "Profiles",
   "settings.profileWorkspaceApplicationExternalEditorMergeToolInheritance": "profile workspace application external editor merge tool inheritance",
   "settings.profileWorkspaceThemeAppearanceDarkLightNordAccent": "profile workspace theme appearance dark light nord accent color tint inheritance reset",
-  "settings.providerAccountGitHubGitLabBitbucketAzureTokenProfileOffline": "provider account GitHub GitLab Bitbucket Azure token profile offline",
+  "settings.providerAccountGitHubGitLabBitbucketAzureTokenProfileOffline": "provider account GitHub Enterprise GitLab self-hosted self hosted Bitbucket Azure token profile offline",
   "settings.pull": "Pull",
   "settings.remotes": "Remotes",
   "settings.repositories": "Repositories",
