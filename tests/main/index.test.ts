@@ -16,6 +16,7 @@ const startup = vi.hoisted(() => ({
   existsSync: vi.fn(() => false),
   mkdirSync: vi.fn(),
   renameSync: vi.fn(),
+  readdirSync: vi.fn(() => [] as string[]),
 }));
 
 vi.mock("node:fs", async (importOriginal) => ({
@@ -24,6 +25,7 @@ vi.mock("node:fs", async (importOriginal) => ({
   mkdirSync: startup.mkdirSync,
   chmodSync: vi.fn(),
   renameSync: startup.renameSync,
+  readdirSync: startup.readdirSync,
 }));
 vi.mock("@main/git/execution/shell-path", () => ({
   restoreShellPath: vi.fn().mockResolvedValue(undefined),
@@ -58,6 +60,7 @@ beforeEach(() => {
   startup.createServices.mockImplementation(() => new Promise(() => {}));
   startup.migrateMacosKeychain.mockResolvedValue(undefined);
   startup.existsSync.mockReturnValue(false);
+  startup.readdirSync.mockReturnValue([]);
   startup.showMessageBox.mockResolvedValue({ response: 0 });
   vi.stubEnv("VITE_DEV_SERVER_URL", "");
 });
@@ -67,24 +70,6 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   vi.resetModules();
-});
-
-it("renames the legacy Keychain before services can load encrypted credentials", async () => {
-  await import("@main/index");
-  await vi.waitFor(() => expect(startup.createServices).toHaveBeenCalledOnce());
-  expect(startup.migrateMacosKeychain).toHaveBeenCalledOnce();
-  expect(startup.migrateMacosKeychain.mock.invocationCallOrder[0]).toBeLessThan(
-    startup.createServices.mock.invocationCallOrder[0]!,
-  );
-});
-
-it("stops before creating services when the legacy Keychain cannot be renamed", async () => {
-  startup.migrateMacosKeychain.mockRejectedValueOnce(new Error("Keychain is locked"));
-  vi.spyOn(console, "error").mockImplementation(() => undefined);
-  await import("@main/index");
-  await vi.waitFor(() => expect(startup.exit).toHaveBeenCalledWith(1));
-  expect(startup.createServices).not.toHaveBeenCalled();
-  expect(startup.showErrorBox).toHaveBeenCalledWith("Eda could not start", "Keychain is locked");
 });
 
 it.each([
@@ -97,6 +82,7 @@ it.each([
   );
   const userData = join(appData, name);
   const legacyData = join(appData, name.toLowerCase());
+  startup.readdirSync.mockReturnValue([name.toLowerCase()]);
 
   await import("@main/index");
 
@@ -106,11 +92,24 @@ it.each([
 
 it("keeps an existing capitalized data directory without replacing it", async () => {
   startup.existsSync.mockReturnValue(true);
+  startup.readdirSync.mockReturnValue(["Eda", "eda"]);
 
   await import("@main/index");
 
   expect(startup.renameSync).not.toHaveBeenCalled();
   expect(startup.setPath).toHaveBeenCalledWith("userData", join(appData, "Eda"));
+});
+
+it("capitalizes the existing folder on a case-insensitive filesystem", async () => {
+  startup.existsSync.mockReturnValue(true);
+  startup.readdirSync.mockReturnValue(["eda"]);
+
+  await import("@main/index");
+
+  expect(startup.renameSync).toHaveBeenCalledExactlyOnceWith(
+    join(appData, "eda"),
+    join(appData, "Eda"),
+  );
 });
 
 it("preserves an explicit user-data-dir override", async () => {

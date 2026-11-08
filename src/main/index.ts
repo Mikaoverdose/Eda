@@ -2,7 +2,7 @@ import { redactDiagnostic } from "@shared/diagnostics";
 import { errorMessage, GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { app, BrowserWindow, dialog, Menu, session, shell } from "electron";
-import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { restoreShellPath } from "./git/execution/shell-path";
@@ -43,7 +43,11 @@ if (!app.commandLine.hasSwitch("user-data-dir")) {
   const name = isDev && process.env["VITE_DEV_SERVER_URL"] ? "Eda-Dev" : "Eda";
   const userData = join(app.getPath("appData"), name);
   const legacyData = join(app.getPath("appData"), name.toLowerCase());
-  if (!existsSync(userData) && existsSync(legacyData)) renameSync(legacyData, userData);
+  if (existsSync(legacyData)) {
+    const names = readdirSync(app.getPath("appData"));
+    if (!names.includes(name) && names.includes(name.toLowerCase()))
+      renameSync(legacyData, userData);
+  }
   mkdirSync(userData, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") chmodSync(userData, 0o700);
   app.setPath("userData", userData);
