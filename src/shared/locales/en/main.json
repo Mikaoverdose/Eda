@@ -434,7 +434,7 @@
   "main.persistence.identityRepository.chooseADifferentProfileName": "Choose a different profile name.",
   "main.persistence.migrate.transactionRequired": "Migrations require their own transaction.",
   "main.persistence.migrate.invalidOrder": "Migration IDs must be unique and ordered.",
-  "main.persistence.migrate.historyMismatch": "Database migration history does not match this build. Keep your local app data and reopen it with the Eda build that last used this database.",
+  "main.persistence.migrate.historyMismatch": "The saved data migration history does not match this build of Eda.",
   "main.persistence.migrate.invalidForeignKeys": "Migration would leave invalid foreign key references.",
   "main.persistence.operationRepository.damagedRecord": "Damaged activity record",
   "main.persistence.operationRepository.edaClosedBeforeThisOperationFinished": "Eda closed before this operation finished.",
@@ -936,5 +936,11 @@
   "main.workflowService.thisMergeReviewExpiredOrBelongsToAnotherContextReviewAgain": "This merge review expired or belongs to another context. Review again.",
   "main.workflowService.thisOperationBelongsToAnotherProfileSwitchTo": "This operation belongs to another profile. Switch to its originating profile to continue or abort it.",
   "main.workflowService.unsupportedStashStructure": "Unsupported stash structure.",
-  "main.remoteService.inspectRemoteTags": "Inspect remote tags"
+  "main.remoteService.inspectRemoteTags": "Inspect remote tags",
+  "main.startupRecovery.title": "Eda could not open its saved data",
+  "main.startupRecovery.message": "The saved data does not match this version of Eda.",
+  "main.startupRecovery.detail": "Quit to keep your data and reopen it with the Eda version that last used it, or clear data and start over. Clearing removes Eda’s profiles, settings, saved credentials, drafts, and database backups. Repository files and SSH key files stay untouched.",
+  "main.startupRecovery.quit": "Quit",
+  "main.startupRecovery.clearData": "Clear data and start over",
+  "main.startupRecovery.resetFailed": "Eda could not clear its saved data"
 }

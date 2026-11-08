@@ -7,7 +7,9 @@ const appData = "/eda-test-missing-user-data";
 
 const startup = vi.hoisted(() => ({
   createServices: vi.fn(),
+  migrateMacosKeychain: vi.fn(),
   showErrorBox: vi.fn(),
+  showMessageBox: vi.fn(),
   exit: vi.fn(),
   hasSwitch: vi.fn(() => false),
   setPath: vi.fn(),
@@ -27,6 +29,9 @@ vi.mock("@main/git/execution/shell-path", () => ({
   restoreShellPath: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@main/services", () => ({ createServices: startup.createServices }));
+vi.mock("@main/secrets/migrate-macos-keychain", () => ({
+  migrateMacosKeychain: startup.migrateMacosKeychain,
+}));
 vi.mock("@main/ipc/register", () => ({ registerIpcHandlers: vi.fn() }));
 vi.mock("electron", () => ({
   app: {
@@ -41,7 +46,7 @@ vi.mock("electron", () => ({
     exit: startup.exit,
   },
   BrowserWindow: vi.fn(),
-  dialog: { showErrorBox: startup.showErrorBox },
+  dialog: { showErrorBox: startup.showErrorBox, showMessageBox: startup.showMessageBox },
   Menu: { setApplicationMenu: vi.fn() },
   session: {
     defaultSession: { webRequest: { onHeadersReceived: vi.fn(), onBeforeRequest: vi.fn() } },
@@ -51,7 +56,9 @@ vi.mock("electron", () => ({
 
 beforeEach(() => {
   startup.createServices.mockImplementation(() => new Promise(() => {}));
+  startup.migrateMacosKeychain.mockResolvedValue(undefined);
   startup.existsSync.mockReturnValue(false);
+  startup.showMessageBox.mockResolvedValue({ response: 0 });
   vi.stubEnv("VITE_DEV_SERVER_URL", "");
 });
 
@@ -60,6 +67,24 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   vi.resetModules();
+});
+
+it("renames the legacy Keychain before services can load encrypted credentials", async () => {
+  await import("@main/index");
+  await vi.waitFor(() => expect(startup.createServices).toHaveBeenCalledOnce());
+  expect(startup.migrateMacosKeychain).toHaveBeenCalledOnce();
+  expect(startup.migrateMacosKeychain.mock.invocationCallOrder[0]).toBeLessThan(
+    startup.createServices.mock.invocationCallOrder[0]!,
+  );
+});
+
+it("stops before creating services when the legacy Keychain cannot be renamed", async () => {
+  startup.migrateMacosKeychain.mockRejectedValueOnce(new Error("Keychain is locked"));
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  await import("@main/index");
+  await vi.waitFor(() => expect(startup.exit).toHaveBeenCalledWith(1));
+  expect(startup.createServices).not.toHaveBeenCalled();
+  expect(startup.showErrorBox).toHaveBeenCalledWith("Eda could not start", "Keychain is locked");
 });
 
 it.each([
@@ -124,4 +149,21 @@ it("reports a missing Git installation visibly and exits instead of remaining wi
   expect(startup.showErrorBox.mock.invocationCallOrder[0]).toBeLessThan(
     startup.exit.mock.invocationCallOrder[0]!,
   );
+});
+
+it("offers startup recovery for migration history mismatches instead of an exit-only error box", async () => {
+  const { AppError } = await import("@shared/errors");
+  const { ERROR_CODE } = await import("@shared/error-codes");
+  startup.createServices.mockRejectedValueOnce(new AppError(ERROR_CODE.MIGRATION_HISTORY_MISMATCH));
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  await import("@main/index");
+  await vi.waitFor(() => expect(startup.exit).toHaveBeenCalledWith(1));
+  expect(startup.showMessageBox).toHaveBeenCalledWith(
+    expect.objectContaining({
+      buttons: ["Quit", "Clear data and start over"],
+      defaultId: 0,
+      cancelId: 0,
+    }),
+  );
+  expect(startup.showErrorBox).not.toHaveBeenCalled();
 });

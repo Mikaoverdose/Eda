@@ -75,3 +75,43 @@ it("removes generated pre-upgrade backups while preserving unrelated files", asy
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it("recovers from an unusable database without opening it and preserves repository and SSH key files", async () => {
+  const { mkdir, readFile } = await import("node:fs/promises");
+  const { clearStartupData } = await import("@main/application/reset-data");
+  const dir = await mkdtemp(join(tmpdir(), "eda-startup-reset-"));
+  try {
+    const managed = [
+      "eda.db",
+      "eda.db-wal",
+      "eda.db-shm",
+      "eda.db-journal",
+      "secrets.vault",
+      "eda.db.backup-123-12345678-1234-1234-1234-123456789abc",
+    ];
+    for (const name of managed) await writeFile(join(dir, name), "unusable data");
+    await mkdir(join(dir, "repository"));
+    await writeFile(join(dir, "repository", "eda.db"), "repository content");
+    await writeFile(join(dir, "id_ed25519"), "SSH key");
+    await writeFile(join(dir, "eda.db.backup-personal"), "user backup");
+    clearStartupData(dir);
+    expect((await readdir(dir)).sort()).toEqual([
+      "eda.db.backup-personal",
+      "id_ed25519",
+      "repository",
+    ]);
+    expect(await readFile(join(dir, "repository", "eda.db"), "utf8")).toBe("repository content");
+    expect(await readFile(join(dir, "id_ed25519"), "utf8")).toBe("SSH key");
+    const fresh = openDatabase(join(dir, "eda.db"));
+    try {
+      expect(fresh.raw.prepare("SELECT COUNT(*) AS count FROM identities").get()).toEqual({
+        count: 0,
+      });
+      expect(fresh.raw.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      fresh.close();
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

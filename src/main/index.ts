@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { restoreShellPath } from "./git/execution/shell-path";
 import { isRendererDocument, isRendererFile, rendererUrl } from "./application/renderer-url";
 import { configureGraphics } from "./application/graphics";
+import { recoverMigrationStartup } from "./application/startup-recovery";
 import { registerWindowRecovery } from "./application/window-recovery";
 import { registerApplicationContents } from "./ipc/transport";
 import { registerIpcHandlers } from "./ipc/register";
@@ -17,6 +18,7 @@ import {
   type RepositoryNavigationQueue,
 } from "./repo/lifecycle/navigation";
 import { createServices } from "./services";
+import { migrateMacosKeychain } from "./secrets/migrate-macos-keychain";
 
 if (app.isPackaged) {
   const { VelopackApp } = await import("velopack");
@@ -132,6 +134,7 @@ async function start(): Promise<void> {
     configureGraphics();
     await app.whenReady();
     setLocale(app.getPreferredSystemLanguages());
+    await migrateMacosKeychain();
 
     if (process.platform !== "darwin") Menu.setApplicationMenu(null);
 
@@ -207,6 +210,7 @@ async function start(): Promise<void> {
   } catch (error) {
     const message = redactDiagnostic(error instanceof Error ? error.message : String(error));
     console.error("Eda could not start:", message);
+    if (await recoverMigrationStartup(error)) return;
     const action = error instanceof GitError ? error.suggestedAction : undefined;
     dialog.showErrorBox(
       t("main.index.edaCouldNotStart"),
