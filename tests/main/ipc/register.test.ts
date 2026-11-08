@@ -185,10 +185,24 @@ function setup() {
       install: vi.fn(),
     },
     resetData: vi.fn(async () => {}),
+    gitlab: {
+      profile: vi.fn(async () => ({
+        id: "7",
+        avatarUrl: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
+      })),
+      status: vi.fn(() => ({ secureStorage: true, account: null })),
+      begin: vi.fn(),
+      poll: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      authorizationUrl: vi.fn(() => "https://gitlab.com/oauth/authorize?client_id=eda"),
+      profileUrl: vi.fn(() => "https://gitlab.com/work-user"),
+    },
     github: {
       maintainerProfile: vi.fn(async () => ({
         id: "7",
         login: "YuzuZensai",
+        avatarUrl: "https://avatars.githubusercontent.com/u/7?v=4",
         name: "Yuzu",
         bio: "Public bio",
         location: "Japan / Thailand",
@@ -197,6 +211,7 @@ function setup() {
       profile: vi.fn(async () => ({
         id: "7",
         login: "work-user",
+        avatarUrl: "https://avatars.githubusercontent.com/u/7?v=4",
         name: "Work User",
         bio: null,
         location: null,
@@ -208,7 +223,10 @@ function setup() {
       disconnect: vi.fn(),
       verifyPending: vi.fn(() => "ABCD-EFGH"),
     },
-    avatars: { getGitHub: vi.fn(async () => ({ dataUrl: "data:image/png;base64,AQID" })) },
+    avatars: {
+      getGitHub: vi.fn(async () => ({ dataUrl: "data:image/png;base64,AQID" })),
+      getGitLab: vi.fn(async () => ({ dataUrl: "data:image/png;base64,AQID" })),
+    },
     navigation: { onChange: vi.fn(), take: vi.fn(() => []) },
     operations: { onChange: vi.fn(), list: vi.fn(() => []), cancel: vi.fn(), retry: vi.fn() },
     identity: {
@@ -284,7 +302,10 @@ describe("IPC registration", () => {
     });
     expect(github.maintainerProfile).toHaveBeenCalledExactlyOnceWith();
     expect(github.profile).not.toHaveBeenCalled();
-    expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith("7");
+    expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith(
+      "7",
+      "https://avatars.githubusercontent.com/u/7?v=4",
+    );
     expect(identity.getActive).not.toHaveBeenCalled();
   });
   it("loads the connected GitHub profile and cached avatar for the active owner, and opens its verified profile link", async () => {
@@ -296,7 +317,10 @@ describe("IPC registration", () => {
       value: { id: "7", login: "work-user", avatarDataUrl: "data:image/png;base64,AQID" },
     });
     expect(github.profile).toHaveBeenCalledWith(profile.id);
-    expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith("7");
+    expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith(
+      "7",
+      "https://avatars.githubusercontent.com/u/7?v=4",
+    );
     await invoke(IPC_CHANNELS.githubOpenProfile, profile.id);
     expect(github.profileUrl).toHaveBeenCalledWith(profile.id);
     expect(electron.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/work-user");
@@ -682,4 +706,33 @@ it("requires native approval of executable settings even from the main document"
     ),
   ).toMatchObject({ ok: false });
   expect(mocks.preferences.set).not.toHaveBeenCalled();
+});
+
+it("guards GitLab authorization and cancellation with active profile ownership", async () => {
+  const { gitlab } = setup();
+  expect(await invoke(IPC_CHANNELS.gitlabBegin, repositoryId)).toMatchObject({ ok: false });
+  expect(gitlab.begin).not.toHaveBeenCalled();
+  await invoke(IPC_CHANNELS.gitlabBegin, profile.id);
+  expect(gitlab.begin).toHaveBeenCalledWith(profile.id);
+  await invoke(IPC_CHANNELS.gitlabOpenAuthorization, profile.id, repositoryId);
+  expect(gitlab.authorizationUrl).toHaveBeenCalledWith(profile.id, repositoryId);
+  expect(electron.openExternal).toHaveBeenCalledWith(
+    "https://gitlab.com/oauth/authorize?client_id=eda",
+  );
+  await invoke(IPC_CHANNELS.gitlabCancel, profile.id, repositoryId);
+  expect(gitlab.cancel).toHaveBeenCalledWith(profile.id, repositoryId);
+});
+
+it("loads GitLab provider avatars for the active profile without exposing remote URLs", async () => {
+  const { gitlab, avatars } = setup();
+  expect(await invoke(IPC_CHANNELS.gitlabProfile, repositoryId)).toMatchObject({ ok: false });
+  expect(gitlab.profile).not.toHaveBeenCalled();
+  expect(await invoke(IPC_CHANNELS.gitlabProfile, profile.id)).toEqual({
+    ok: true,
+    value: { id: "7", avatarDataUrl: "data:image/png;base64,AQID" },
+  });
+  expect(avatars.getGitLab).toHaveBeenCalledExactlyOnceWith(
+    "7",
+    "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
+  );
 });

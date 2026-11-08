@@ -7,6 +7,7 @@ const user = {
   bio: "Hello\nGitHub",
   location: "Japan / Thailand",
   email: "private@example.test",
+  avatar_url: "https://avatars.githubusercontent.com/u/7?v=4",
   access_token: "never-cache-this",
 };
 
@@ -16,6 +17,7 @@ const details = {
   name: user.name,
   bio: "Hello GitHub",
   location: user.location,
+  avatarUrl: user.avatar_url,
 };
 
 it("deduplicates public profile lookups in memory and retains cached details when offline", async () => {
@@ -61,6 +63,7 @@ it("rejects unsafe lookup keys and profiles belonging to another account", async
     name: null,
     bio: null,
     location: null,
+    avatarUrl: null,
   });
 });
 

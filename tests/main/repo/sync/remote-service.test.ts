@@ -22,6 +22,8 @@ import { SettingsRepository } from "@main/persistence/settings-repository";
 import { ProfileSessionRepository } from "@main/persistence/profile-session-repository";
 import { BackgroundFetchService } from "@main/repo/sync/background-fetch-service";
 import type { Database } from "@main/persistence/types";
+import type { GitLabAuth } from "@main/providers/gitlab-auth";
+import { isGitLabHttps } from "@shared/integrations/gitlab";
 import type { GitHubAuth } from "@main/providers/github-auth";
 import { isGitHubHttps } from "@shared/integrations/github";
 
@@ -33,7 +35,7 @@ afterEach(async () => {
   for (const repo of fixtures.splice(0)) await repo.cleanup();
 });
 
-async function setup(github?: Pick<GitHubAuth, "forFetch">) {
+async function setup(github?: Pick<GitHubAuth, "forFetch">, gitlab?: Pick<GitLabAuth, "forFetch">) {
   const server = await createTempRepo({ bare: true });
 
   fixtures.push(server);
@@ -75,6 +77,7 @@ async function setup(github?: Pick<GitHubAuth, "forFetch">) {
     operations,
     new FetchHistoryRepository(db),
     github,
+    gitlab,
   );
 
   const client = await service.clone({
@@ -1146,3 +1149,144 @@ it("lists remote tags without fetching them, keeping annotated tag object IDs an
     service.listTags({ repositoryId: client.id, remote: "--all" }),
   ).rejects.toMatchObject({ kind: "invalid-input" });
 });
+
+it.each([false, true])(
+  "authenticates GitLab push preview and execution with saved OAuth or an explicit override (manual: %s)",
+  async (manual) => {
+    const saved = { username: "oauth2", password: "saved-push-token" };
+    const refreshed = { username: "oauth2", password: "refreshed-push-token" };
+    const override = { username: "manual-user", password: "manual-push-token" };
+    const gitlab = { forFetch: vi.fn(async () => saved) };
+    const ctx = await setup(undefined, gitlab);
+    const url = "https://gitlab.com/example/push-only.git";
+    await ctx.run(["remote", "set-url", "--push", "origin", url]);
+    const execute = ctx.source.git.exec.bind(ctx.source.git);
+    const transports: string[] = [];
+    let expected = manual ? override : saved;
+    const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
+      const push = args.includes("push");
+      if (args[0] !== "ls-remote" && !push) return execute(args, options);
+      transports.push(push ? "push" : "preview");
+      expect(options.identityName).toBe(ctx.profile.name);
+      expect(Object.values(options.env?.overrides ?? {})).toContain(
+        `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
+      );
+      expect(options.redactValues).toContain(expected.password);
+      const local = [...args];
+      local[local.indexOf("--") + 1] = ctx.server.path;
+      expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
+      return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
+    });
+    try {
+      const preview = await ctx.service.preparePush({
+        repositoryId: ctx.client.id,
+        remote: "origin",
+        branch: "main",
+        destination: "authenticated-push",
+        mode: "normal",
+        setUpstream: false,
+        ...(manual ? { credentials: override } : {}),
+      });
+      expect(preview.url).toBe(url);
+      expected = manual ? override : refreshed;
+      gitlab.forFetch.mockResolvedValue(refreshed);
+      await ctx.service.push(ctx.client.id, preview.token, manual ? override : undefined);
+      expect(transports).toEqual(["preview", "push"]);
+      expect(
+        (
+          await ctx.source.run(["rev-parse", "refs/heads/authenticated-push"], ctx.server.path)
+        ).trim(),
+      ).toBe(preview.localOid);
+      if (manual) expect(gitlab.forFetch).not.toHaveBeenCalled();
+      else {
+        expect(gitlab.forFetch).toHaveBeenCalledTimes(2);
+        expect(gitlab.forFetch).toHaveBeenNthCalledWith(1, ctx.profile.id, url);
+        expect(gitlab.forFetch).toHaveBeenNthCalledWith(2, ctx.profile.id, url);
+      }
+      const activity = JSON.stringify(ctx.operations.list(ctx.profile.id));
+      for (const credential of [saved, refreshed, override])
+        expect(activity).not.toContain(credential.password);
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
+it("uses saved GitLab credentials for nested-group fetch and respects explicit manual credentials", async () => {
+  const credentials = { username: "oauth2", password: "gitlab-secret" };
+  const gitlab = {
+    forFetch: vi.fn(async (_profile: string, url: string) =>
+      isGitLabHttps(url) ? credentials : undefined,
+    ),
+  };
+  const ctx = await setup(undefined, gitlab);
+  const url = "https://gitlab.com/team/subgroup/private.git";
+  await ctx.run(["remote", "set-url", "origin", url]);
+  const execute = ctx.source.git.exec.bind(ctx.source.git);
+  let expected = credentials;
+  const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
+    if (args[0] !== "fetch") return execute(args, options);
+    expect(Object.values(options.env?.overrides ?? {})).toContain(
+      `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
+    );
+    expect(options.redactValues).toContain(expected.password);
+    const local = [...args];
+    local[local.indexOf("--") + 1] = ctx.server.path;
+    return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
+  });
+  try {
+    const request = { repositoryId: ctx.client.id, remote: "origin", prune: false, tags: false };
+    await ctx.service.fetch(request);
+    expect(gitlab.forFetch).toHaveBeenCalledWith(ctx.profile.id, url);
+    expect(JSON.stringify(ctx.operations.list(ctx.profile.id))).not.toContain(credentials.password);
+    gitlab.forFetch.mockClear();
+    expected = { username: "manual", password: "manual-secret" };
+    await ctx.service.fetch({ ...request, credentials: expected });
+    expect(gitlab.forFetch).not.toHaveBeenCalled();
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it.each([false, true])(
+  "uses saved GitLab OAuth for cloning unless manual credentials are supplied (%s)",
+  async (manual) => {
+    const saved = { username: "oauth2", password: "gitlab-clone-secret" };
+    const override = { username: "manual", password: "manual-clone-secret" };
+    const gitlab = {
+      forFetch: vi.fn(async (_profile: string, url: string) =>
+        isGitLabHttps(url) ? saved : undefined,
+      ),
+    };
+    const ctx = await setup(undefined, gitlab);
+    const url = "https://gitlab.com/team/subgroup/private.git";
+    const expected = manual ? override : saved;
+    const execute = ctx.source.git.exec.bind(ctx.source.git);
+    gitlab.forFetch.mockClear();
+    const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
+      if (args[0] !== "clone") return execute(args, options);
+      expect(Object.values(options.env?.overrides ?? {})).toContain(
+        `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
+      );
+      expect(options.redactValues).toContain(expected.password);
+      const local = [...args];
+      local[local.indexOf("--") + 1] = ctx.server.path;
+      return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
+    });
+    try {
+      const result = await ctx.service.clone({
+        profileId: ctx.profile.id,
+        url,
+        parent: ctx.source.home,
+        name: "gitlab clone",
+        ...(manual ? { credentials: override } : {}),
+      });
+      expect(await readFile(join(result.path, "file.txt"), "utf8")).toBe("initial\n");
+      if (manual) expect(gitlab.forFetch).not.toHaveBeenCalled();
+      else expect(gitlab.forFetch).toHaveBeenCalledExactlyOnceWith(ctx.profile.id, url);
+      expect(JSON.stringify(ctx.operations.list(ctx.profile.id))).not.toContain(expected.password);
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);

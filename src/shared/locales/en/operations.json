@@ -319,5 +319,6 @@
   "operationTitles.pushBranch": "Push branch",
   "operationTitles.rebase": "Rebase",
   "operationTitles.redo": "Redo",
-  "operationTitles.undo": "Undo"
+  "operationTitles.undo": "Undo",
+  "operations.gitLabSignIn": "GitLab sign-in"
 }

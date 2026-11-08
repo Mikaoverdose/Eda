@@ -218,7 +218,6 @@ export function AboutSettings() {
                 location={profile?.location}
                 avatarDataUrl={profile?.avatarDataUrl}
                 hue={45}
-                email={maintainerEmail}
                 onOpenProfile={() =>
                   window.open(`https://github.com/${maintainer}`, "_blank", "noopener,noreferrer")
                 }

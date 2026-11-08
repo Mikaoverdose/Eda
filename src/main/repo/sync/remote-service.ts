@@ -31,6 +31,7 @@ import type { IdentityManager } from "../../identity/identity-manager";
 import type { OperationManager } from "../../operations/operation-manager";
 import type { FetchHistoryRepository } from "../../persistence/fetch-history-repository";
 import type { IdentityRepository } from "../../persistence/identity-repository";
+import type { GitLabAuth } from "../../providers/gitlab-auth";
 import type { GitHubAuth } from "../../providers/github-auth";
 import { PreviewStore } from "../preview-store";
 import type { RepositoryManager } from "../lifecycle/repository-manager";
@@ -56,6 +57,7 @@ export class RemoteService {
     private readonly operations: OperationManager,
     private readonly fetchHistory: FetchHistoryRepository,
     private readonly github?: Pick<GitHubAuth, "forFetch">,
+    private readonly gitlab?: Pick<GitLabAuth, "forFetch">,
   ) {
     this.remotes = new GitRemotes(git);
   }
@@ -110,7 +112,10 @@ export class RemoteService {
     if (!identity)
       throw remoteError(errorText("main.remoteService.theOriginatingProfileNoLongerExists"));
     const url = await this.remotes.destination(path, request.remote, true);
-    const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
+    const credentials =
+      request.credentials ??
+      (await this.github?.forFetch(identity.id, url)) ??
+      (await this.gitlab?.forFetch(identity.id, url));
     const result = await this.git
       .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--tags", "--", url], {
         cwd: path,
@@ -222,7 +227,10 @@ export class RemoteService {
       );
 
       try {
-        const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
+        const credentials =
+          request.credentials ??
+          (await this.github?.forFetch(identity.id, url)) ??
+          (await this.gitlab?.forFetch(identity.id, url));
         const result = await this.git.exec(
           [
             "fetch",
@@ -300,7 +308,10 @@ export class RemoteService {
             ).stdout.trim()
           : null;
 
-        const credentials = request.credentials ?? (await this.github?.forFetch(identity.id, url));
+        const credentials =
+          request.credentials ??
+          (await this.github?.forFetch(identity.id, url)) ??
+          (await this.gitlab?.forFetch(identity.id, url));
         const result = await this.git
           .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--", url, destination], {
             cwd: path,
@@ -425,7 +436,9 @@ export class RemoteService {
               ...transportOptions(
                 url,
                 identity,
-                credentials ?? (await this.github?.forFetch(identity.id, url)),
+                credentials ??
+                  (await this.github?.forFetch(identity.id, url)) ??
+                  (await this.gitlab?.forFetch(identity.id, url)),
               ),
             },
           )
@@ -473,6 +486,16 @@ export class RemoteService {
           if (!this.identities.findById(captured.id))
             throw remoteError(errorText("main.remoteService.theOriginatingProfileNoLongerExists"));
 
+          const credentials =
+            request.credentials ??
+            (request.url.startsWith("https://")
+              ? ((await this.github?.forFetch(captured.id, request.url)) ??
+                (await this.gitlab?.forFetch(captured.id, request.url)))
+              : undefined);
+          const authenticatedTransport = credentials
+            ? transportOptions(request.url, captured, credentials)
+            : transport;
+
           this.operations.started(t("main.remoteService.preparingCloneDestination"));
 
           if (!(await lstat(request.parent)).isDirectory())
@@ -504,7 +527,7 @@ export class RemoteService {
               ],
               {
                 operation: t("operations.cloneRepository"),
-                ...transport,
+                ...authenticatedTransport,
               },
             );
 

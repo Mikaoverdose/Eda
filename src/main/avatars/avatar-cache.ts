@@ -5,7 +5,7 @@ import type { AvatarImage } from "@shared/identity/avatar";
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 128;
-const MAX_IMAGE_BYTES = 64 * 1024;
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_FILE_BYTES = 64 * 1024;
 
 export class AvatarCache {
@@ -49,16 +49,38 @@ export class AvatarCache {
     return this.getImage(hash, `https://www.gravatar.com/avatar/${hash}?s=96&d=404&r=g`);
   }
 
-  async getGitHub(accountId: string): Promise<AvatarImage> {
-    if (!/^[1-9][0-9]{0,15}$/.test(accountId))
-      return { dataUrl: null, expiresAt: this.now() + DAY };
-    return this.getImage(
-      `github:${accountId}`,
-      `https://avatars.githubusercontent.com/u/${accountId}?s=96&v=4`,
-    );
+  getGitHub(accountId: string, avatarUrl: string | null): Promise<AvatarImage> {
+    return this.getProviderImage("github", accountId, avatarUrl);
   }
 
-  private async getImage(hash: string, url: string): Promise<AvatarImage> {
+  getGitLab(accountId: string, avatarUrl: string | null): Promise<AvatarImage> {
+    return this.getProviderImage("gitlab", accountId, avatarUrl);
+  }
+
+  private async getProviderImage(
+    provider: "github" | "gitlab",
+    accountId: string,
+    avatarUrl: string | null,
+  ): Promise<AvatarImage> {
+    const fallback = { dataUrl: null, expiresAt: this.now() + DAY };
+    if (!/^[1-9][0-9]{0,15}$/.test(accountId) || !avatarUrl || avatarUrl.length > 4096)
+      return fallback;
+    let url: URL;
+    try {
+      url = new URL(avatarUrl);
+    } catch {
+      return fallback;
+    }
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) return fallback;
+    const version = createHash("sha256").update(url.href).digest("hex");
+    return this.getImage(`${provider}:${accountId}:${version}`, url.href, MAX_IMAGE_BYTES);
+  }
+
+  private async getImage(
+    hash: string,
+    url: string,
+    maxImageBytes = 64 * 1024,
+  ): Promise<AvatarImage> {
     await (this.loaded ??= this.load());
 
     const cached = this.entries.get(hash);
@@ -72,7 +94,7 @@ export class AvatarCache {
 
     const slot = this.slot++ % this.slots.length;
     const work = this.slots[slot]!.then(async () => {
-      const image = await this.download(url);
+      const image = await this.download(url, maxImageBytes);
 
       this.entries.delete(hash);
       this.entries.set(hash, image);
@@ -148,7 +170,9 @@ export class AvatarCache {
 
         if (
           typeof hash !== "string" ||
-          !/^(?:[a-f0-9]{64}|github:[1-9][0-9]{0,15})$/.test(hash) ||
+          !/^(?:[a-f0-9]{64}|github:[1-9][0-9]{0,15}|(?:github|gitlab):[1-9][0-9]{0,15}:[a-f0-9]{64})$/.test(
+            hash,
+          ) ||
           !image ||
           typeof image.expiresAt !== "number" ||
           image.expiresAt <= this.now() ||
@@ -159,6 +183,8 @@ export class AvatarCache {
           )
         )
           continue;
+
+        if (image.type === null && hash.includes(":")) continue;
 
         try {
           let dataUrl: string | null = null;
@@ -177,13 +203,13 @@ export class AvatarCache {
     } catch {}
   }
 
-  private async download(url: string): Promise<AvatarImage> {
+  private async download(url: string, maxImageBytes: number): Promise<AvatarImage> {
     const fallback = { dataUrl: null, expiresAt: this.now() + 5 * 60_000 };
 
     try {
       const response = await this.fetchImage(url, {
         signal: AbortSignal.timeout(8000),
-        redirect: "error",
+        redirect: "follow",
         credentials: "omit",
       });
 
@@ -210,7 +236,7 @@ export class AvatarCache {
 
         bytes += value.byteLength;
 
-        if (bytes > MAX_IMAGE_BYTES) {
+        if (bytes > maxImageBytes) {
           await reader.cancel();
           return fallback;
         }

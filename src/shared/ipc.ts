@@ -1,3 +1,9 @@
+import type {
+  GitLabStatus,
+  GitLabSignIn,
+  GitLabSignInResult,
+  GitLabAccountProfile,
+} from "./integrations/gitlab";
 import type { DesktopPlatform, GraphicsStatus, InstallationInfo } from "./application";
 import type { GitEngineInfo } from "./integrations/git-engine";
 import type { AvatarImage } from "./identity/avatar";
@@ -281,6 +287,16 @@ export interface EdaApi {
     openVerification(profileId: string, id: string): Promise<Result<void>>;
     disconnect(profileId: string): Promise<Result<void>>;
   };
+  gitlab: {
+    profile(profileId: string): Promise<Result<GitLabAccountProfile | null>>;
+    status(profileId: string): Promise<Result<GitLabStatus>>;
+    begin(profileId: string): Promise<Result<GitLabSignIn>>;
+    poll(profileId: string, id: string): Promise<Result<GitLabSignInResult>>;
+    cancel(profileId: string, id: string): Promise<Result<void>>;
+    openAuthorization(profileId: string, id: string): Promise<Result<void>>;
+    openProfile(profileId: string): Promise<Result<void>>;
+    disconnect(profileId: string): Promise<Result<void>>;
+  };
   app: {
     readonly version: BuildInfo;
     installation(): Promise<Result<InstallationInfo>>;
@@ -458,6 +474,14 @@ export const IPC_CHANNELS = {
   updatesCheck: "updates:check",
   updatesDownload: "updates:download",
   updatesInstall: "updates:install",
+  gitlabProfile: "gitlab:profile",
+  gitlabStatus: "gitlab:status",
+  gitlabBegin: "gitlab:begin",
+  gitlabPoll: "gitlab:poll",
+  gitlabCancel: "gitlab:cancel",
+  gitlabOpenAuthorization: "gitlab:open-authorization",
+  gitlabOpenProfile: "gitlab:open-profile",
+  gitlabDisconnect: "gitlab:disconnect",
   githubStatus: "github:status",
   githubProfile: "github:profile",
   githubMaintainerProfile: "github:maintainer-profile",

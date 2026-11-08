@@ -2446,5 +2446,20 @@
   "referenceSidebar.remoteTagIndicator": "Remote tag: {remotes}",
   "referenceSidebar.remoteTagUnavailable": "Remote status unavailable: {remotes}",
   "referenceMenu.loadingTagTargets": "Loading tag targets...",
-  "referenceMenu.localTagActions": "Checkout and signature verification use the local copy. Local and remote tags with the same name may differ."
+  "referenceMenu.localTagActions": "Checkout and signature verification use the local copy. Local and remote tags with the same name may differ.",
+  "settings.gitLabConnection.loadFailed": "Could not load the GitLab connection. Reopen settings and try again.",
+  "settings.gitLabConnection.signInFailed": "Could not complete GitLab sign-in. Try again.",
+  "settings.gitLabConnection.openFailed": "Could not open GitLab. Try again.",
+  "settings.gitLabConnection.disconnectFailed": "Could not disconnect GitLab. Try again.",
+  "settings.gitLabConnection.connected": "GitLab connected",
+  "settings.gitLabConnection.waiting": "Waiting for GitLab",
+  "settings.gitLabConnection.openGitLab": "Open GitLab",
+  "settings.gitLabConnection.cancel": "Cancel sign-in",
+  "settings.gitLabConnection.reconnect": "Reconnect GitLab",
+  "settings.gitLabConnection.signIn": "Sign in with GitLab",
+  "settings.gitLabConnection.disconnect": "Disconnect GitLab",
+  "settings.gitLabConnection.authorizeInBrowser": "Authorize Eda in your browser, then return here to finish connecting.",
+  "settings.gitLabConnection.viewProfile": "View {login} on GitLab",
+  "settings.gitLabConnection.reconnectRequired": "Reconnect required",
+  "settings.gitLabConnection.unlockStorage": "Unlock your OS keychain and restart Eda to save a GitLab login."
 }

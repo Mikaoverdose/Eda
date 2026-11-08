@@ -6,7 +6,6 @@ import { INTEGRATIONS } from "@shared/integrations/config";
 import {
   isGitHubHttps,
   MAINTAINER_GITHUB_LOGIN,
-  type GitHubAccountProfile,
   type GitHubSignIn,
   type GitHubSignInResult,
   type GitHubStatus,
@@ -18,7 +17,7 @@ import type {
   SavedGitHubAccount,
 } from "../persistence/github-account-repository";
 import { secretKeys, type SecretStore } from "../secrets/secret-store";
-import { GitHubProfileCache } from "./github-profile-cache";
+import { GitHubProfileCache, type GitHubProfileDetails } from "./github-profile-cache";
 
 const DEVICE_URL = "https://github.com/login/device/code";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
@@ -83,7 +82,7 @@ export class GitHubAuth {
     };
   }
 
-  async profile(profileId: string): Promise<Omit<GitHubAccountProfile, "avatarDataUrl"> | null> {
+  async profile(profileId: string): Promise<GitHubProfileDetails | null> {
     const account = this.accounts.find(profileId);
     if (this.authorized.has(profileId)) return null;
     if (!account || !this.ownsCredential(account) || !/^[1-9][0-9]{0,15}$/.test(account.accountId))
@@ -91,7 +90,7 @@ export class GitHubAuth {
     return this.profiles.get({ id: account.accountId, login: account.login });
   }
 
-  maintainerProfile(): Promise<Omit<GitHubAccountProfile, "avatarDataUrl"> | null> {
+  maintainerProfile(): Promise<GitHubProfileDetails | null> {
     return this.profiles.get({ login: MAINTAINER_GITHUB_LOGIN });
   }
 

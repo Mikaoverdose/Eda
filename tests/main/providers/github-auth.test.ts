@@ -120,6 +120,7 @@ describe("GitHub device OAuth", () => {
       name: "Work User",
       bio: "Hello GitHub",
       location: "Bangkok",
+      avatarUrl: "https://evil.invalid/avatar",
     });
     expect(ctx.fetch).toHaveBeenCalledExactlyOnceWith(
       "https://api.github.com/user/7",
@@ -147,6 +148,7 @@ describe("GitHub device OAuth", () => {
       name: null,
       bio: null,
       location: null,
+      avatarUrl: null,
     });
     ctx.advance(61_000);
     ctx.fetch.mockRejectedValueOnce(new Error("offline"));

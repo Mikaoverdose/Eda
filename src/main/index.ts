@@ -183,6 +183,7 @@ async function start(): Promise<void> {
     app.on("before-quit", (event) => {
       services.updates.stop();
       services.github.cancelAll();
+      services.gitlab.cancelAll();
       if (backgroundStopped) return;
       event.preventDefault();
       void services.backgroundFetch

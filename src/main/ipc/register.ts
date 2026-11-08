@@ -11,12 +11,14 @@ import { registerSettingsHandlers } from "./handlers/settings-handlers";
 import { registerSshHandlers } from "./handlers/ssh-handlers";
 import { registerOperationHandlers } from "./handlers/operation-handlers";
 import { registerRemoteHandlers } from "./handlers/remote-handlers";
+import { registerGitLabHandlers } from "./handlers/gitlab-handlers";
 import { registerGitHubHandlers } from "./handlers/github-handlers";
 import { registerUpdateHandlers } from "./handlers/update-handlers";
 
 export function registerIpcHandlers(services: Services): void {
   registerUpdateHandlers(services);
   registerGitHubHandlers(services);
+  registerGitLabHandlers(services);
   registerStashHandlers(services);
   registerWorkflowHandlers(services);
   registerConflictHandlers(services);

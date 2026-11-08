@@ -37,6 +37,7 @@ import { OperationManager } from "./operations/operation-manager";
 import { ContentRecoveryRepository } from "./persistence/content-recovery-repository";
 import { openDatabase } from "./persistence/database";
 import { FetchHistoryRepository } from "./persistence/fetch-history-repository";
+import { GitLabAccountRepository } from "./persistence/gitlab-account-repository";
 import { GitHubAccountRepository } from "./persistence/github-account-repository";
 import { IdentityRepository } from "./persistence/identity-repository";
 import { OperationRepository } from "./persistence/operation-repository";
@@ -44,6 +45,7 @@ import { ProfileSessionRepository } from "./persistence/profile-session-reposito
 import { SettingsRepository } from "./persistence/settings-repository";
 import type { Database } from "./persistence/types";
 import { WorkflowJournal } from "./persistence/workflow-journal";
+import { GitLabAuth } from "./providers/gitlab-auth";
 import { GitHubAuth } from "./providers/github-auth";
 import { HistoryRecoveryService } from "./repo/history/history-recovery-service";
 import { HistoryReversalService } from "./repo/history/history-reversal-service";
@@ -68,6 +70,7 @@ export interface Services {
   updates: UpdateService;
   resetData(): Promise<void>;
   github: GitHubAuth;
+  gitlab: GitLabAuth;
   avatars: AvatarCache;
   backgroundFetch: BackgroundFetchService;
   pull: PullService;
@@ -161,7 +164,13 @@ export async function createServices(): Promise<Services> {
     const github = new GitHubAuth(new GitHubAccountRepository(db), secrets, (url, options) =>
       net.fetch(url instanceof URL ? url.href : url, options),
     );
-    identity.onChange(() => github.cancelAll());
+    const gitlab = new GitLabAuth(new GitLabAccountRepository(db), secrets, (url, options) =>
+      net.fetch(url instanceof URL ? url.href : url, options),
+    );
+    identity.onChange(() => {
+      github.cancelAll();
+      gitlab.cancelAll();
+    });
     const recovery = new ContentRecoveryRepository(db);
     const journal = new WorkflowJournal(db);
     const writer = new RepositoryWriter(
@@ -198,6 +207,7 @@ export async function createServices(): Promise<Services> {
       operations,
       new FetchHistoryRepository(db),
       github,
+      gitlab,
     );
 
     let suspended = false;
@@ -315,6 +325,7 @@ export async function createServices(): Promise<Services> {
       installation,
       updates,
       github,
+      gitlab,
       historyReversal: new HistoryReversalService(
         git,
         repositories,
@@ -346,7 +357,7 @@ export async function createServices(): Promise<Services> {
         operations.reset();
         await backgroundFetch.stop();
         try {
-          await github.reset();
+          await Promise.all([github.reset(), gitlab.reset()]);
           await identity.serialize(async () => {
             await avatars.clear();
             await secrets.clear();

@@ -9,6 +9,17 @@ const api: EdaApi = {
     download: () => ipcRenderer.invoke(IPC_CHANNELS.updatesDownload),
     install: () => ipcRenderer.invoke(IPC_CHANNELS.updatesInstall),
   },
+  gitlab: {
+    profile: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabProfile, profileId),
+    status: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabStatus, profileId),
+    begin: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabBegin, profileId),
+    poll: (profileId, id) => ipcRenderer.invoke(IPC_CHANNELS.gitlabPoll, profileId, id),
+    cancel: (profileId, id) => ipcRenderer.invoke(IPC_CHANNELS.gitlabCancel, profileId, id),
+    openAuthorization: (profileId, id) =>
+      ipcRenderer.invoke(IPC_CHANNELS.gitlabOpenAuthorization, profileId, id),
+    openProfile: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabOpenProfile, profileId),
+    disconnect: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabDisconnect, profileId),
+  },
   github: {
     maintainerProfile: () => ipcRenderer.invoke(IPC_CHANNELS.githubMaintainerProfile),
     status: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.githubStatus, profileId),

@@ -11,7 +11,6 @@ export function GitHubProfile({
   bio,
   location,
   avatarDataUrl,
-  email,
   hue,
   onOpenProfile,
   children,
@@ -21,7 +20,6 @@ export function GitHubProfile({
   bio?: string | null | undefined;
   location?: string | null | undefined;
   avatarDataUrl?: string | null | undefined;
-  email?: string | undefined;
   hue: AccentColor;
   onOpenProfile: () => void;
   children?: ReactNode;
@@ -29,12 +27,7 @@ export function GitHubProfile({
   return (
     <div className="space-y-2">
       <div className="flex min-w-0 items-center gap-3">
-        <ProfileAvatar
-          name={name ?? login}
-          hue={hue}
-          imageUrl={avatarDataUrl ?? undefined}
-          email={avatarDataUrl ? undefined : email}
-        />
+        <ProfileAvatar name={name ?? login} hue={hue} imageUrl={avatarDataUrl ?? undefined} />
 
         <div className="min-w-0">
           {name && <p className="break-words text-sm font-medium">{name}</p>}

@@ -17,9 +17,10 @@ export function registerGitHubHandlers(services: Services): void {
 
     if (!details) return ok(null);
 
-    const avatar = await services.avatars.getGitHub(details.id);
+    const avatar = await services.avatars.getGitHub(details.id, details.avatarUrl);
 
-    return ok({ ...details, avatarDataUrl: avatar.dataUrl });
+    const { avatarUrl: _avatarUrl, ...profile } = details;
+    return ok({ ...profile, avatarDataUrl: avatar.dataUrl });
   });
 
   const work = async <T>(rawProfile: unknown, action: (id: string) => Promise<T> | T) => {
@@ -37,8 +38,9 @@ export function registerGitHubHandlers(services: Services): void {
     work(profile, async (id) => {
       const details = await github.profile(id);
       if (!details) return null;
-      const avatar = await services.avatars.getGitHub(details.id);
-      return { ...details, avatarDataUrl: avatar.dataUrl };
+      const avatar = await services.avatars.getGitHub(details.id, details.avatarUrl);
+      const { avatarUrl: _avatarUrl, ...profile } = details;
+      return { ...profile, avatarDataUrl: avatar.dataUrl };
     }),
   );
   handle(IPC_CHANNELS.githubOpenProfile, async (_event, profile) =>

@@ -1,3 +1,4 @@
+import { GitLabConnection } from "../connections/GitLabConnection";
 import { t } from "@shared/i18n";
 import { useAppStore } from "../../stores/app-store";
 import { ConnectionCard } from "../connections/ConnectionCard";
@@ -10,7 +11,8 @@ export function ConnectionsStep({ profileId }: { profileId: string }) {
   return (
     <div className="space-y-3">
       <GitHubConnection key={profileId} profileId={profileId} compact />
-      {(["GitLab", "Bitbucket", "Azure DevOps"] as const).map((provider) => (
+      <GitLabConnection key={`gitlab:${profileId}`} profileId={profileId} compact />
+      {(["Bitbucket", "Azure DevOps"] as const).map((provider) => (
         <ConnectionCard
           key={provider}
           title={provider}

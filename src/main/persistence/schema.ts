@@ -93,6 +93,23 @@ export const githubAccounts = sqliteTable(
   ],
 );
 
+export const gitlabAccounts = sqliteTable(
+  "gitlab_accounts",
+  {
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    login: text("login").notNull(),
+    credentialRef: text("credential_ref").notNull(),
+    state: text("state", { enum: ["connected", "expired", "revoked"] }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId] }),
+    check("gitlab_accounts_state", sql`${table.state} IN ('connected', 'expired', 'revoked')`),
+  ],
+);
+
 export const settingOverrides = sqliteTable(
   "setting_overrides",
   {
