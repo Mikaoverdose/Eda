@@ -1,6 +1,7 @@
 import { StatusBannerStack } from "../components/ui/index";
 import { GlobalGitWarning } from "../features/profiles/GlobalGitWarning";
 import { AppUpdateNotice } from "../features/updates/AppUpdateNotice";
+import { useUpdates } from "../features/updates/hooks/useUpdates";
 
 export function AppNotices({
   aboutOpen,
@@ -9,9 +10,11 @@ export function AppNotices({
   aboutOpen: boolean;
   onReviewGitSettings: () => void;
 }) {
+  const { state } = useUpdates();
+
   return (
     <StatusBannerStack>
-      <GlobalGitWarning onReview={onReviewGitSettings} />
+      {state?.phase !== "installing" && <GlobalGitWarning onReview={onReviewGitSettings} />}
 
       <AppUpdateNotice aboutOpen={aboutOpen} />
     </StatusBannerStack>

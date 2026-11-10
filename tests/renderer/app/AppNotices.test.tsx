@@ -103,6 +103,22 @@ it("stacks notices, dismisses an update independently, and resurfaces changed up
 
     expect(rows()).toHaveLength(2);
 
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Review global Git settings"]')!
+        .click(),
+    );
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+    await act(async () => useSimulationStore.getState().setUpdatePhase("installing"));
+
+    expect(rows()).toHaveLength(0);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+
+    await act(async () => useSimulationStore.getState().setUpdatePhase("ready"));
+    expect(rows()).toHaveLength(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+
     await act(async () => useSimulationStore.getState().reset());
 
     expect(rows()).toHaveLength(0);

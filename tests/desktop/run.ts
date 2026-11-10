@@ -9,6 +9,7 @@ const suites = [
   "debug",
   "navigation",
   "updates",
+  "homebrew-updates",
   "workspace",
   "foundations",
   "local",
@@ -31,11 +32,15 @@ Suites: ${suites.join(", ")}
 
 Run pnpm build first. Suites run sequentially and stop at the first failure.
 Use --packaged with bundled-git after pnpm package --dir (Windows only).
-Remotes requires OpenSSL and Git http-backend; gitlab-tls requires OpenSSL; ssh-remotes requires ssh-keygen and GPG.`);
+Remotes requires OpenSSL and Git http-backend; gitlab-tls requires OpenSSL; ssh-remotes requires ssh-keygen and GPG.
+Homebrew-updates requires macOS and Homebrew, builds two disposable dev packages, and runs only when selected explicitly.`);
 } else {
   const packaged = args.includes("--packaged");
   const names = args.filter((arg) => arg !== "--packaged");
-  const selected = names.length === 1 && names[0] === "all" ? suites : names;
+  const selected =
+    names.length === 1 && names[0] === "all"
+      ? suites.filter((name) => name !== "homebrew-updates")
+      : names;
   const invalid = selected.filter((name) => !suites.includes(name));
 
   if (!selected.length || invalid.length) {

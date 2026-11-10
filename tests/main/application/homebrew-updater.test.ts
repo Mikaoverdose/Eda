@@ -11,7 +11,7 @@ const cask = {
   sha256: "a".repeat(64),
 };
 
-function fixture(changes: Record<string, unknown> = {}) {
+function fixture(changes: Record<string, unknown> = {}, environment: NodeJS.ProcessEnv = {}) {
   const runner = new FakeProcessRunner()
     .on(["update"], {})
     .on(["info"], { stdout: JSON.stringify({ casks: [{ ...cask, ...changes }] }) })
@@ -23,7 +23,7 @@ function fixture(changes: Record<string, unknown> = {}) {
     "/tmp/neutral-directory",
     "0.0.1",
     restart,
-    { PATH: "/usr/bin:/bin", HOME: "/Users/fixture" },
+    { PATH: "/usr/bin:/bin", HOME: "/Users/fixture", ...environment },
   );
 
   return { updater, runner, restart };
@@ -47,6 +47,17 @@ it("refreshes the tap and allows only the announced release from the installed E
     HOMEBREW_NO_SUDO: "1",
   });
 });
+
+it.each(["XDG_CONFIG_HOME", "HOMEBREW_XDG_CONFIG_HOME"])(
+  "preserves %s so noninteractive updates can read the existing Homebrew cask trust",
+  async (key) => {
+    const { updater, runner } = fixture({}, { [key]: "/Users/fixture/config" });
+
+    await updater.check("0.0.2");
+
+    expect(runner.calls.every((call) => call.env[key] === "/Users/fixture/config")).toBe(true);
+  },
+);
 
 it.each([
   { version: "0.0.1" },

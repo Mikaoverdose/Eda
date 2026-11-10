@@ -118,6 +118,7 @@ const electron = vi.hoisted(() => ({
   on: vi.fn(),
   send: vi.fn(),
   destroy: vi.fn(),
+  quit: vi.fn(),
   setZoomFactor: vi.fn(),
   minimize: vi.fn(),
   maximize: vi.fn(),
@@ -137,7 +138,7 @@ const electron = vi.hoisted(() => ({
 }));
 
 vi.mock("electron", () => ({
-  app: { on: electron.on, isPackaged: false },
+  app: { on: electron.on, quit: electron.quit, isPackaged: false },
   ipcMain: { handle: electron.handle },
   BrowserWindow: {
     getAllWindows: () => [
@@ -736,49 +737,68 @@ describe("IPC registration", () => {
     });
   });
 
-  it("requires the window close nonce before draining writes and destroying the window", async () => {
-    const { sessions, identity } = setup();
+  it.each([false, true])(
+    "saves the window before closing and resumes application quit: %s",
+    async (quitting) => {
+      const { sessions, identity } = setup();
 
-    const window = Object.assign(new EventEmitter(), {
-      webContents: {
-        id: 42,
-        isDestroyed: () => false,
-        isCrashed: () => false,
-        send: electron.send,
-      },
-    });
+      const window = Object.assign(new EventEmitter(), {
+        webContents: {
+          id: 42,
+          isDestroyed: () => false,
+          isCrashed: () => false,
+          send: electron.send,
+        },
+      });
 
-    const onWindowCreated = electron.on.mock.calls.find(
-      ([name]) => name === "browser-window-created",
-    )?.[1] as (event: unknown, window: unknown) => void;
+      const onWindowCreated = electron.on.mock.calls.find(
+        ([name]) => name === "browser-window-created",
+      )?.[1] as (event: unknown, window: unknown) => void;
 
-    onWindowCreated({}, window);
+      onWindowCreated({}, window);
 
-    const preventDefault = vi.fn();
+      if (quitting) {
+        const onBeforeQuit = electron.on.mock.calls.find(([name]) => name === "before-quit")?.[1];
+        onBeforeQuit?.();
+      }
 
-    window.emit("close", { preventDefault });
-    expect(preventDefault).toHaveBeenCalledOnce();
+      const preventDefault = vi.fn();
 
-    const nonce = electron.send.mock.calls[0]?.[1] as string;
+      window.emit("close", { preventDefault });
+      expect(preventDefault).toHaveBeenCalledOnce();
 
-    expect(await invoke(IPC_CHANNELS.sessionsReadyToClose, "wrong")).toMatchObject({
-      ok: false,
-      error: { kind: "invalid-input" },
-    });
+      const nonce = electron.send.mock.calls[0]?.[1] as string;
 
-    expect(electron.destroy).not.toHaveBeenCalled();
+      window.emit("close", { preventDefault });
+      expect(electron.send).toHaveBeenCalledTimes(2);
+      expect(electron.send).toHaveBeenLastCalledWith(IPC_EVENTS.flushRequested, nonce);
 
-    expect(await invoke(IPC_CHANNELS.sessionsReadyToClose, nonce)).toEqual({
-      ok: true,
-      value: undefined,
-    });
+      expect(await invoke(IPC_CHANNELS.sessionsReadyToClose, "wrong")).toMatchObject({
+        ok: false,
+        error: { kind: "invalid-input" },
+      });
 
-    expect(identity.serialize).toHaveBeenCalledOnce();
-    expect(electron.destroy).toHaveBeenCalledOnce();
+      expect(electron.destroy).not.toHaveBeenCalled();
 
-    window.emit("closed");
-    expect(sessions.close).toHaveBeenCalledWith(42);
-  });
+      expect(await invoke(IPC_CHANNELS.sessionsReadyToClose, nonce)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+
+      expect(identity.serialize).toHaveBeenCalledOnce();
+      expect(electron.destroy).not.toHaveBeenCalled();
+      expect(electron.quit).toHaveBeenCalledTimes(quitting ? 1 : 0);
+      expect(electron.close).toHaveBeenCalledTimes(quitting ? 0 : 1);
+
+      preventDefault.mockClear();
+      window.emit("close", { preventDefault });
+      expect(preventDefault).not.toHaveBeenCalled();
+      expect(electron.send).toHaveBeenCalledTimes(2);
+
+      window.emit("closed");
+      expect(sessions.close).toHaveBeenCalledWith(42);
+    },
+  );
 });
 
 it("rejects foreign main documents and child frames before any ordinary IPC side effect", async () => {
@@ -983,6 +1003,8 @@ it("keeps the application window open during a Homebrew upgrade and restores nor
   )?.[1] as (event: unknown, window: unknown) => void;
   onWindowCreated({}, window);
   mocks.updates.blocksQuit = true;
+  const onBeforeQuit = electron.on.mock.calls.find(([name]) => name === "before-quit")?.[1];
+  onBeforeQuit?.();
   const preventDefault = vi.fn();
 
   window.emit("close", { preventDefault });

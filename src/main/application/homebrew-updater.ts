@@ -31,7 +31,13 @@ export class HomebrewUpdater {
       environment,
     );
 
-    for (const key of ["USER", "LOGNAME", "SHELL"] as const) {
+    for (const key of [
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "XDG_CONFIG_HOME",
+      "HOMEBREW_XDG_CONFIG_HOME",
+    ] as const) {
       const value = environment[key];
 
       if (value !== undefined) this.environment[key] = value;

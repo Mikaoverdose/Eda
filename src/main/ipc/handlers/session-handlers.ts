@@ -13,6 +13,12 @@ import { optionalInteger, requireId, requireRecord, requireString } from "../val
 export function registerSessionHandlers(services: Services): void {
   const { identity } = services;
   const closing = new Map<number, string>();
+  const readyToClose = new Set<number>();
+  let quitting = false;
+
+  app.on("before-quit", () => {
+    if (!services.updates.blocksQuit) quitting = true;
+  });
 
   app.on("browser-window-created", (_event, window) => {
     const caller = window.webContents.id;
@@ -24,6 +30,7 @@ export function registerSessionHandlers(services: Services): void {
       }
 
       if (
+        readyToClose.has(caller) ||
         !services.sessions.hasBinding(caller) ||
         window.webContents.isDestroyed() ||
         window.webContents.isCrashed()
@@ -32,13 +39,14 @@ export function registerSessionHandlers(services: Services): void {
 
       event.preventDefault();
 
-      const nonce = randomUUID();
+      const nonce = closing.get(caller) ?? randomUUID();
 
       closing.set(caller, nonce);
       window.webContents.send(IPC_EVENTS.flushRequested, nonce);
     });
     window.once("closed", () => {
       closing.delete(caller);
+      readyToClose.delete(caller);
       services.sessions.close(caller);
     });
   });
@@ -49,9 +57,15 @@ export function registerSessionHandlers(services: Services): void {
       requireString(rawNonce, t("fields.closeAcknowledgement"), 128)
     )
       throw invalidRequest(errorText("main.sessionHandlers.invalidCloseAcknowledgement"));
+
     await identity.serialize(async () => undefined);
     closing.delete(event.sender.id);
-    BrowserWindow.fromWebContents(event.sender)?.destroy();
+    readyToClose.add(event.sender.id);
+
+    // Preventing a window close cancels app.quit(), so resume it after the save handshake.
+    if (quitting) app.quit();
+    else BrowserWindow.fromWebContents(event.sender)?.close();
+
     return ok(undefined);
   });
 

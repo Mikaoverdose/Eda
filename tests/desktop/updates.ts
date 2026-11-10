@@ -20,8 +20,8 @@ const fixtureRoot = await mkdtemp(join(tmpdir(), "eda-updates-gate-"));
 const config = join(fixtureRoot, "gitconfig");
 await writeFile(config, "[user]\nname = Fixture\nemail = fixture@example.test\n");
 let app: ElectronApplication | undefined;
-try {
-  app = await electron.launch({
+function launch() {
+  return electron.launch({
     args: [
       "dist/main/index.js",
       "--no-sandbox",
@@ -34,6 +34,10 @@ try {
       GIT_CONFIG_NOSYSTEM: "1",
     },
   });
+}
+
+try {
+  app = await launch();
   const page = await app.firstWindow();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -552,8 +556,24 @@ try {
   await updates.screenshot({ path: join(tmpdir(), "eda-updates-homebrew-installing.png") });
 
   assert.deepEqual(errors, []);
+
+  const savedProfile = await page.evaluate(() => window.eda.identity.getActive());
+  assert.ok(savedProfile.ok && savedProfile.value);
+
+  const closed = app.waitForEvent("close", { timeout: 10_000 });
+
+  await app.evaluate(({ app }) => app.quit());
+  await closed;
+
+  app = await launch();
+  const restored = await app.firstWindow();
+
+  await restored.getByRole("button", { name: "Settings", exact: true }).waitFor();
+  assert.deepEqual(await restored.evaluate(() => window.eda.identity.getActive()), savedProfile);
+  assert.equal(await restored.getByRole("button", { name: "Get started", exact: true }).count(), 0);
+
   console.log(
-    "Update desktop gate passed: source-build protection, persisted preferences, update navigation, direct and managed previews, and one-click Homebrew updates gated on cask availability.",
+    "Update desktop gate passed: source-build protection, persisted preferences, update navigation, direct and managed previews, one-click Homebrew updates, single-request quit, and profile restoration after restart.",
   );
 } finally {
   await app?.close();
