@@ -3,6 +3,7 @@ import { t } from "@shared/i18n";
 import type { IgnoreInspection, IgnoreKind } from "@shared/repository/ignore";
 import { useEffect, useState } from "react";
 import {
+  DialogActions,
   Button,
   Checkbox,
   CodeBlock,
@@ -32,6 +33,7 @@ export function IgnoreDialog({
 
     setInspection(null);
     setError(null);
+
     void window.eda.repository.inspectIgnore(repositoryId, path, kind).then((result) => {
       if (!alive) return;
       if (result.ok) setInspection(result.value);
@@ -71,20 +73,22 @@ export function IgnoreDialog({
       title={t("ignoreDialog.ignoreRules")}
       description={path}
       onClose={onClose}
+      busy={busy}
       footer={
-        <>
-          <Button variant="quiet" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button disabled={busy || !inspection} onClick={() => void run(false)}>
-            {t("ignoreDialog.addIgnoreRule")}
-          </Button>
-        </>
+        <DialogActions
+          busy={busy}
+          onClose={onClose}
+          onConfirm={() => void run(false)}
+          confirmLabel={t("ignoreDialog.addIgnoreRule")}
+          confirmDisabled={!inspection}
+          confirmVariant="secondary"
+        />
       }
     >
       <div className="space-y-3 text-sm">
         <label className="flex items-center justify-between">
           {t("ignoreDialog.match")}
+
           <Select
             aria-label={t("ignoreDialog.ignoreRuleType")}
             value={kind}
@@ -97,10 +101,12 @@ export function IgnoreDialog({
             <option value="directory">{t("ignoreDialog.parentDirectory")}</option>
           </Select>
         </label>
+
         {inspection && (
           <>
             <p className="text-text-tertiary">{t("ignoreDialog.appendToTheRootGitignore")}</p>
             <CodeBlock label={t("ignoreDialog.ruleToAddToGitignore")}>{inspection.rule}</CodeBlock>
+
             <p>
               {inspection.source
                 ? t("ignoreDialog.by", {
@@ -113,11 +119,13 @@ export function IgnoreDialog({
                   })
                 : t("ignoreDialog.noMatchingIgnoreRule")}
             </p>
+
             {inspection.tracked && (
               <div className="space-y-2 border-t border-border-subtle pt-3">
                 <p>
                   {t("ignoreDialog.thisFileIsTrackedIgnoreRulesDoNotRemoveTrackedFilesFromGit")}
                 </p>
+
                 <Checkbox
                   className="flex items-start gap-2"
                   checked={confirmStop}
@@ -127,6 +135,7 @@ export function IgnoreDialog({
                     "ignoreDialog.stageRemovalFromGitWhileKeepingTheFileOnDiskThisIsASeparateAction",
                   )}
                 </Checkbox>
+
                 <Button disabled={!confirmStop || busy} onClick={() => void run(true)}>
                   {t("ignoreDialog.stopTrackingFile")}
                 </Button>
@@ -134,6 +143,7 @@ export function IgnoreDialog({
             )}
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

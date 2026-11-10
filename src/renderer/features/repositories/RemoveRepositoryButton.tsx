@@ -3,7 +3,7 @@ import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
 import { X } from "lucide-react";
 import { useState } from "react";
-import { Button, Dialog, ErrorDialog } from "../../components/ui/index";
+import { DialogActions, Button, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionStore } from "../../stores/session-store";
 
@@ -18,6 +18,7 @@ export function RemoveRepositoryButton({
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const remove = async () => {
     setBusy(true);
     setError(null);
@@ -28,6 +29,7 @@ export function RemoveRepositoryButton({
           useSessionStore.getState().error ??
             t("removeRepositoryButton.couldNotSaveTheCurrentSessionTryAgain"),
         );
+
         return;
       }
 
@@ -66,21 +68,20 @@ export function RemoveRepositoryButton({
       >
         {compact ? <X size={14} aria-hidden="true" /> : t("removeRepositoryButton.openDialog")}
       </Button>
+
       {confirm && (
         <Dialog
           title={t("removeRepositoryButton.removeRepositoryFromProfile")}
-          onClose={() => {
-            if (!busy) setConfirm(false);
-          }}
+          busy={busy}
+          onClose={() => setConfirm(false)}
           footer={
-            <>
-              <Button variant="quiet" disabled={busy} onClick={() => setConfirm(false)}>
-                {t("common.cancel")}
-              </Button>
-              <Button variant="danger" busy={busy} onClick={() => void remove()}>
-                {t("removeRepositoryButton.dialogTitle")}
-              </Button>
-            </>
+            <DialogActions
+              onClose={() => setConfirm(false)}
+              onConfirm={() => void remove()}
+              confirmLabel={t("removeRepositoryButton.dialogTitle")}
+              busy={busy}
+              confirmVariant="danger"
+            />
           }
         >
           <p>
@@ -88,6 +89,7 @@ export function RemoveRepositoryButton({
               name: repository.name,
             })}
           </p>
+
           <p className="mono my-3 break-all text-xs">{repository.path}</p>
           <p>
             {t("removeRepositoryButton.filesOnDiskGitHistoryAndOtherProfilesMembershipsAreKept")}

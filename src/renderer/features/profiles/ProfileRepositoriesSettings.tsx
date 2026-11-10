@@ -3,6 +3,7 @@ import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
 import { useEffect, useState } from "react";
 import {
+  DialogActions,
   ActionList,
   Button,
   Checkbox,
@@ -28,10 +29,12 @@ export function ProfileRepositoriesSettings() {
             value1: active?.name ?? t("profileRepositoriesSettings.thisProfile"),
           })}
         </p>
+
         <Button size="sm" onClick={() => void useAppStore.getState().addRepository()}>
           {t("profileRepositoriesSettings.addFromDisk")}
         </Button>
       </div>
+
       {repositories.length > 0 ? (
         <ActionList
           items={repositories.map((repository) => ({
@@ -39,6 +42,7 @@ export function ProfileRepositoriesSettings() {
             title: (
               <>
                 {repository.name}
+
                 <span className="ml-2 text-xs font-normal text-text-tertiary">
                   {repository.available
                     ? t("profileRepositoriesSettings.available")
@@ -77,6 +81,7 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const candidates = profiles.filter((profile) => profile.id !== active?.id);
+
   const targetId = candidates.some((profile) => profile.id === target)
     ? target
     : (candidates[0]?.id ?? "");
@@ -86,6 +91,7 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
 
     if (open) {
       setSuggestion(null);
+
       void window.eda.repository.suggestProfile(repository.path).then((result) => {
         if (!cancelled && result.ok) setSuggestion(result.value?.name ?? null);
       });
@@ -108,6 +114,7 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
           useSessionStore.getState().error ??
             t("profileRepositoriesSettings.couldNotSaveTheCurrentSessionTryAgain"),
         );
+
         return;
       }
 
@@ -115,6 +122,7 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
         setError(
           t("profileRepositoriesSettings.theActiveProfileChangedCloseThisDialogAndTryAgain"),
         );
+
         return;
       }
 
@@ -148,29 +156,33 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
       >
         {t("profileRepositoriesSettings.addToAnotherProfile")}
       </Button>
+
       {open && (
         <Dialog
           title={t("profileRepositoriesSettings.addRepositoryToProfile", { name: repository.name })}
-          onClose={() => {
-            if (!busy) setOpen(false);
-          }}
+          busy={busy}
+          onClose={() => setOpen(false)}
           footer={
-            <>
-              <Button variant="quiet" disabled={busy} onClick={() => setOpen(false)}>
-                {t("common.cancel")}
-              </Button>
-              <Button busy={busy} disabled={!targetId} onClick={() => void save()}>
-                {move
+            <DialogActions
+              onClose={() => setOpen(false)}
+              onConfirm={() => void save()}
+              confirmLabel={
+                move
                   ? t("profileRepositoriesSettings.moveToProfile")
-                  : t("profileRepositoriesSettings.addToProfile")}
-              </Button>
-            </>
+                  : t("profileRepositoriesSettings.addToProfile")
+              }
+              busy={busy}
+              confirmDisabled={!targetId}
+              confirmVariant="secondary"
+            />
           }
         >
           <div className="flex flex-col gap-4 text-sm">
             <p className="mono break-all text-xs text-text-tertiary">{repository.path}</p>
+
             <label className="flex items-center gap-2">
               {t("profileRepositoriesSettings.addToProfile")}
+
               <Select
                 aria-label={t("profileRepositoriesSettings.destinationProfile")}
                 value={targetId}
@@ -186,12 +198,15 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
                 ))}
               </Select>
             </label>
+
             {suggestion && (
               <p className="text-xs text-text-secondary">
                 {t("profileRepositoriesSettings.yourPathRulesSuggest", { suggestion: suggestion })}
               </p>
             )}
+
             <p>{t("profileRepositoriesSettings.bothProfilesWillUseTheSameFilesAnd")}</p>
+
             <Checkbox
               checked={move}
               disabled={busy}
@@ -201,6 +216,7 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
                 value1: active?.name ?? t("profileRepositoriesSettings.thisProfile"),
               })}
             </Checkbox>
+
             <p className="text-xs text-text-secondary">
               {move
                 ? t("profileRepositoriesSettings.thisDeletesTheSourceProfileSSavedDrafts")
@@ -209,6 +225,7 @@ function RepositoryProfileAction({ repository }: { repository: RepositorySummary
                   )}
             </p>
           </div>
+
           <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
         </Dialog>
       )}

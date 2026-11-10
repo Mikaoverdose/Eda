@@ -2,7 +2,7 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { ProfileDeletePreview } from "@shared/identity/profile-session";
 import { useState } from "react";
-import { Button, Dialog, ErrorDialog, TextButton } from "../../components/ui/index";
+import { DialogActions, Dialog, ErrorDialog, TextButton } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 
 export function DeleteProfile({
@@ -16,6 +16,7 @@ export function DeleteProfile({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const remove = async () => {
     setBusy(true);
 
@@ -35,21 +36,19 @@ export function DeleteProfile({
   return (
     <Dialog
       title={t("profiles.deleteProfile.delete", { name: preview.name })}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       description={t(
         "profiles.deleteProfile.deleteThisProfileSSavedMetadataAndRememberedCredentials",
       )}
       footer={
-        <>
-          <Button variant="quiet" disabled={busy} onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="danger" disabled={busy} busy={busy} onClick={() => void remove()}>
-            {t("profiles.deleteProfile.deleteProfile")}
-          </Button>
-        </>
+        <DialogActions
+          onClose={onClose}
+          onConfirm={() => void remove()}
+          confirmLabel={t("profiles.deleteProfile.deleteProfile")}
+          busy={busy}
+          confirmVariant="danger"
+        />
       }
     >
       <div className="flex flex-col gap-3 text-sm">
@@ -59,9 +58,11 @@ export function DeleteProfile({
             drafts: preview.drafts,
           })}
         </p>
+
         <p>
           {t("profiles.deleteProfile.repositoryFoldersGitHistoryWorkingFilesAndSshKeyFilesAreKept")}
         </p>
+
         <p>
           {preview.active
             ? preview.fallback
@@ -71,6 +72,7 @@ export function DeleteProfile({
               : t("profiles.deleteProfile.thisIsTheLastProfileEdaWillReturn")
             : t("profiles.deleteProfile.yourActiveProfileStaysSelected")}
         </p>
+
         {error && (
           <ErrorDialog>
             {error}{" "}

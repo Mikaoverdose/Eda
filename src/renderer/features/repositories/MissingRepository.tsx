@@ -3,7 +3,7 @@ import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
 import { ArrowRight } from "lucide-react";
 import { useState } from "react";
-import { Button, Dialog, ErrorDialog } from "../../components/ui/index";
+import { DialogActions, Button, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useSessionStore } from "../../stores/session-store";
 
@@ -11,6 +11,7 @@ export function MissingRepository({ repository }: { repository: RepositorySummar
   const [candidate, setCandidate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
     setError(null);
@@ -57,6 +58,7 @@ export function MissingRepository({ repository }: { repository: RepositorySummar
         <p className="mt-2 text-sm text-text-tertiary">
           {t("missingRepository.yourTabsAndDraftsAreSavedIfYou")}
         </p>
+
         <div className="mt-4 flex justify-center gap-2">
           <Button
             variant="secondary"
@@ -65,42 +67,46 @@ export function MissingRepository({ repository }: { repository: RepositorySummar
           >
             {t("missingRepository.tryAgain")}
           </Button>
+
           <Button disabled={busy} onClick={() => void choose()}>
             {t("missingRepository.locateRepository")}
           </Button>
         </div>
+
         {error && !candidate && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
       </div>
+
       {candidate && (
         <Dialog
           title={t("missingRepository.updateRepositoryLocation")}
+          busy={busy}
           onClose={() => {
-            if (!busy) {
-              setCandidate(null);
-              setError(null);
-            }
+            setCandidate(null);
+            setError(null);
           }}
           footer={
-            <>
-              <Button variant="quiet" disabled={busy} onClick={() => setCandidate(null)}>
-                {t("common.cancel")}
-              </Button>
-              <Button busy={busy} disabled={busy} onClick={() => void locate()}>
-                {t("missingRepository.useThisFolder")}
-              </Button>
-            </>
+            <DialogActions
+              onClose={() => setCandidate(null)}
+              onConfirm={() => void locate()}
+              confirmLabel={t("missingRepository.useThisFolder")}
+              busy={busy}
+              confirmVariant="secondary"
+            />
           }
         >
           <p className="text-sm">
             {t("missingRepository.chooseTheSameRepositoryYouMovedThisKeeps")}
           </p>
+
           <p className="mono my-3 break-all text-xs">
             {repository.path}
+
             <span className="flex items-start gap-1">
               <ArrowRight size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
               <span className="min-w-0 break-all">{candidate}</span>
             </span>
           </p>
+
           <p className="text-xs text-text-secondary">
             {t("missingRepository.edaUpdatesThisSavedLocationWithoutMovingFiles")}
           </p>

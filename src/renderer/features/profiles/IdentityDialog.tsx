@@ -5,7 +5,14 @@ import type { Identity } from "@shared/identity/identity";
 import { builtInSetting } from "@shared/preferences/settings";
 import { useState } from "react";
 import { ButtonBase } from "../../components/ui/actions/ButtonBase";
-import { Button, Dialog, ErrorDialog, Field, Input, Textarea } from "../../components/ui/index";
+import {
+  DialogActions,
+  Dialog,
+  ErrorDialog,
+  Field,
+  Input,
+  Textarea,
+} from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 
 export function IdentityDialog({
@@ -70,22 +77,23 @@ export function IdentityDialog({
     <Dialog
       title={identity ? t("identityDialog.editProfile") : t("identityDialog.newProfile")}
       description={t("identityDialog.profilesKeepYourGitAuthorCredentialsPreferencesAnd")}
-      onClose={() => {
-        if (!saving) onClose();
-      }}
+      busy={saving}
+      onClose={onClose}
       footer={
-        <>
-          <Button variant="quiet" disabled={saving} onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="identity" busy={saving} disabled={!canSave} onClick={() => void save()}>
-            {saving
+        <DialogActions
+          onClose={onClose}
+          onConfirm={() => void save()}
+          confirmLabel={
+            saving
               ? t("identityDialog.saving")
               : identity
                 ? t("identityDialog.saveProfile")
-                : t("identityDialog.createProfile")}
-          </Button>
-        </>
+                : t("identityDialog.createProfile")
+          }
+          busy={saving}
+          confirmDisabled={!canSave}
+          confirmVariant="identity"
+        />
       }
     >
       <form

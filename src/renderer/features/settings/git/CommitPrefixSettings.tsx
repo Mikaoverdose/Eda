@@ -13,9 +13,11 @@ import { Button, Checkbox, Textarea, IconButton, Dialog } from "../../../compone
 export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
   const inputId = useId();
   const values = usePreferencesStore((state) => state.values);
+
   const [enabled, setEnabled] = useState<ResolvedSetting<"conventionalCommitsEnabled"> | null>(
     null,
   );
+
   const [prefixes, setPrefixes] = useState<ResolvedSetting<"commitPrefixes"> | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -31,6 +33,7 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
     ]).then(([toggle, list]) => {
       if (!alive) return;
       if (toggle.ok) setEnabled(toggle.value);
+
       if (list.ok) {
         setPrefixes(list.value);
         setText(list.value.value.join("\n"));
@@ -53,6 +56,7 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
       <h2 className="text-sm font-medium">
         {t("settings.commitPrefixSettings.conventionalCommits")}
       </h2>
+
       <Checkbox
         checked={enabled.value}
         onChange={(event) =>
@@ -63,11 +67,13 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
       >
         {t("settings.commitPrefixSettings.showCommitPrefixPicker")}
       </Checkbox>
+
       <p className="text-xs text-text-secondary">
         {t("settings.commitPrefixSettings.selectingAPrefixAddsItToTheSaved", {
           value1: preferenceSource(enabled),
         })}
       </p>
+
       {scope.kind === "profile" && enabled.source.kind === "profile" && (
         <Button
           size="sm"
@@ -79,10 +85,12 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
           {t("common.followGlobal")}
         </Button>
       )}
+
       <div className="flex items-center justify-between">
         <label htmlFor={inputId} className="text-sm">
           {t("settings.commitPrefixSettings.commitPrefixes")}
         </label>
+
         <IconButton
           icon={<RotateCcw size={14} />}
           aria-label={t("settings.commitPrefixSettings.resetCommitPrefixes")}
@@ -90,6 +98,7 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
           onClick={() => setResetOpen(true)}
         />
       </div>
+
       <div>
         <Textarea
           id={inputId}
@@ -100,11 +109,13 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
           invalid={!valid}
         />
       </div>
+
       <p className="text-xs text-text-secondary">
         {t("settings.commitPrefixSettings.enterOneTypePerLineOrSeparateWith", {
           value1: preferenceSource(prefixes),
         })}
       </p>
+
       <div className="flex gap-2">
         <Button
           size="sm"
@@ -113,6 +124,7 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
         >
           {t("settings.commitPrefixSettings.savePrefixes")}
         </Button>
+
         {scope.kind === "profile" && prefixes.source.kind === "profile" && (
           <Button
             size="sm"
@@ -123,15 +135,15 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
           </Button>
         )}
       </div>
+
       {resetOpen && (
         <Dialog
           title={t("settings.commitPrefixSettings.resetCommitPrefixes")}
           description={t(
             "settings.commitPrefixSettings.restoreTheDefaultPrefixesWithOrWithoutEmojis",
           )}
-          onClose={() => {
-            if (!resetting) setResetOpen(false);
-          }}
+          busy={resetting}
+          onClose={() => setResetOpen(false)}
         >
           <div className="flex flex-wrap gap-2">
             {[false, true].map((emojis) => (
@@ -158,6 +170,7 @@ export function CommitPrefixSettings({ scope }: { scope: SettingScope }) {
                   : t("settings.commitPrefixSettings.withoutEmojis")}
               </Button>
             ))}
+
             <Button variant="ghost" disabled={resetting} onClick={() => setResetOpen(false)}>
               {t("common.cancel")}
             </Button>

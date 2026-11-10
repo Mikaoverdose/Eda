@@ -2,7 +2,7 @@ import { PACKAGE_MANAGER_NAMES } from "@shared/application";
 import { t } from "@shared/i18n";
 import type { UpdatePhase } from "@shared/updates";
 import { Button, RangeField, Select } from "../../../components/ui/index";
-import { openSettings } from "../../../commands/open-settings";
+import { openSettings } from "../../../stores/shell-store";
 import {
   useSimulationStore,
   type GitIdentitySimulation,
@@ -18,6 +18,7 @@ export function StateSimulations() {
   const gitIdentity = useSimulationStore((simulation) => simulation.gitIdentity);
   const setGitIdentity = useSimulationStore((simulation) => simulation.setGitIdentity);
   const profile = useAppStore((state) => state.activeIdentity);
+
   const phases: { value: UpdatePhase; label: string }[] = [
     { value: "idle", label: t("settings.stateSimulations.idle") },
     { value: "checking", label: t("settings.updatesSettings.checkingForUpdates") },

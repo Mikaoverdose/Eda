@@ -2,11 +2,20 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { InitRepositoryOptions } from "@shared/repository/repository";
 import { useState } from "react";
-import { Button, Checkbox, Dialog, ErrorDialog, Input, Select } from "../../components/ui/index";
+import {
+  DialogActions,
+  Button,
+  Checkbox,
+  Dialog,
+  ErrorDialog,
+  Input,
+  Select,
+} from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 
 export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
   const [path, setPath] = useState("");
+
   const [options, setOptions] = useState<InitRepositoryOptions>({
     branch: "main",
     readme: true,
@@ -16,6 +25,7 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const create = async () => {
     const profileId = useAppStore.getState().activeIdentity?.id;
 
@@ -45,15 +55,16 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
       title={t("initRepositoryDialog.createARepository")}
       description={t("initRepositoryDialog.initializeGitInAnExistingFolderSelectedStarter")}
       onClose={onClose}
+      busy={busy}
       footer={
-        <>
-          <Button variant="quiet" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button disabled={!path || !options.branch.trim() || busy} onClick={() => void create()}>
-            {t("initRepositoryDialog.createRepository")}
-          </Button>
-        </>
+        <DialogActions
+          busy={busy}
+          onClose={onClose}
+          onConfirm={() => void create()}
+          confirmLabel={t("initRepositoryDialog.createRepository")}
+          confirmDisabled={!path || !options.branch.trim()}
+          confirmVariant="secondary"
+        />
       }
     >
       <div className="space-y-4">
@@ -61,6 +72,7 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
           <span className="min-w-0 flex-1 break-all text-xs text-text-secondary">
             {path || t("initRepositoryDialog.chooseAFolder")}
           </span>
+
           <Button
             disabled={busy}
             onClick={() =>
@@ -73,14 +85,17 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
             {t("common.browse")}
           </Button>
         </div>
+
         <label className="block space-y-2 text-sm">
           <span>{t("initRepositoryDialog.initialBranch")}</span>
+
           <Input
             aria-label={t("initRepositoryDialog.initialBranch")}
             value={options.branch}
             onChange={(event) => setOptions({ ...options, branch: event.target.value })}
           />
         </label>
+
         <Checkbox
           className="flex items-center gap-2 text-sm"
           checked={options.readme}
@@ -88,8 +103,10 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
         >
           {t("initRepositoryDialog.addReadmeMd")}
         </Checkbox>
+
         <label className="flex items-center justify-between text-sm">
           {t("initRepositoryDialog.ignoreTemplate")}
+
           <Select
             aria-label={t("initRepositoryDialog.ignoreTemplate")}
             compact
@@ -106,8 +123,10 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
             <option value="python">{t("initRepositoryDialog.python")}</option>
           </Select>
         </label>
+
         <label className="flex items-center justify-between text-sm">
           {t("initRepositoryDialog.licenseFile")}
+
           <Select
             aria-label={t("initRepositoryDialog.licenseFile")}
             compact
@@ -123,6 +142,7 @@ export function InitRepositoryDialog({ onClose }: { onClose: () => void }) {
             <option value="MIT">{t("initRepositoryDialog.mit")}</option>
           </Select>
         </label>
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

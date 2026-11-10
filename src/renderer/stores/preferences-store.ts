@@ -17,40 +17,27 @@ import {
 import { create } from "zustand";
 import { applyIdentityHue, applyTheme, BUILT_IN_THEMES } from "../styles/themes";
 
+const PREFERENCE_KEYS = [
+  "developerSettingsEnabled",
+  "conventionalCommitsEnabled",
+  "commitPrefixes",
+  "accentHue",
+  "editorExecutable",
+  "theme",
+  "background",
+  "windowTransparency",
+  "syncGlobalGitConfig",
+  "reducedMotion",
+  "uiZoom",
+  "diffMode",
+] as const satisfies readonly SettingKey[];
+
 type Values = {
-  [
-    K in Exclude<
-      SettingKey,
-      | "language"
-      | "automaticUpdateChecks"
-      | "includePrereleaseUpdates"
-      | "hardwareAcceleration"
-      | "gitEngine"
-      | "sshAgent"
-      | "pullStrategy"
-      | "fetchPrune"
-      | "fetchTags"
-      | "backgroundFetchMinutes"
-      | "mergeTool"
-      | "repositoryCommitIdentity"
-    >
-  ]: ResolvedSetting<K>;
+  [K in (typeof PREFERENCE_KEYS)[number]]: ResolvedSetting<K>;
 };
 
-const defaults = (): Values => ({
-  developerSettingsEnabled: builtInSetting("developerSettingsEnabled"),
-  conventionalCommitsEnabled: builtInSetting("conventionalCommitsEnabled"),
-  commitPrefixes: builtInSetting("commitPrefixes"),
-  accentHue: builtInSetting("accentHue"),
-  editorExecutable: builtInSetting("editorExecutable"),
-  theme: builtInSetting("theme"),
-  background: builtInSetting("background"),
-  windowTransparency: builtInSetting("windowTransparency"),
-  syncGlobalGitConfig: builtInSetting("syncGlobalGitConfig"),
-  reducedMotion: builtInSetting("reducedMotion"),
-  uiZoom: builtInSetting("uiZoom"),
-  diffMode: builtInSetting("diffMode"),
-});
+const defaults = (): Values =>
+  Object.fromEntries(PREFERENCE_KEYS.map((key) => [key, builtInSetting(key)])) as Values;
 
 interface PreferencesState {
   context: SettingsContext;
@@ -59,11 +46,13 @@ interface PreferencesState {
   saving: boolean;
   error: GitErrorData | null;
   load: (context: SettingsContext) => Promise<void>;
+
   set: <K extends SettingKey>(
     key: K,
     scope: SettingScope,
     value: SettingValues[K],
   ) => Promise<boolean>;
+
   reset: (key: SettingKey, scope: SettingScope) => Promise<boolean>;
 }
 
@@ -76,6 +65,7 @@ let accentPreview: AccentColor | null = null;
 
 function apply(values: Values): void {
   applyIdentityHue(accentPreview ?? values.accentHue.value);
+
   applyTheme(
     BUILT_IN_THEMES.find(
       (theme) =>
@@ -163,90 +153,29 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => {
           ...defaults(),
           developerSettingsEnabled: get().values.developerSettingsEnabled,
         };
+
         set({ context, values, loading: true, error: null });
         apply(values);
       } else set({ context, loading: true });
 
-      const [
-        theme,
-        sync,
-        motion,
-        zoom,
-        diff,
-        editor,
-        background,
-        transparency,
-        accent,
-        conventional,
-        prefixes,
-        developerSettings,
-      ] = await Promise.all([
-        window.eda.settings.resolve("theme", context),
-        window.eda.settings.resolve("syncGlobalGitConfig", context),
-        window.eda.settings.resolve("reducedMotion", context),
-        window.eda.settings.resolve("uiZoom", context),
-        window.eda.settings.resolve("diffMode", context),
-        window.eda.settings.resolve("editorExecutable", context),
-        window.eda.settings.resolve("background", context),
-        window.eda.settings.resolve("windowTransparency", context),
-        window.eda.settings.resolve("accentHue", context),
-        window.eda.settings.resolve("conventionalCommitsEnabled", context),
-        window.eda.settings.resolve("commitPrefixes", context),
-        window.eda.settings.resolve("developerSettingsEnabled", context),
-      ]);
+      const results = await Promise.all(
+        PREFERENCE_KEYS.map(
+          async (key) => [key, await window.eda.settings.resolve(key, context)] as const,
+        ),
+      );
 
       if (request !== generation) return;
 
-      const failure = [
-        theme,
-        sync,
-        motion,
-        zoom,
-        diff,
-        editor,
-        background,
-        transparency,
-        accent,
-        conventional,
-        prefixes,
-        developerSettings,
-      ].find((result) => !result.ok);
+      const failure = results.find(([, result]) => !result.ok)?.[1];
 
       if (failure && !failure.ok) {
         set({ loading: false, error: failure.error });
         return;
       }
 
-      if (
-        !theme.ok ||
-        !sync.ok ||
-        !motion.ok ||
-        !zoom.ok ||
-        !diff.ok ||
-        !editor.ok ||
-        !background.ok ||
-        !transparency.ok ||
-        !accent.ok ||
-        !conventional.ok ||
-        !prefixes.ok ||
-        !developerSettings.ok
-      )
-        return;
-
-      const values = {
-        developerSettingsEnabled: developerSettings.value,
-        conventionalCommitsEnabled: conventional.value,
-        commitPrefixes: prefixes.value,
-        accentHue: accent.value,
-        theme: theme.value,
-        syncGlobalGitConfig: sync.value,
-        reducedMotion: motion.value,
-        uiZoom: zoom.value,
-        diffMode: diff.value,
-        editorExecutable: editor.value,
-        background: background.value,
-        windowTransparency: transparency.value,
-      };
+      const values = Object.fromEntries(
+        results.flatMap(([key, result]) => (result.ok ? [[key, result.value]] : [])),
+      ) as Values;
 
       set({ values, loading: false, error: null });
       apply(values);

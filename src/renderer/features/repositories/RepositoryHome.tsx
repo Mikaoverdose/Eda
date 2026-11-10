@@ -3,7 +3,7 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
 import { ArrowUpRight, FolderOpen, Pencil, SquareArrowOutUpRight, Star } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ButtonBase } from "../../components/ui/actions/ButtonBase";
 import {
   Button,
@@ -16,8 +16,11 @@ import {
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useShellStore } from "../../stores/shell-store";
-import { CloneRepositoryDialog } from "./CloneRepositoryDialog";
 import { InitRepositoryDialog } from "./InitRepositoryDialog";
+
+const CloneRepositoryDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.CloneRepositoryDialog })),
+);
 
 export function RepositoryHome() {
   const repositories = useAppStore((state) => state.repositories);
@@ -31,15 +34,18 @@ export function RepositoryHome() {
   const [alias, setAlias] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
   const matches = repositories.filter((repository) =>
     `${repository.name} ${repository.path}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
+
   const update = async (repository: RepositorySummary, name: string, favourite: boolean) => {
     setBusy(true);
     setError(null);
 
     try {
       const result = await window.eda.repository.updateMetadata(repository.id, { name, favourite });
+
       if (!result.ok) setError(errorMessage(result.error));
       else {
         setEditing(null);
@@ -56,6 +62,7 @@ export function RepositoryHome() {
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold">{t("repositoryHome.repositories")}</h1>
+
             <p className="mt-2 text-sm text-text-tertiary">
               {t("repositoryHome.profileRepositoryCount", {
                 name: active?.name,
@@ -63,6 +70,7 @@ export function RepositoryHome() {
               })}
             </p>
           </div>
+
           <div data-tour="repository-actions" className="flex gap-2">
             <Button size="sm" onClick={() => setCloning(true)}>
               {t("repositoryHome.cloneRepository")}
@@ -70,6 +78,7 @@ export function RepositoryHome() {
             <Button size="sm" onClick={() => setCreating(true)}>
               {t("repositoryHome.createRepository")}
             </Button>
+
             <Button
               size="sm"
               variant="primary"
@@ -80,6 +89,7 @@ export function RepositoryHome() {
             </Button>
           </div>
         </div>
+
         <SearchField
           size="md"
           aria-label={t("repositoryHome.filterRepositories")}
@@ -87,7 +97,9 @@ export function RepositoryHome() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+
         {!editing && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
+
         {matches.length > 0 ? (
           <div data-tour="repository-list" className="border-t border-border-subtle">
             {matches.map((repository) => (
@@ -102,8 +114,10 @@ export function RepositoryHome() {
                   className="group flex min-w-0 flex-1 items-center gap-3 px-2 py-4 text-left hover:bg-bg-inset"
                 >
                   <FolderIcon size={16} className="shrink-0 text-text-tertiary" />
+
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{repository.name}</span>
+
                     <span
                       className="mt-1 block truncate text-xs text-text-tertiary"
                       title={repository.path}
@@ -113,12 +127,14 @@ export function RepositoryHome() {
                         : t("repositoryHome.folderUnavailableOpenToRetry")}
                     </span>
                   </span>
+
                   <ArrowUpRight
                     size={14}
                     className="shrink-0 text-text-tertiary"
                     aria-hidden="true"
                   />
                 </ButtonBase>
+
                 <IconButton
                   disabled={busy}
                   aria-label={`${repository.favourite ? t("repositoryHome.unfavourite") : t("repositoryHome.favourite")} ${repository.name}`}
@@ -127,6 +143,7 @@ export function RepositoryHome() {
                   onClick={() => void update(repository, repository.name, !repository.favourite)}
                   icon={<Star size={15} fill={repository.favourite ? "currentColor" : "none"} />}
                 />
+
                 <IconButton
                   aria-label={t("repositoryHome.rename", { name: repository.name })}
                   title={t("repositoryHome.editDisplayName")}
@@ -136,6 +153,7 @@ export function RepositoryHome() {
                   }}
                   icon={<Pencil size={15} />}
                 />
+
                 <IconButton
                   disabled={!repository.available}
                   aria-label={t("repositoryHome.reveal", { name: repository.name })}
@@ -147,6 +165,7 @@ export function RepositoryHome() {
                   }
                   icon={<FolderOpen size={15} />}
                 />
+
                 <IconButton
                   disabled={!repository.available}
                   aria-label={t("repositoryHome.openInEditor", { name: repository.name })}
@@ -168,10 +187,12 @@ export function RepositoryHome() {
               : t("repositoryHome.noRepositoriesInThisProfileAddALocalFolderToGetStarted")}
           </p>
         )}
+
         <p className="mt-4 flex items-center justify-end gap-2 text-xs text-text-tertiary">
           <Button variant="ghost" size="sm" onClick={() => useShellStore.getState().startTour()}>
             {t("repositoryHome.takeATour")}
           </Button>
+
           <Localized
             id="repositoryHome.quickOpen"
             values={{
@@ -184,8 +205,15 @@ export function RepositoryHome() {
           />
         </p>
       </div>
+
       {creating && <InitRepositoryDialog onClose={() => setCreating(false)} />}
-      {cloning && <CloneRepositoryDialog key={active?.id} onClose={() => setCloning(false)} />}
+
+      {cloning && (
+        <Suspense fallback={null}>
+          <CloneRepositoryDialog key={active?.id} onClose={() => setCloning(false)} />
+        </Suspense>
+      )}
+
       {editing && (
         <Dialog
           title={t("repositoryHome.repositoryDisplayName")}
@@ -206,6 +234,7 @@ export function RepositoryHome() {
             maxLength={120}
             onChange={(event) => setAlias(event.target.value)}
           />
+
           {error && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
         </Dialog>
       )}

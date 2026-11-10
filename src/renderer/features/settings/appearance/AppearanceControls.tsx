@@ -1,11 +1,11 @@
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { UI_ZOOM_PRESETS, type SettingScope } from "@shared/preferences/settings";
-import { useEffect, useId, useState } from "react";
+import { UI_ZOOM_PRESETS } from "@shared/preferences/settings";
+import { useEffect, useId } from "react";
 import { afterViewTransition } from "../../../components/layout/hooks/useViewTransition";
 import { BackgroundSettings } from "./BackgroundSettings";
-
+import { useScopedSetting } from "../hooks/useScopedSetting";
 import { Checkbox, Select } from "../../../components/ui/index";
 import { useAppStore } from "../../../stores/app-store";
 import { previewMotion, usePreferencesStore } from "../../../stores/preferences-store";
@@ -21,38 +21,15 @@ export function AppearanceControls({
 }) {
   const id = useId();
   const activeId = useAppStore((state) => state.activeIdentity?.id);
-  const values = usePreferencesStore((state) => state.values);
   const saving = usePreferencesStore((state) => state.saving);
-  const [settings, setSettings] = useState({ zoom: values.uiZoom, motion: values.reducedMotion });
-  const [reading, setReading] = useState(true);
+  const zoom = useScopedSetting("uiZoom", owner);
+  const motion = useScopedSetting("reducedMotion", owner);
+  const reading = zoom.reading || motion.reading;
   const workspace = owner === "profile";
-  const scope: SettingScope =
-    workspace && activeId ? { kind: "profile", profileId: activeId } : { kind: "application" };
 
   useEffect(() => {
-    let cancelled = false;
-
-    setReading(true);
-
-    const context = workspace && activeId ? { profileId: activeId } : {};
-
-    void Promise.all([
-      window.eda.settings.resolve("uiZoom", context),
-      window.eda.settings.resolve("reducedMotion", context),
-    ]).then(([zoom, motion]) => {
-      if (cancelled) return;
-      if (zoom.ok && motion.ok) setSettings({ zoom: zoom.value, motion: motion.value });
-      setReading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace, activeId, values]);
-
-  useEffect(() => {
-    if (preview && !reading) previewMotion(settings.motion.value);
-  }, [preview, reading, settings.motion.value]);
+    if (preview && !reading) previewMotion(motion.resolved.value);
+  }, [preview, reading, motion.resolved.value]);
 
   useEffect(() => {
     if (!preview) return;
@@ -88,10 +65,8 @@ export function AppearanceControls({
   }, [preview]);
 
   const change = (key: "uiZoom" | "reducedMotion", value: string) => {
-    const store = usePreferencesStore.getState();
-    if (value === "global") void store.reset(key, scope);
-    else if (key === "uiZoom") void store.set(key, scope, Number(value));
-    else void store.set(key, scope, value === "true");
+    if (key === "uiZoom") void (value === "global" ? zoom.reset() : zoom.set(Number(value)));
+    else void (value === "global" ? motion.reset() : motion.set(value === "true"));
   };
 
   return (
@@ -111,19 +86,17 @@ export function AppearanceControls({
               {t("settings.appearanceControls.adjustTheSizeOfTextAndControls")}
             </p>
           </div>
+
           <Select
             id={`${id}-zoom`}
             aria-label={t("settings.appearanceControls.uIZoom")}
-            value={
-              workspace && settings.zoom.source.kind !== "profile"
-                ? "global"
-                : String(settings.zoom.value)
-            }
+            value={zoom.following ? "global" : String(zoom.resolved.value)}
             onValueChange={(value) => change("uiZoom", value)}
             surface="base"
           >
             {workspace && <option value="global">{t("common.followGlobal")}</option>}
-            {Array.from(new Set([...UI_ZOOM_PRESETS, settings.zoom.value]))
+
+            {Array.from(new Set([...UI_ZOOM_PRESETS, zoom.resolved.value]))
               .sort((a, b) => a - b)
               .map((zoom) => (
                 <option key={zoom} value={zoom}>
@@ -132,6 +105,7 @@ export function AppearanceControls({
               ))}
           </Select>
         </div>
+
         <div className="space-y-4 border-t border-border-subtle pt-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -140,16 +114,13 @@ export function AppearanceControls({
                 {t("settings.appearanceControls.keepTransitionsAndAnimationsToAMinimum")}
               </p>
             </div>
+
             {workspace && (
               <Select
                 id={`${id}-motion`}
                 aria-label={t("settings.appearanceControls.reduceMotion")}
                 aria-describedby={`${id}-motion-hint`}
-                value={
-                  settings.motion.source.kind !== "profile"
-                    ? "global"
-                    : String(settings.motion.value)
-                }
+                value={motion.following ? "global" : String(motion.resolved.value)}
                 onValueChange={(value) => change("reducedMotion", value)}
                 surface="base"
               >
@@ -159,9 +130,10 @@ export function AppearanceControls({
               </Select>
             )}
           </div>
+
           {!workspace && (
             <Checkbox
-              checked={settings.motion.value}
+              checked={motion.resolved.value}
               aria-describedby={`${id}-motion-hint`}
               onChange={(event) => change("reducedMotion", String(event.target.checked))}
             >
@@ -170,6 +142,7 @@ export function AppearanceControls({
           )}
         </div>
       </fieldset>
+
       <BackgroundSettings owner={owner} preview={preview} active={active} />
     </>
   );

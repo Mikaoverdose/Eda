@@ -8,9 +8,11 @@ import { ErrorDialog, WindowControlButton } from "../components/ui/index";
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const act = async (action: Parameters<EdaApi["app"]["windowControl"]>[0]) => {
     try {
       const result = await window.eda.app.windowControl(action);
+
       if (result.ok) {
         setMaximized(result.value.maximized);
         setError(null);
@@ -39,6 +41,7 @@ export function WindowControls() {
       >
         <Minus size={14} />
       </WindowControlButton>
+
       <WindowControlButton
         aria-label={
           maximized ? t("windowControls.restoreWindow") : t("windowControls.maximizeWindow")
@@ -48,6 +51,7 @@ export function WindowControls() {
       >
         {maximized ? <Copy size={12} /> : <Square size={12} />}
       </WindowControlButton>
+
       <WindowControlButton
         close
         aria-label={t("windowControls.closeWindow")}
@@ -56,6 +60,7 @@ export function WindowControls() {
       >
         <X size={16} />
       </WindowControlButton>
+
       {error && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
     </div>
   );
@@ -71,12 +76,9 @@ export function WindowTitlebar({ children }: { children?: ReactNode }) {
         <GitBranch size={15} aria-hidden="true" />
         {t("windowControls.eda")}
       </span>
+
       {children ?? <div className="min-w-0 flex-1" />}
       <WindowControls />
     </header>
   );
-}
-
-export function StartupTitlebar() {
-  return <WindowTitlebar />;
 }

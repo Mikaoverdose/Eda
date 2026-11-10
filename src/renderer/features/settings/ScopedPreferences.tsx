@@ -1,5 +1,3 @@
-import { errorText } from "@shared/error-codes";
-import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import {
   builtInSetting,
@@ -12,6 +10,16 @@ import { useAppStore } from "../../stores/app-store";
 import { previewAppearance, usePreferencesStore } from "../../stores/preferences-store";
 import { ThemePreferences } from "./appearance/ThemePreferences";
 import { CommitPrefixSettings } from "./git/CommitPrefixSettings";
+import { useScopedSetting } from "./hooks/useScopedSetting";
+
+const APPEARANCE_SETTINGS = [
+  "theme",
+  "accentHue",
+  "uiZoom",
+  "reducedMotion",
+  "background",
+  "windowTransparency",
+] as const;
 
 interface ScopedPreferencesProps {
   owner: "application" | "profile";
@@ -27,60 +35,32 @@ export function ScopedPreferences(props: ScopedPreferencesProps) {
 
 function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPreferencesProps) {
   const active = useAppStore((state) => state.activeIdentity);
-  const switching = useAppStore((state) => state.switchingIdentityId);
   const values = usePreferencesStore((state) => state.values);
   const loading = usePreferencesStore((state) => state.loading);
   const saving = usePreferencesStore((state) => state.saving);
   const [theme, setTheme] = useState<ResolvedSetting<"theme">>(() => builtInSetting("theme"));
+
   const [sync, setSync] = useState<ResolvedSetting<"syncGlobalGitConfig">>(() =>
     builtInSetting("syncGlobalGitConfig"),
   );
-  const [reading, setReading] = useState(true);
+
+  const appearance = useScopedSetting("theme", owner);
+  const gitSync = useScopedSetting("syncGlobalGitConfig", owner);
+  const reading = appearance.reading || gitSync.reading;
   const [following, setFollowing] = useState(false);
+
   const scope: SettingScope =
     owner === "profile" && active
       ? { kind: "profile", profileId: active.id }
       : { kind: "application" };
 
   useEffect(() => {
-    if (switching !== null) return;
-    let cancelled = false;
+    if (!appearance.reading) setTheme(appearance.resolved);
+  }, [appearance.reading, appearance.resolved]);
 
-    setReading(true);
-
-    const context = owner === "profile" && active ? { profileId: active.id } : {};
-
-    void Promise.all([
-      window.eda.settings.resolve("theme", context),
-      window.eda.settings.resolve("syncGlobalGitConfig", context),
-    ])
-      .then(([appearance, gitSync]) => {
-        if (cancelled) return;
-        if (!appearance.ok || !gitSync.ok) {
-          usePreferencesStore.setState({
-            error: !appearance.ok ? appearance.error : !gitSync.ok ? gitSync.error : null,
-          });
-          return;
-        }
-        setTheme(appearance.value);
-        setSync(gitSync.value);
-        setReading(false);
-      })
-      .catch(() => {
-        if (!cancelled)
-          usePreferencesStore.setState({
-            error: new GitError({
-              kind: "unknown",
-              operation: t("operations.readPreferences"),
-              message: errorText("settings.scopedPreferences.couldNotReadApplicationPreferences"),
-            }).toData(),
-          });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [owner, active, values, switching]);
+  useEffect(() => {
+    if (!gitSync.reading) setSync(gitSync.resolved);
+  }, [gitSync.reading, gitSync.resolved]);
 
   useEffect(() => {
     if (preview && !reading) previewAppearance(theme.value);
@@ -91,14 +71,9 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
     return () => previewAppearance(null);
   }, [preview]);
 
-  const hasAppearanceOverrides = [
-    values.theme,
-    values.accentHue,
-    values.uiZoom,
-    values.reducedMotion,
-    values.background,
-    values.windowTransparency,
-  ].some((setting) => setting.source.kind === "profile");
+  const hasAppearanceOverrides = APPEARANCE_SETTINGS.some(
+    (key) => values[key].source.kind === "profile",
+  );
 
   const followGlobalAppearance = async () => {
     if (!active) return;
@@ -108,14 +83,7 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
     setFollowing(true);
 
     try {
-      for (const key of [
-        "theme",
-        "accentHue",
-        "uiZoom",
-        "reducedMotion",
-        "background",
-        "windowTransparency",
-      ] as const) {
+      for (const key of APPEARANCE_SETTINGS) {
         if (useAppStore.getState().activeIdentity?.id !== target.profileId) return;
         if (!(await usePreferencesStore.getState().reset(key, target))) return;
       }
@@ -149,13 +117,14 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
               <p>{t("settings.scopedPreferences.profileOverridesReturnWhenYouLeaveThisPage")}</p>
             </NoticeBanner>
           )}
+
           <ThemePreferences
             value={theme.value}
             inheritance={
               owner === "profile"
                 ? {
                     following: theme.source.kind !== "profile",
-                    onFollow: () => void usePreferencesStore.getState().reset("theme", scope),
+                    onFollow: () => void appearance.reset(),
                   }
                 : undefined
             }
@@ -163,27 +132,28 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
               const previous = theme;
 
               setTheme({ ...theme, value, source: scope });
-              void usePreferencesStore
-                .getState()
-                .set("theme", scope, value)
-                .then((saved) => {
-                  if (
-                    !saved &&
-                    (owner === "application" ||
-                      useAppStore.getState().activeIdentity?.id === active?.id)
-                  )
-                    setTheme(previous);
-                });
+
+              void appearance.set(value).then((saved) => {
+                if (
+                  !saved &&
+                  (owner === "application" ||
+                    useAppStore.getState().activeIdentity?.id === active?.id)
+                )
+                  setTheme(previous);
+              });
             }}
           />
         </div>
       )}
+
       {section === "git" && <CommitPrefixSettings key={`${owner}:${active?.id}`} scope={scope} />}
+
       {section === "git" && (
         <div className="border-b border-border-subtle pb-4">
           <h2 className="mb-3 text-sm font-medium">
             {t("settings.scopedPreferences.gitConfiguration")}
           </h2>
+
           <Checkbox
             className="flex items-center gap-3 text-sm"
             checked={sync.value}
@@ -191,37 +161,31 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
               const previous = sync;
 
               setSync({ ...sync, value: event.target.checked });
-              void usePreferencesStore
-                .getState()
-                .set("syncGlobalGitConfig", scope, event.target.checked)
-                .then((saved) => {
-                  if (
-                    !saved &&
-                    (owner === "application" ||
-                      useAppStore.getState().activeIdentity?.id === active?.id)
-                  )
-                    setSync(previous);
-                });
+
+              void gitSync.set(event.target.checked).then((saved) => {
+                if (
+                  !saved &&
+                  (owner === "application" ||
+                    useAppStore.getState().activeIdentity?.id === active?.id)
+                )
+                  setSync(previous);
+              });
             }}
           >
             {owner === "profile"
               ? t("settings.scopedPreferences.syncThisProfileSIdentityToGit")
               : t("settings.scopedPreferences.syncProfileIdentitiesToGit")}
           </Checkbox>
+
           <p className="mt-2 text-xs leading-relaxed text-text-secondary">
             {owner === "profile"
               ? t("settings.scopedPreferences.updateGlobalGitAuthorAndSigningSettingsWhenMessage")
               : t("settings.scopedPreferences.updateGlobalGitAuthorAndSigningSettingsWhen")}
           </p>
+
           {owner === "profile" && resettable(sync) && (
             <div className="mt-3">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  void usePreferencesStore.getState().reset("syncGlobalGitConfig", scope)
-                }
-              >
+              <Button size="sm" variant="secondary" onClick={() => void gitSync.reset()}>
                 {t("common.followGlobal")}
               </Button>
             </div>

@@ -4,7 +4,7 @@ import type { PartialStagePreview, PartialStageRequest } from "@shared/repositor
 import { Minus, Plus } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  Button,
+  DialogActions,
   CheckboxControl,
   CodeBlock,
   Dialog,
@@ -41,15 +41,18 @@ export function PartialStageProvider({
   const diff = useRepositoryStore((state) => state.diff);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [preview, setPreview] = useState<PartialStagePreview | null>(null);
+
   const [discard, setDiscard] = useState<{ request: PartialStageRequest; paths: string[] } | null>(
     null,
   );
+
   const [busy, setBusy] = useState(false);
   const preparing = useRef(false);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
+
     return () => {
       mounted.current = false;
     };
@@ -67,6 +70,7 @@ export function PartialStageProvider({
   const area = selection.area === "staged" ? "staged" : "unstaged";
   const verb =
     area === "staged" ? t("partialStageControls.unstage") : t("partialStageControls.stage");
+
   const prepareDiscard = (hunk?: number) =>
     setDiscard({
       paths: [selection.path],
@@ -172,6 +176,7 @@ export function PartialStageProvider({
       }}
     >
       {children}
+
       {discard && (
         <DiscardDialog
           repositoryId={repositoryId}
@@ -180,20 +185,21 @@ export function PartialStageProvider({
           onClose={() => setDiscard(null)}
         />
       )}
+
       {preview && (
         <Dialog
           title={t("partialStageControls.selectedChanges", { verb: verb })}
           description={t("partialStageControls.reviewTheExactPatchThatWillUpdateThe")}
           onClose={() => setPreview(null)}
+          busy={writing || busy}
           footer={
-            <>
-              <Button variant="quiet" onClick={() => setPreview(null)}>
-                {t("common.cancel")}
-              </Button>
-              <Button disabled={writing || busy} onClick={() => void apply()}>
-                {t("partialStageControls.changes", { verb: verb })}
-              </Button>
-            </>
+            <DialogActions
+              busy={writing || busy}
+              onClose={() => setPreview(null)}
+              onConfirm={() => void apply()}
+              confirmLabel={t("partialStageControls.changes", { verb: verb })}
+              confirmVariant="secondary"
+            />
           }
         >
           <p className="mb-2 text-xs text-text-secondary">
@@ -230,6 +236,7 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
               : t("partialStageControls.selectChangedLinesOrStageUnstageAHunk")}
           </span>
         )}
+
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-3">
           {!fileOnly && (
             <TextButton
@@ -241,6 +248,7 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
               {t("partialStageControls.selectedLines", { verb: context.verb })}
             </TextButton>
           )}
+
           <TextButton
             disabled={context.busy || !status || status.capabilities?.write === false}
             className="flex shrink-0 items-center gap-1.5"
@@ -256,8 +264,10 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
             ) : (
               <Plus size={14} aria-hidden="true" />
             )}
+
             {fileLabel}
           </TextButton>
+
           {!fileOnly && (
             <>
               {context.selected.size > 0 && (
@@ -265,6 +275,7 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
                   {t("partialStageControls.clear")}
                 </TextButton>
               )}
+
               {context.discardSelected && context.selected.size > 0 && (
                 <TextButton disabled={context.busy} tone="danger" onClick={context.discardSelected}>
                   {t("partialStageControls.discardSelectedLines")}
@@ -274,6 +285,7 @@ export function PartialStageToolbar({ fileOnly = false }: { fileOnly?: boolean }
           )}
         </div>
       </div>
+
       {context.error && <ErrorDialog>{context.error}</ErrorDialog>}
     </>
   );
@@ -299,6 +311,7 @@ export function PartialLineControl({ row }: { row: UnifiedRow }) {
         >
           {t("partialStageControls.hunk", { verb: context.verb })}
         </TextButton>
+
         {context.discard && (
           <TextButton
             disabled={context.busy}

@@ -35,11 +35,13 @@ export function DiscardDialog({
 
   useEffect(() => {
     let alive = true;
+
     const load = async () => {
       if (paths) {
         const result = partial
           ? await window.eda.repository.previewDiscardPartial(partial)
           : await window.eda.repository.previewDiscard(repositoryId, paths);
+
         if (!alive) return;
         if (result.ok) setPreview(result.value);
         else setError(errorMessage(result.error));
@@ -90,14 +92,14 @@ export function DiscardDialog({
       title={
         paths ? t("discardDialog.discardWorkingChanges") : t("discardDialog.recoverLocalFiles")
       }
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <>
           <Button variant="quiet" disabled={busy} onClick={onClose}>
             {t("common.close")}
           </Button>
+
           {paths && (
             <Button disabled={!preview || !confirmed || busy} onClick={() => void run()}>
               {t("discardDialog.discardSelectedFiles")}
@@ -124,25 +126,30 @@ export function DiscardDialog({
                 })}
               </p>
             )}
+
             <p>
               {t("discardDialog.aLocalSnapshotOfBytesWillBeSaved", {
                 bytes: preview.bytes.toLocaleString(getLocale()),
               })}
             </p>
+
             <ul className="max-h-40 overflow-auto font-mono text-xs">
               {preview.paths.map((path) => (
                 <li key={path}>{path}</li>
               ))}
             </ul>
+
             <Checkbox checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)}>
               {t("discardDialog.discardTheseWorkingFileChanges")}
             </Checkbox>
           </>
         )}
+
         {!paths && (
           <>
             <p>{t("discardDialog.restoreChecksTheFilesHaveNotChangedSince")}</p>
             {records.length === 0 && <p>{t("discardDialog.noSavedRecoverySnapshots")}</p>}
+
             {records.map((record) => (
               <div key={record.id} className="space-y-2 border-t border-border-subtle pt-2">
                 <p>
@@ -162,7 +169,9 @@ export function DiscardDialog({
                               : t("discardDialog.discard")}{" "}
                   , {stateLabel(record.state)}
                 </p>
+
                 <p className="break-all text-xs text-text-tertiary">{record.paths.join(", ")}</p>
+
                 {record.indexOnly && (
                   <p>
                     {t(
@@ -170,6 +179,7 @@ export function DiscardDialog({
                     )}
                   </p>
                 )}
+
                 {!record.indexOnly &&
                   record.paths.map((path) => (
                     <TextButton
@@ -187,6 +197,7 @@ export function DiscardDialog({
                       {t("discardDialog.saveCopyOf", { path: path })}
                     </TextButton>
                   ))}
+
                 {record.indexVersions?.map(({ path, stage }) => (
                   <TextButton
                     key={`${stage}:${path}`}
@@ -209,6 +220,7 @@ export function DiscardDialog({
                     })}
                   </TextButton>
                 ))}
+
                 {!record.indexOnly && (
                   <Button
                     disabled={busy || record.state !== "completed"}
@@ -217,11 +229,13 @@ export function DiscardDialog({
                     {t("discardDialog.restoreFiles", { length: record.paths.length })}
                   </Button>
                 )}
+
                 {forgetId === record.id ? (
                   <div className="space-y-2 text-xs">
                     <p>
                       {t("discardDialog.removingThisSnapshotPermanentlyRemovesItsSavedRecovery")}
                     </p>
+
                     <Button
                       disabled={busy}
                       onClick={async () => {
@@ -244,6 +258,7 @@ export function DiscardDialog({
                     >
                       {t("discardDialog.permanentlyRemoveSnapshot")}
                     </Button>
+
                     <Button variant="quiet" onClick={() => setForgetId(null)}>
                       {t("discardDialog.keepSnapshot")}
                     </Button>
@@ -257,6 +272,7 @@ export function DiscardDialog({
             ))}
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>
