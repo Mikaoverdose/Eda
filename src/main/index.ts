@@ -43,11 +43,13 @@ if (!app.commandLine.hasSwitch("user-data-dir")) {
   const name = isDev && process.env["VITE_DEV_SERVER_URL"] ? "Eda-Dev" : "Eda";
   const userData = join(app.getPath("appData"), name);
   const legacyData = join(app.getPath("appData"), name.toLowerCase());
+
   if (existsSync(legacyData)) {
     const names = readdirSync(app.getPath("appData"));
     if (!names.includes(name) && names.includes(name.toLowerCase()))
       renameSync(legacyData, userData);
   }
+
   mkdirSync(userData, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") chmodSync(userData, 0o700);
   app.setPath("userData", userData);
@@ -112,6 +114,7 @@ function createWindow(zoom = 100): BrowserWindow {
   window.webContents.on("will-redirect", (event) => {
     if (event.isMainFrame && !isRendererDocument(event.url)) event.preventDefault();
   });
+
   void window.loadURL(rendererUrl());
 
   return window;
@@ -146,6 +149,7 @@ async function start(): Promise<void> {
       { urls: ["file://*/*"] },
       (details, callback) => callback({ cancel: !isRendererFile(details.url) }),
     );
+
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
         responseHeaders: {
@@ -164,6 +168,7 @@ async function start(): Promise<void> {
     const services = await createServices();
 
     navigation = services.navigation;
+
     navigation.push([
       ...navigationFromArguments(process.argv.slice(app.isPackaged ? 1 : 2), process.cwd()),
       ...pendingLinks.flatMap((link) => {
@@ -179,21 +184,24 @@ async function start(): Promise<void> {
     services.updates.start();
 
     let backgroundStopped = false;
+    let stopping: Promise<void> | undefined;
 
     app.on("before-quit", (event) => {
       services.updates.stop();
-      services.github.cancelAll();
-      services.gitlab.cancelAll();
+      services.cancelSignIns();
       if (backgroundStopped) return;
       event.preventDefault();
-      void services.backgroundFetch
+
+      stopping ??= services.backgroundFetch
         .stop()
         .finally(() => services.sshAgent.stop())
         .finally(() => {
           backgroundStopped = true;
           app.quit();
-        });
+        })
+        .catch((error: unknown) => console.error("[Eda Shutdown]", error));
     });
+
     app.once("will-quit", () => services.db.close());
 
     createWindow(
@@ -217,10 +225,12 @@ async function start(): Promise<void> {
     console.error("Eda could not start:", message);
     if (await recoverMigrationStartup(error)) return;
     const action = error instanceof GitError ? error.suggestedAction : undefined;
+
     dialog.showErrorBox(
       t("main.index.edaCouldNotStart"),
       [errorMessage(error), action].filter(Boolean).join("\n\n"),
     );
+
     app.exit(1);
   }
 }

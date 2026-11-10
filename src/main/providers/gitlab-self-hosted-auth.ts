@@ -1,3 +1,4 @@
+import { readResponseBytes } from "../network/response";
 import { createHash, randomUUID } from "node:crypto";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
@@ -144,6 +145,7 @@ export class GitLabSelfHostedAuth {
     this.assertNoOverlap(profileId, baseUrl);
 
     const previous = this.accounts.find(profileId, baseUrl);
+
     const account: SavedGitLabSelfHostedAccount = {
       profileId,
       baseUrl,
@@ -181,6 +183,7 @@ export class GitLabSelfHostedAuth {
   ) {
     const fetch = this.fetchFor(baseUrl, ignoreTlsErrors);
     const user = await this.request(fetch, `${baseUrl}/api/v4/user`, token, signal);
+
     if (
       !Number.isSafeInteger(user["id"]) ||
       (user["id"] as number) <= 0 ||
@@ -247,6 +250,7 @@ export class GitLabSelfHostedAuth {
     const account = this.accounts
       .list(profileId)
       .find((saved) => isGitLabInstanceHttps(url, saved.baseUrl));
+
     return !!account && this.ownsCredential(account) && account.ignoreTlsErrors;
   }
 
@@ -398,27 +402,11 @@ export class GitLabSelfHostedAuth {
   }
 
   private async readResponse(body: ReadableStream<Uint8Array>): Promise<Record<string, unknown>> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let length = 0;
+    const bytes = await readResponseBytes(body, 1024 * 1024, () =>
+      fail("invalidResponse", "network-failed"),
+    );
 
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-
-        if (done) break;
-
-        length += value.byteLength;
-
-        if (length > 1024 * 1024) throw fail("invalidResponse", "network-failed");
-
-        chunks.push(value);
-      }
-    } finally {
-      await reader.cancel();
-    }
-
-    const data: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const data: unknown = JSON.parse(bytes.toString("utf8"));
 
     if (!isRecord(data)) throw fail("invalidResponse", "network-failed");
 

@@ -38,9 +38,8 @@ import { OperationManager } from "./operations/operation-manager";
 import { ContentRecoveryRepository } from "./persistence/content-recovery-repository";
 import { openDatabase } from "./persistence/database";
 import { FetchHistoryRepository } from "./persistence/fetch-history-repository";
-import { GitLabAccountRepository } from "./persistence/gitlab-account-repository";
+import { ProviderAccountRepository } from "./persistence/provider-account-repository";
 import { GitLabSelfHostedAccountRepository } from "./persistence/gitlab-self-hosted-account-repository";
-import { GitHubAccountRepository } from "./persistence/github-account-repository";
 import { IdentityRepository } from "./persistence/identity-repository";
 import { OperationRepository } from "./persistence/operation-repository";
 import { ProfileSessionRepository } from "./persistence/profile-session-repository";
@@ -72,6 +71,7 @@ export interface Services {
   installation: InstallationInfo;
   updates: UpdateService;
   resetData(): Promise<void>;
+  cancelSignIns(): void;
   github: GitHubAuth;
   gitlab: GitLabAuth;
   gitlabSelfHosted: GitLabSelfHostedAuth;
@@ -117,16 +117,19 @@ export async function createServices(): Promise<Services> {
     const preferences = new SettingsRepository(db);
     const language = preferences.resolve("language").value;
     if (language !== "system") setLocale(language);
+
     const bundle = bundledGitLocation(
       app.isPackaged,
       resolve(dirname(fileURLToPath(import.meta.url)), "../.."),
       process.resourcesPath,
     );
+
     const engine = await resolveGitEngine(runner, {
       preferred: preferences.resolve("gitEngine").value,
       bundledPath: bundledGitBinary(bundle),
       bundledEnvironment: bundledGitEnvironment(bundle),
     });
+
     const operations = new OperationManager(new OperationRepository(db));
     // Git for Windows includes the OpenSSH/MSYS tools we need.
     const sshEnvironment =
@@ -138,6 +141,7 @@ export async function createServices(): Promise<Services> {
     const transportRunner = new SshHostTrustRunner(runner, sshHostTrust.confirm);
     const neutralDirectory = join(app.getPath("userData"), "git-cwd");
     await mkdir(neutralDirectory, { recursive: true, mode: 0o700 });
+
     const trust = new RepositoryTrust(
       db,
       async (path, source) => {
@@ -153,10 +157,12 @@ export async function createServices(): Promise<Services> {
           cancelId: 0,
           noLink: true,
         });
+
         return result.response === 1;
       },
       neutralDirectory,
     );
+
     const git = new GitService(transportRunner, engine, transportEnvironment, operations, trust);
 
     const identities = new IdentityRepository(db, preferences);
@@ -165,25 +171,28 @@ export async function createServices(): Promise<Services> {
     const secrets = await KeychainSecretStore.create(vaultPathFor(app.getPath("userData")));
     const ssh = new SshService(transportRunner, undefined, transportEnvironment, sshAgent);
     const credentials = new CredentialService(identities, secrets, ssh);
-    const github = new GitHubAuth(new GitHubAccountRepository(db), secrets, (url, options) =>
-      net.fetch(url instanceof URL ? url.href : url, options),
-    );
-    const gitlab = new GitLabAuth(new GitLabAccountRepository(db), secrets, (url, options) =>
-      net.fetch(url instanceof URL ? url.href : url, options),
-    );
+    const request: typeof fetch = (url, options) =>
+      net.fetch(url instanceof URL ? url.href : url, options);
+    const github = new GitHubAuth(new ProviderAccountRepository(db, "github"), secrets, request);
+    const gitlab = new GitLabAuth(new ProviderAccountRepository(db, "gitlab"), secrets, request);
+
     const gitlabSelfHosted = new GitLabSelfHostedAuth(
       new GitLabSelfHostedAccountRepository(db),
       secrets,
-      (url, options) => net.fetch(url instanceof URL ? url.href : url, options),
+      request,
       createGitLabInsecureFetch,
     );
-    identity.onChange(() => {
-      github.cancelAll();
-      gitlab.cancelAll();
-      gitlabSelfHosted.cancelAll();
-    });
+
+    const providers = [github, gitlab, gitlabSelfHosted];
+
+    const cancelSignIns = () => {
+      for (const provider of providers) provider.cancelAll();
+    };
+
+    identity.onChange(cancelSignIns);
     const recovery = new ContentRecoveryRepository(db);
     const journal = new WorkflowJournal(db);
+
     const writer = new RepositoryWriter(
       git,
       repositories,
@@ -227,6 +236,7 @@ export async function createServices(): Promise<Services> {
     powerMonitor.on("suspend", () => {
       suspended = true;
     });
+
     powerMonitor.on("resume", () => {
       suspended = false;
     });
@@ -241,28 +251,29 @@ export async function createServices(): Promise<Services> {
       (id) => broadcast(IPC_EVENTS.repositoryChanged, id),
     );
 
-    const avatars = new AvatarCache(
-      join(app.getPath("userData"), "cache", "avatars"),
-      (url, options) => net.fetch(url instanceof URL ? url.href : url, options),
-    );
+    const avatars = new AvatarCache(join(app.getPath("userData"), "cache", "avatars"), request);
 
     const platform: UpdatePlatform =
       process.platform === "win32" ? "win" : process.platform === "darwin" ? "osx" : "linux";
     const supportedArch = ["x64", "arm64"].includes(process.arch);
+
     const installation = await detectInstallation({
       packaged: app.isPackaged,
       executablePath: process.execPath,
       resourcesPath: process.resourcesPath,
     });
+
     const manager =
       installation.method === "homebrew"
         ? PACKAGE_MANAGER_NAMES.homebrew
         : installation.method === "system-package"
           ? PACKAGE_MANAGER_NAMES[installation.manager]
           : null;
+
     let capability: UpdateCapability =
       installation.method === "development" ? "development" : manager ? "managed" : "manual";
     let installedUpdater: VelopackUpdater | undefined;
+
     const initialFeedUrl = updateFeedUrl(
       platform,
       process.arch,
@@ -278,6 +289,7 @@ export async function createServices(): Promise<Services> {
           app.getVersion(),
           () => app.quit(),
         );
+
         capability = "automatic";
       } catch {
         capability = "manual";
@@ -300,22 +312,22 @@ export async function createServices(): Promise<Services> {
       currentVersion: app.getVersion(),
       automaticChecks: () => preferences.resolve("automaticUpdateChecks").value,
       includePrereleases: () => preferences.resolve("includePrereleaseUpdates").value,
-      checkRelease: (url) =>
-        checkReleaseFeed(url, platform, process.arch, (input, init) =>
-          net.fetch(input instanceof URL ? input.href : input, init),
-        ),
+      checkRelease: (url) => checkReleaseFeed(url, platform, process.arch, request),
       createDriver: (url) =>
         url === initialFeedUrl
           ? installedUpdater!
           : createVelopackUpdater(url, platform, process.arch, app.getVersion(), () => app.quit()),
       prepareInstall: async () => {
         const release = beginUpdateInstall();
+
         const rollback = () => {
           release();
           backgroundFetch.start();
         };
+
         try {
           await backgroundFetch.stop();
+
           if (operations.busy)
             throw new GitError({
               kind: "invalid-input",
@@ -324,6 +336,7 @@ export async function createServices(): Promise<Services> {
                 "main.services.finishRunningGitOperationsBeforeInstallingAnUpdate",
               ),
             });
+
           await identity.serialize(async () => undefined);
           return rollback;
         } catch (error) {
@@ -365,12 +378,15 @@ export async function createServices(): Promise<Services> {
       ),
       remotes,
       avatars,
+      cancelSignIns,
       async resetData() {
         await updates.discardDownload();
         operations.reset();
         await backgroundFetch.stop();
+
         try {
-          await Promise.all([github.reset(), gitlab.reset(), gitlabSelfHosted.reset()]);
+          await Promise.all(providers.map((provider) => provider.reset()));
+
           await identity.serialize(async () => {
             await avatars.clear();
             await secrets.clear();

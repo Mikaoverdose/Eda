@@ -1,3 +1,4 @@
+import { readResponseBytes } from "../network/response";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -73,27 +74,11 @@ export async function listProviderRepositories(
           : fail("network-failed", "loadFailed");
     }
 
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let length = 0;
+    const bytes = await readResponseBytes(response.body, 4 * 1024 * 1024, () =>
+      fail("network-failed", "invalidResponse"),
+    );
 
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-
-        if (done) break;
-
-        length += value.byteLength;
-
-        if (length > 4 * 1024 * 1024) throw fail("network-failed", "invalidResponse");
-
-        chunks.push(value);
-      }
-    } finally {
-      await reader.cancel();
-    }
-
-    const data: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const data: unknown = JSON.parse(bytes.toString("utf8"));
 
     if (!Array.isArray(data) || data.length > 50) throw fail("network-failed", "invalidResponse");
 
@@ -102,6 +87,7 @@ export async function listProviderRepositories(
 
       const fullName = provider === "github" ? item["full_name"] : item["path_with_namespace"];
       const cloneUrl = provider === "github" ? item["clone_url"] : item["http_url_to_repo"];
+
       const validUrl =
         provider === "github"
           ? isGitHubHttps

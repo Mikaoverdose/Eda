@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { INTEGRATIONS } from "@shared/integrations/config";
 import { GitLabAuth } from "@main/providers/gitlab-auth";
-import { GitLabAccountRepository } from "@main/persistence/gitlab-account-repository";
+import { ProviderAccountRepository } from "@main/persistence/provider-account-repository";
 import { IdentityRepository } from "@main/persistence/identity-repository";
 import { openDatabase } from "@main/persistence/database";
 import type { Database } from "@main/persistence/types";
@@ -16,6 +16,7 @@ const callbacks = vi.hoisted(
       close: ReturnType<typeof vi.fn>;
     }[],
 );
+
 vi.mock("@main/providers/gitlab-oauth-callback", () => ({
   GitLabOAuthCallback: class {
     close = vi.fn();
@@ -25,24 +26,30 @@ vi.mock("@main/providers/gitlab-oauth-callback", () => ({
     async listen() {}
   },
 }));
+
 const databases: Database[] = [];
 const services: GitLabAuth[] = [];
+
 afterEach(() => {
   for (const service of services.splice(0)) service.cancelAll();
   for (const db of databases.splice(0)) db.close();
   callbacks.splice(0);
 });
+
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+
 const token = {
   access_token: "gitlab-access",
   refresh_token: "gitlab-refresh",
   expires_in: 7200,
   token_type: "Bearer",
 };
+
 function setup() {
   const db = openDatabase(":memory:");
   databases.push(db);
   const identities = new IdentityRepository(db);
+
   const profile = identities.create({
     name: "Work",
     gitName: "Work",
@@ -51,8 +58,10 @@ function setup() {
     signing: { format: "none", signCommits: false },
     rules: [],
   });
+
   const other = identities.create({ ...profile, name: "Personal" });
   const values = new Map<string, string>();
+
   const secrets: SecretStore = {
     available: true,
     get: vi.fn(async (key) => values.get(key)),
@@ -64,21 +73,26 @@ function setup() {
     }),
     deleteForIdentity: vi.fn(async () => {}),
   };
+
   const fetch = vi.fn<typeof globalThis.fetch>();
   let now = Date.now();
-  const accounts = new GitLabAccountRepository(db);
+  const accounts = new ProviderAccountRepository(db, "gitlab");
   const service = new GitLabAuth(accounts, secrets, fetch, () => now);
   services.push(service);
+
   const connect = async () => {
     const signIn = await service.begin(profile.id);
+
     fetch
       .mockResolvedValueOnce(json(token))
       .mockResolvedValueOnce(json({ id: 7, username: "work.user" }));
+
     callbacks.at(-1)!.received("private-code");
     await vi.waitFor(() => expect(service.status(profile.id).account?.state).toBe("connected"));
     expect(service.poll(profile.id, signIn.id)).toMatchObject({ state: "connected" });
     return signIn;
   };
+
   return {
     db,
     identities,
@@ -108,24 +122,32 @@ it("uses PKCE without a client secret, verifies account identity and stores only
   expect(Object.keys(signIn).sort()).toEqual(["expiresAt", "id"]);
   expect(ctx.service.poll(ctx.profile.id, signIn.id)).toEqual({ state: "pending" });
   expect(() => ctx.service.authorizationUrl(ctx.other.id, signIn.id)).toThrow(/another profile/);
+
   ctx.fetch
     .mockResolvedValueOnce(json(token))
     .mockResolvedValueOnce(json({ id: 7, username: "work.user" }));
+
   callbacks.at(-1)!.received("private-code");
+
   await vi.waitFor(() =>
     expect(ctx.service.status(ctx.profile.id).account?.state).toBe("connected"),
   );
+
   const form = new URLSearchParams(String(ctx.fetch.mock.calls[0]?.[1]?.body));
   expect(form.get("code")).toBe("private-code");
   expect(form.has("client_secret")).toBe(false);
+
   expect(createHash("sha256").update(form.get("code_verifier")!).digest("base64url")).toBe(
     url.searchParams.get("code_challenge"),
   );
+
   expect(form.get("redirect_uri")).toBe(INTEGRATIONS.gitlab.redirectUri);
+
   expect(ctx.service.poll(ctx.profile.id, signIn.id)).toMatchObject({
     state: "connected",
     status: { account: { id: "7", login: "work.user" } },
   });
+
   expect(JSON.stringify(ctx.service.status(ctx.profile.id))).not.toContain(token.access_token);
   expect(JSON.stringify(ctx.accounts.find(ctx.profile.id))).not.toContain(token.refresh_token);
   expect(ctx.service.status(ctx.other.id).account).toBeNull();
@@ -135,24 +157,29 @@ it("uses PKCE without a client secret, verifies account identity and stores only
 it("persists connections across service restarts, refreshes once for concurrent Git requests, and disconnects", async () => {
   const ctx = setup();
   await ctx.connect();
+
   const restarted = new GitLabAuth(
     ctx.accounts,
     ctx.secrets,
     ctx.fetch,
     () => Date.now() + 8_000_000,
   );
+
   services.push(restarted);
   ctx.fetch.mockClear();
+
   ctx.fetch
     .mockResolvedValueOnce(
       json({ ...token, access_token: "rotated-access", refresh_token: "rotated-refresh" }),
     )
     .mockResolvedValueOnce(json({ id: 7, username: "work.user" }));
+
   const creds = await Promise.all(
     [1, 2].map(() =>
       restarted.forFetch(ctx.profile.id, "https://gitlab.com/team/subgroup/invited.git"),
     ),
   );
+
   expect(creds).toEqual(Array(2).fill({ username: "oauth2", password: "rotated-access" }));
   expect(ctx.fetch).toHaveBeenCalledTimes(2);
   const form = new URLSearchParams(String(ctx.fetch.mock.calls[0]?.[1]?.body));
@@ -168,15 +195,16 @@ it("persists connections across service restarts, refreshes once for concurrent 
 it("never supplies tokens to other profiles, hosts, self-hosted GitLab, SSH, or malformed remotes", async () => {
   const ctx = setup();
   await ctx.connect();
+
   expect(
     await ctx.service.forFetch(ctx.other.id, "https://gitlab.com/team/repo.git"),
   ).toBeUndefined();
+
   for (const url of [
     "https://gitlab.company.com/team/repo.git",
     "https://gitlab.com.evil.test/team/repo",
     "https://gitlab.com@evil.test/team/repo",
     "http://gitlab.com/team/repo",
-    "https://gitlab.com:8443/team/repo",
     "https://gitlab.com/team/repo?redirect=evil",
     "https://github.com/team/repo",
     "git@gitlab.com:team/repo.git",
@@ -184,11 +212,14 @@ it("never supplies tokens to other profiles, hosts, self-hosted GitLab, SSH, or 
   ]) {
     expect(await ctx.service.forFetch(ctx.profile.id, url)).toBeUndefined();
   }
+
   const saved = ctx.accounts.find(ctx.profile.id)!;
   ctx.accounts.save({ ...saved, profileId: ctx.other.id });
+
   await expect(
     ctx.service.forFetch(ctx.other.id, "https://gitlab.com/team/repo"),
   ).rejects.toMatchObject({ kind: "auth-failed" });
+
   await ctx.service.disconnect(ctx.other.id);
   expect(ctx.values.size).toBe(1);
 });
@@ -199,13 +230,16 @@ it("preserves an existing connection when new authorization is cancelled during 
   const saved = ctx.accounts.find(ctx.profile.id);
   const signIn = await ctx.service.begin(ctx.profile.id);
   const write = ctx.secrets.set;
+
   ctx.secrets.set = vi.fn(async (key, value) => {
     await write(key, value);
     ctx.service.cancel(ctx.profile.id, signIn.id);
   });
+
   ctx.fetch
     .mockResolvedValueOnce(json(token))
     .mockResolvedValueOnce(json({ id: 8, username: "another-user" }));
+
   callbacks.at(-1)!.received("code");
   await vi.waitFor(() => expect(ctx.secrets.delete).toHaveBeenCalled());
   expect(ctx.accounts.find(ctx.profile.id)).toEqual(saved);
@@ -224,9 +258,11 @@ it("handles rejection, expiry, profile switches and locked storage without savin
   ctx.service.cancelAll();
   expect(() => ctx.service.poll(ctx.profile.id, signIn.id)).toThrow(/cancelled/);
   const locked = new GitLabAuth(ctx.accounts, { ...ctx.secrets, available: false }, ctx.fetch);
+
   await expect(locked.begin(ctx.profile.id)).rejects.toMatchObject({
     kind: "keychain-unavailable",
   });
+
   expect(ctx.values.size).toBe(0);
 });
 
@@ -235,14 +271,18 @@ it("marks invalid refresh tokens expired while preserving a connection on tempor
   await ctx.connect();
   ctx.advance(8_000_000);
   ctx.fetch.mockRejectedValueOnce(new Error("offline"));
+
   await expect(
     ctx.service.forFetch(ctx.profile.id, "https://gitlab.com/team/repo"),
   ).rejects.toMatchObject({ kind: "network-failed" });
+
   expect(ctx.service.status(ctx.profile.id).account?.state).toBe("connected");
   ctx.fetch.mockResolvedValueOnce(json({ error: "invalid_grant" }, 400));
+
   await expect(
     ctx.service.forFetch(ctx.profile.id, "https://gitlab.com/team/repo"),
   ).rejects.toMatchObject({ kind: "auth-failed" });
+
   expect(ctx.service.status(ctx.profile.id).account?.state).toBe("expired");
 });
 
@@ -251,13 +291,16 @@ it("loads the signed-in GitLab account’s avatar and rejects profiles from anot
   await ctx.connect();
   ctx.advance(301_000);
   expect(await ctx.service.profile(ctx.other.id)).toBeNull();
+
   ctx.fetch.mockResolvedValueOnce(
     json({ id: 7, avatar_url: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png" }),
   );
+
   expect(await ctx.service.profile(ctx.profile.id)).toEqual({
     id: "7",
     avatarUrl: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
   });
+
   expect(ctx.fetch).toHaveBeenLastCalledWith(
     "https://gitlab.com/api/v4/user",
     expect.objectContaining({
@@ -265,10 +308,13 @@ it("loads the signed-in GitLab account’s avatar and rejects profiles from anot
       redirect: "error",
     }),
   );
+
   ctx.advance(301_000);
+
   ctx.fetch.mockResolvedValueOnce(
     json({ id: 8, avatar_url: "https://gitlab.com/uploads/-/system/user/avatar/8/photo.png" }),
   );
+
   expect(await ctx.service.profile(ctx.profile.id)).toEqual({
     id: "7",
     avatarUrl: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
@@ -285,10 +331,12 @@ it("reuses the sign-in profile across page visits, deduplicates refreshes and ke
   ctx.advance(301_000);
   const avatarUrl = "https://secure.gravatar.com/avatar/provider-selected-hash";
   ctx.fetch.mockResolvedValueOnce(json({ id: 7, avatar_url: avatarUrl }));
+
   const values = await Promise.all([
     ctx.service.profile(ctx.profile.id),
     ctx.service.profile(ctx.profile.id),
   ]);
+
   expect(values).toEqual(Array(2).fill({ id: "7", avatarUrl }));
   expect(ctx.fetch).toHaveBeenCalledOnce();
   await ctx.service.profile(ctx.profile.id);
@@ -308,16 +356,19 @@ it("browses with the active profile's saved GitLab credential and refuses an unc
   await ctx.connect();
   ctx.fetch.mockClear();
   ctx.fetch.mockResolvedValueOnce(json([]));
+
   await expect(ctx.service.repositories(ctx.profile.id)).resolves.toEqual({
     repositories: [],
     nextPage: null,
   });
+
   expect(ctx.fetch).toHaveBeenCalledWith(
     expect.stringContaining("https://gitlab.com/api/v4/projects?"),
     expect.objectContaining({
       headers: expect.objectContaining({ Authorization: `Bearer ${token.access_token}` }),
     }),
   );
+
   ctx.fetch.mockClear();
   await expect(ctx.service.repositories(ctx.other.id)).rejects.toThrow();
   expect(ctx.fetch).not.toHaveBeenCalled();

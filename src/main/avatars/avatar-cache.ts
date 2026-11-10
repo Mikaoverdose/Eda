@@ -1,3 +1,6 @@
+import { errorText } from "@shared/error-codes";
+import { AppError } from "@shared/errors";
+import { readResponseBytes } from "../network/response";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -66,11 +69,13 @@ export class AvatarCache {
     if (!/^[1-9][0-9]{0,15}$/.test(accountId) || !avatarUrl || avatarUrl.length > 4096)
       return fallback;
     let url: URL;
+
     try {
       url = new URL(avatarUrl);
     } catch {
       return fallback;
     }
+
     if (url.protocol !== "https:" || url.username || url.password || url.hash) return fallback;
     const version = createHash("sha256").update(url.href).digest("hex");
     return this.getImage(`${provider}:${accountId}:${version}`, url.href, MAX_IMAGE_BYTES);
@@ -93,6 +98,7 @@ export class AvatarCache {
     if (this.pending.size >= MAX_ENTRIES) return { dataUrl: null, expiresAt: this.now() + 60_000 };
 
     const slot = this.slot++ % this.slots.length;
+
     const work = this.slots[slot]!.then(async () => {
       const image = await this.download(url, maxImageBytes);
 
@@ -113,36 +119,47 @@ export class AvatarCache {
           const snapshot = [...this.entries];
           const records = [];
           const retained = new Set(["index", "index.tmp"]);
+
           for (const [key, entry] of snapshot) {
             const name = createHash("sha256").update(key).digest("hex");
             const type = entry.dataUrl?.slice(5, entry.dataUrl.indexOf(";")) ?? null;
+
             if (entry.dataUrl) {
               retained.add(name);
+
               if (this.persistedImages.get(key) !== entry.dataUrl) {
                 await writeFile(
                   join(this.directory, `${name}.tmp`),
                   Buffer.from(entry.dataUrl.split(",")[1]!, "base64"),
                   { mode: 0o600 },
                 );
+
                 await rename(join(this.directory, `${name}.tmp`), join(this.directory, name));
                 this.persistedImages.set(key, entry.dataUrl);
               }
             }
+
             records.push([key, { type, expiresAt: entry.expiresAt }]);
           }
+
           await writeFile(join(this.directory, "index.tmp"), JSON.stringify(records), {
             mode: 0o600,
           });
+
           await rename(join(this.directory, "index.tmp"), join(this.directory, "index"));
+
           for (const name of await readdir(this.directory)) {
             if (!retained.has(name)) await rm(join(this.directory, name), { force: true });
           }
+
           for (const key of this.persistedImages.keys()) {
             if (!this.entries.get(key)?.dataUrl) this.persistedImages.delete(key);
           }
+
           this.persistedRevision = snapshotRevision;
         })
         .catch(() => {});
+
       await this.saved;
 
       return image;
@@ -188,6 +205,7 @@ export class AvatarCache {
 
         try {
           let dataUrl: string | null = null;
+
           if (image.type !== null) {
             const name = createHash("sha256").update(hash).digest("hex");
             const file = join(this.directory, name);
@@ -197,6 +215,7 @@ export class AvatarCache {
             dataUrl = `data:${image.type};base64,${bytes.toString("base64")}`;
             this.persistedImages.set(hash, dataUrl);
           }
+
           this.entries.set(hash, { dataUrl, expiresAt: image.expiresAt });
         } catch {}
       }
@@ -225,29 +244,16 @@ export class AvatarCache {
         return fallback;
       }
 
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let bytes = 0;
+      const bytes = await readResponseBytes(
+        response.body,
+        maxImageBytes,
+        () => new AppError(errorText("main.avatarCache.imageExceedsSizeLimit")),
+      );
 
-      for (;;) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        bytes += value.byteLength;
-
-        if (bytes > maxImageBytes) {
-          await reader.cancel();
-          return fallback;
-        }
-
-        chunks.push(value);
-      }
-
-      if (!bytes) return fallback;
+      if (!bytes.length) return fallback;
 
       return {
-        dataUrl: `data:${type};base64,${Buffer.concat(chunks).toString("base64")}`,
+        dataUrl: `data:${type};base64,${bytes.toString("base64")}`,
         expiresAt: this.now() + DAY,
       };
     } catch {

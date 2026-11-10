@@ -1,3 +1,4 @@
+import { readResponseBytes } from "../network/response";
 import { ERROR_CODE, errorText } from "@shared/error-codes";
 import { AppError } from "@shared/errors";
 import {
@@ -15,27 +16,13 @@ const MAX_FEED_BYTES = 256 * 1024;
 export async function readFeed(response: Response): Promise<unknown> {
   if (!response.body) throw new AppError(ERROR_CODE.INVALID_STABLE_VERSION);
 
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
+  const bytes = await readResponseBytes(
+    response.body,
+    MAX_FEED_BYTES,
+    () => new AppError(ERROR_CODE.INVALID_STABLE_VERSION),
+  );
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) break;
-
-      size += value.byteLength;
-
-      if (size > MAX_FEED_BYTES) throw new AppError(ERROR_CODE.INVALID_STABLE_VERSION);
-
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-
-  const text = Buffer.concat(chunks).toString("utf8");
+  const text = bytes.toString("utf8");
   let feed: unknown;
 
   try {
@@ -94,6 +81,7 @@ export async function checkReleaseFeed(
   request: typeof fetch = fetch,
 ): Promise<UpdateCheckResult> {
   const url = new URL(`releases.${updateChannel(platform, arch)}.json`, feedUrl);
+
   const response = await request(url.href, {
     headers: { Accept: "application/json" },
     credentials: "omit",

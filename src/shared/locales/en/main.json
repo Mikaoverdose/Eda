@@ -1,4 +1,5 @@
 {
+  "main.avatarCache.imageExceedsSizeLimit": "The avatar exceeds the permitted image size.",
   "main.sshHandlers.invalidKeyParameters": "Use a single-line key comment and a 2048, 3072 or 4096-bit RSA key.",
   "main.sshHandlers.chooseKeyFirst": "Choose the new key’s destination in the file picker.",
   "main.repositoryTrust.cloneDetail": "Clone {source} into {path}.\n\nAfter cloning, Git configuration and filters may run programs with your user permissions. Continue only if you trust this source and destination.",

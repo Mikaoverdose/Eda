@@ -58,6 +58,7 @@ async function setup(
   databases.push(db);
 
   const identities = new IdentityRepository(db);
+
   const profile = identities.create({
     name: "Work",
     gitName: "Eda",
@@ -73,6 +74,7 @@ async function setup(
   const repositories = new RepositoryManager(db, source.git, identity, identities);
   const operations = new OperationManager(new OperationRepository(db));
   const writer = new RepositoryWriter(source.git, repositories, identity, identities, operations);
+
   const service = new RemoteService(
     source.git,
     repositories,
@@ -96,6 +98,7 @@ async function setup(
   const run = (args: string[]) => source.run(args, client.path);
   const journal = new WorkflowJournal(db);
   const recovery = new ContentRecoveryRepository(db);
+
   const workflows = new WorkflowService(
     source.git,
     repositories,
@@ -152,6 +155,7 @@ it("schedules only open repositories, pauses when offline or suspended, backs of
   let now = Date.now();
   let conditions = { online: true, suspended: false };
   const changed: string[] = [];
+
   const scheduler = new BackgroundFetchService(
     identity,
     sessions,
@@ -179,6 +183,7 @@ it("schedules only open repositories, pauses when offline or suspended, backs of
     tabs: [client.id],
     selectedRepositoryId: client.id,
   });
+
   const inspections = vi.spyOn(service, "fetchStates");
   scheduler.configure(client.id, 0);
   await scheduler.tick();
@@ -242,11 +247,13 @@ it("schedules only open repositories, pauses when offline or suspended, backs of
   expect((await restarted.inspect(client.id)).remotes[0]!.history).toEqual(failed);
 
   await restarted.tick();
+
   expect((await restarted.inspect(client.id)).remotes[0]!.history).toMatchObject({
     failures: 0,
     error: null,
     retryAt: null,
   });
+
   expect(await run(["rev-parse", "HEAD"])).toBe(original);
 
   scheduler.stop();
@@ -259,6 +266,7 @@ it("pulls a pinned upstream with fast-forward and rebase policies while preservi
   expect(pull.preference(client.id).value).toBe("ff");
 
   pull.setPreference(client.id, "ff-only");
+
   expect(pull.preference(client.id)).toMatchObject({
     value: "ff-only",
     source: { kind: "repository" },
@@ -279,6 +287,7 @@ it("pulls a pinned upstream with fast-forward and rebase policies while preservi
     branch: "main",
     upstream: "refs/remotes/origin/main",
   });
+
   expect(await pull.execute(client.id, forward.token)).toBe("Pull completed.");
   expect((await run(["rev-parse", "HEAD"])).trim()).toBe(forward.source);
 
@@ -332,6 +341,7 @@ it("pulls a pinned upstream with fast-forward and rebase policies while preservi
   });
 
   await service.push(client.id, push.token);
+
   expect((await source.run(["ls-remote", "origin", "refs/heads/main"])).split("\t")[0]).toBe(
     (await run(["rev-parse", "HEAD"])).trim(),
   );
@@ -343,6 +353,7 @@ it("clones, configures multiple remotes, fetches/prunes and changes tracking wit
   await service.change(client.id, { kind: "add", name: "secondary", url: server.path });
   await service.change(client.id, { kind: "rename", name: "secondary", to: "backup" });
   await service.change(client.id, { kind: "url", name: "backup", url: server.path, push: true });
+
   expect((await service.inspect(client.id)).remotes.map((item) => item.name)).toEqual([
     "backup",
     "origin",
@@ -357,17 +368,20 @@ it("clones, configures multiple remotes, fetches/prunes and changes tracking wit
 
   await service.fetch({ repositoryId: client.id, remote: null, prune: true, tags: false });
   await service.track(client.id, "main", "refs/remotes/backup/topic");
+
   expect(
     (await service.inspect(client.id)).branches.find((item) => item.name === "main")?.upstream,
   ).toBe("backup/topic");
 
   await source.run(["push", "origin", "--delete", "topic"]);
   await service.fetch({ repositoryId: client.id, remote: "backup", prune: true, tags: false });
+
   expect(
     (await service.inspect(client.id)).branches.find((item) => item.name === "main")?.upstreamState,
   ).toBe("[gone]");
 
   await service.track(client.id, "main", null);
+
   expect(
     (await service.inspect(client.id)).branches.find((item) => item.name === "main")?.upstream,
   ).toBeUndefined();
@@ -412,9 +426,11 @@ it("publishes selected branches, rejects stale leases even after fetch, and perm
   const newer = await server.run(["rev-parse", "refs/heads/published"]);
 
   await service.fetch({ repositoryId: client.id, remote: "origin", prune: false, tags: false });
+
   await expect(service.push(client.id, lease.token)).rejects.toMatchObject({
     kind: "non-fast-forward",
   });
+
   expect(await server.run(["rev-parse", "refs/heads/published"])).toBe(newer);
 
   const normal = await service.preparePush(request);
@@ -428,6 +444,7 @@ it("publishes selected branches, rejects stale leases even after fetch, and perm
   await service.push(client.id, reviewed.token);
   expect((await server.run(["rev-parse", "refs/heads/published"])).trim()).toBe(first.localOid);
   await expect(async () => service.push(client.id, reviewed.token)).rejects.toThrow(/expired/);
+
   expect(
     operations
       .list(profile.id)
@@ -437,6 +454,7 @@ it("publishes selected branches, rejects stale leases even after fetch, and perm
 
 it("rejects changed sources and profile ownership at push confirmation, and preserves occupied clone destinations", async () => {
   const { service, source, server, client, run, profile, identities } = await setup();
+
   const request = {
     repositoryId: client.id,
     remote: "origin",
@@ -452,6 +470,7 @@ it("rejects changed sources and profile ownership at push confirmation, and pres
   await expect(service.push(client.id, preview.token)).rejects.toThrow(/changed after preview/);
 
   const owned = await service.preparePush(request);
+
   const other = identities.create({
     name: "Home",
     gitName: "Home",
@@ -470,6 +489,7 @@ it("rejects changed sources and profile ownership at push confirmation, and pres
 
   await mkdir(occupied);
   await writeFile(join(occupied, "keep.txt"), "keep");
+
   await expect(
     service.clone({
       profileId: profile.id,
@@ -478,6 +498,7 @@ it("rejects changed sources and profile ownership at push confirmation, and pres
       name: "occupied",
     }),
   ).rejects.toThrow(/already exists/);
+
   expect(await readFile(join(occupied, "keep.txt"), "utf8")).toBe("keep");
 });
 
@@ -523,6 +544,7 @@ it("pushes selected tags and deletes only reviewed remote refs, retaining local 
 
   await source.run(["tag", "-a", "replacement", "-m", "replacement"]);
   await source.run(["push", "origin", "+refs/tags/replacement:refs/tags/release"]);
+
   await expect(service.push(client.id, removal.token)).rejects.toMatchObject({
     kind: "non-fast-forward",
   });
@@ -546,6 +568,7 @@ it("pushes selected tags and deletes only reviewed remote refs, retaining local 
 
   await service.push(client.id, (await service.preparePush({ ...branch, mode: "delete" })).token);
   expect(await server.run(["branch", "--list", "published"])).toBe("");
+
   expect(await run(["show-ref", "--heads", "--tags"])).toBe(
     before
       .split("\n")
@@ -644,11 +667,14 @@ it("retains a divergent merge's autostash across service restart and restores it
     await divergentPullFixture();
   const before = await run(["status", "--porcelain"]);
   const preview = await pull.prepare({ repositoryId: client.id, strategy: "ff" });
+
   expect(await pull.execute(client.id, preview.token)).toContain(
     "Review and complete the merge commit",
   );
+
   expect(await run(["stash", "list"])).toContain("Eda pull autostash");
   expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("initial\n");
+
   const workflows = new WorkflowService(
     source.git,
     repositories,
@@ -657,6 +683,7 @@ it("retains a divergent merge's autostash across service restart and restores it
     new WorkflowJournal(db),
     new ContentRecoveryRepository(db),
   );
+
   const merge = await workflows.prepareMerge(client.id);
   await workflows.continueMerge(client.id, merge.id, "Merge upstream");
   expect(await run(["status", "--porcelain"])).toBe(before);
@@ -710,16 +737,19 @@ it("preserves existing user stashes and restores local work when fast-forward ex
   await source.run(["push", "origin", "main"]);
   const preview = await pull.prepare({ repositoryId: client.id, strategy: "ff" });
   const original = source.git.exec.bind(source.git);
+
   const spy = vi.spyOn(source.git, "exec").mockImplementation((args, options) => {
     if (args.includes("merge") && args.includes("--ff-only"))
       return Promise.reject(new Error("injected merge failure"));
     return original(args, options);
   });
+
   try {
     await expect(pull.execute(client.id, preview.token)).rejects.toThrow("injected merge failure");
   } finally {
     spy.mockRestore();
   }
+
   expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("local work\n");
   expect(await run(["rev-parse", "refs/stash"])).toBe(existing);
   expect(await run(["stash", "list"])).toContain("user stash");
@@ -755,6 +785,7 @@ it.each(["continue", "abort"] as const)(
 
     const journal = new WorkflowJournal(db);
     const recovery = new ContentRecoveryRepository(db);
+
     const workflows = new WorkflowService(
       source.git,
       repositories,
@@ -763,6 +794,7 @@ it.each(["continue", "abort"] as const)(
       journal,
       recovery,
     );
+
     const rebase = new RebaseService(
       source.git,
       repositories,
@@ -772,10 +804,12 @@ it.each(["continue", "abort"] as const)(
       journal,
       recovery,
     );
+
     if (action === "continue") {
       await writeFile(join(client.path, "file.txt"), "resolved commit\n");
       await run(["add", "file.txt"]);
     }
+
     const review = await rebase.prepare(client.id, action);
     expect((await rebase.execute(client.id, review.token)).state).toBe("completed");
     if (action === "abort") expect(await run(["rev-parse", "HEAD"])).toBe(head);
@@ -794,14 +828,17 @@ it.each(["ff", "rebase"] as const)(
     const before = await run(["status", "--porcelain"]);
     const preview = await pull.prepare({ repositoryId: client.id, strategy });
     const original = source.git.exec.bind(source.git);
+
     const spy = vi.spyOn(source.git, "exec").mockImplementation((args, options) => {
       if (
         (strategy === "ff" && args.includes("merge") && args.includes("--no-commit")) ||
         (strategy === "rebase" && args.includes("rebase") && args.includes("--merge"))
       )
         return Promise.reject(new Error("injected integration failure"));
+
       return original(args, options);
     });
+
     try {
       await expect(pull.execute(client.id, preview.token)).rejects.toThrow(
         "injected integration failure",
@@ -809,6 +846,7 @@ it.each(["ff", "rebase"] as const)(
     } finally {
       spy.mockRestore();
     }
+
     expect(await run(["status", "--porcelain"])).toBe(before);
     expect(await run(["show", ":file.txt"])).toBe("staged edit\n");
     expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("unstaged edit\n");
@@ -841,19 +879,24 @@ it("keeps the named stash recoverable when cancellation prevents restoration", a
   const preview = await pull.prepare({ repositoryId: client.id, strategy: "ff" });
   const original = source.git.exec.bind(source.git);
   let cancelled = false;
+
   const spy = vi.spyOn(source.git, "exec").mockImplementation((args, options) => {
     if (args.includes("merge") && args.includes("--ff-only")) cancelled = true;
+
     if (cancelled)
       return Promise.reject(
         new GitError(errorFixture({ kind: "cancelled", operation: "pull", message: "Cancelled" })),
       );
+
     return original(args, options);
   });
+
   try {
     await expect(pull.execute(client.id, preview.token)).rejects.toThrow(/remain saved in Stashes/);
   } finally {
     spy.mockRestore();
   }
+
   expect(await run(["stash", "list"])).toContain("Eda pull autostash");
   expect(await run(["show", "stash@{0}^2:file.txt"])).toBe("staged work\n");
   expect(await run(["show", "stash@{0}:file.txt"])).toBe("unstaged work\n");
@@ -879,12 +922,14 @@ it("restores renamed, deleted and binary files without disturbing an existing us
   const preview = await pull.prepare({ repositoryId: client.id, strategy: "ff" });
   await pull.execute(client.id, preview.token);
   expect(await run(["status", "--porcelain"])).toBe(before);
+
   expect(
     (await run(["ls-files", "--stage"]))
       .split("\n")
       .filter((line) => line && !line.endsWith("\tremote.txt"))
       .join("\n"),
   ).toBe(index.trimEnd());
+
   expect(await readFile(join(client.path, "renamed.txt"), "utf8")).toBe("unstaged rename edit\n");
   expect(await readFile(join(client.path, "binary.bin"))).toEqual(bytes);
   expect(await run(["rev-parse", "refs/stash"])).toBe(existing);
@@ -899,6 +944,7 @@ it("leaves local work and existing stashes untouched when fetching fails", async
   await run(["add", "file.txt"]);
   await writeFile(join(client.path, "file.txt"), "unstaged work\n");
   const before = await run(["status", "--porcelain"]);
+
   const spy = vi
     .spyOn(service, "fetchInPlace")
     .mockRejectedValue(
@@ -906,6 +952,7 @@ it("leaves local work and existing stashes untouched when fetching fails", async
         errorFixture({ kind: "auth-failed", operation: "fetch", message: "Authentication failed" }),
       ),
     );
+
   try {
     await expect(pull.prepare({ repositoryId: client.id, strategy: "rebase" })).rejects.toThrow(
       "Authentication failed",
@@ -913,6 +960,7 @@ it("leaves local work and existing stashes untouched when fetching fails", async
   } finally {
     spy.mockRestore();
   }
+
   expect(await run(["status", "--porcelain"])).toBe(before);
   expect(await run(["rev-parse", "refs/stash"])).toBe(existing);
   expect(await run(["show", ":file.txt"])).toBe("staged work\n");
@@ -933,6 +981,7 @@ it.each([
     await ctx.run(["remote", "set-url", "--push", "origin", url]);
     const execute = ctx.source.git.exec.bind(ctx.source.git);
     const credentials = manual ? { username: "user", password: "manual-token" } : undefined;
+
     const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
       const preview = args[0] === "ls-remote";
       const push = args.includes("push");
@@ -972,6 +1021,7 @@ it.each([
         await expect(preparing).rejects.toMatchObject({ kind });
       } else {
         const preview = await preparing;
+
         await expect(
           ctx.service.push(ctx.client.id, preview.token, credentials),
         ).rejects.toMatchObject({
@@ -997,20 +1047,24 @@ it.each([false, true])(
     const execute = ctx.source.git.exec.bind(ctx.source.git);
     const transports: string[] = [];
     let expected = manual ? override : saved;
+
     const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
       const push = args.includes("push");
       if (args[0] !== "ls-remote" && !push) return execute(args, options);
       transports.push(push ? "push" : "preview");
       expect(options.identityName).toBe(ctx.profile.name);
+
       expect(Object.values(options.env?.overrides ?? {})).toContain(
         `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
       );
+
       expect(options.redactValues).toContain(expected.password);
       const local = [...args];
       local[local.indexOf("--") + 1] = ctx.server.path;
       expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
       return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
     });
+
     try {
       const preview = await ctx.service.preparePush({
         repositoryId: ctx.client.id,
@@ -1021,22 +1075,26 @@ it.each([false, true])(
         setUpstream: false,
         ...(manual ? { credentials: override } : {}),
       });
+
       expect(preview.url).toBe(url);
       expected = manual ? override : refreshed;
       github.forFetch.mockResolvedValue(refreshed);
       await ctx.service.push(ctx.client.id, preview.token, manual ? override : undefined);
       expect(transports).toEqual(["preview", "push"]);
+
       expect(
         (
           await ctx.source.run(["rev-parse", "refs/heads/authenticated-push"], ctx.server.path)
         ).trim(),
       ).toBe(preview.localOid);
+
       if (manual) expect(github.forFetch).not.toHaveBeenCalled();
       else {
         expect(github.forFetch).toHaveBeenCalledTimes(2);
         expect(github.forFetch).toHaveBeenNthCalledWith(1, ctx.profile.id, url);
         expect(github.forFetch).toHaveBeenNthCalledWith(2, ctx.profile.id, url);
       }
+
       const activity = JSON.stringify(ctx.operations.list(ctx.profile.id));
       for (const credential of [saved, refreshed, override])
         expect(activity).not.toContain(credential.password);
@@ -1048,11 +1106,13 @@ it.each([false, true])(
 
 it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, preserves local work and keeps credentials out of Activity", async () => {
   const credentials = { username: "github-user", password: "gho_saved_oauth_fixture" };
+
   const github = {
     forFetch: vi.fn(async (_profile: string, url: string) =>
       isGitHubHttps(url) ? credentials : undefined,
     ),
   };
+
   const ctx = await setup(github);
   const url = "https://github.com/example/private-repository.git";
   await ctx.run(["remote", "set-url", "origin", url]);
@@ -1064,14 +1124,18 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
   let rejected = false;
   let accessDenied = false;
   let expected = credentials;
+
   const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
     const index = args.indexOf(url);
     if (args[0] !== "fetch" || index < 0) return execute(args, options);
     expect(options.identityName).toBe(ctx.profile.name);
+
     expect(Object.values(options.env?.overrides ?? {})).toContain(
       `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
     );
+
     expect(options.redactValues).toContain(expected.password);
+
     if (rejected)
       throw new GitError(
         errorFixture({
@@ -1081,25 +1145,31 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
           ...(accessDenied ? { rawStderr: "The requested URL returned error: 403" } : {}),
         }),
       );
+
     const local = [...args];
     local[index] = ctx.server.path;
     expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
     return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
   });
+
   try {
     const review = await ctx.pull.prepare({ repositoryId: ctx.client.id, strategy: "ff-only" });
     expect(review.behind).toBe(1);
     await ctx.pull.execute(ctx.client.id, review.token);
+
     expect(await readFile(join(ctx.client.path, "remote-update.txt"), "utf8")).toBe(
       "fetched with saved OAuth\n",
     );
+
     expect(await readFile(join(ctx.client.path, "local-draft.txt"), "utf8")).toBe(
       "keep local bytes\n",
     );
+
     expect(github.forFetch).toHaveBeenCalledWith(ctx.profile.id, url);
     expect(JSON.stringify(ctx.operations.list(ctx.profile.id))).not.toContain(credentials.password);
     github.forFetch.mockClear();
     expected = { username: "manual-user", password: "manual-override" };
+
     await ctx.service.fetch({
       repositoryId: ctx.client.id,
       remote: "origin",
@@ -1107,9 +1177,24 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
       tags: false,
       credentials: expected,
     });
+
+    expect(github.forFetch).not.toHaveBeenCalled();
+    rejected = true;
+
+    await expect(
+      ctx.service.fetch({
+        repositoryId: ctx.client.id,
+        remote: "origin",
+        prune: false,
+        tags: false,
+        credentials: expected,
+      }),
+    ).rejects.toMatchObject({ kind: "auth-failed" });
+
     expect(github.forFetch).not.toHaveBeenCalled();
     expected = credentials;
     rejected = true;
+
     await expect(
       ctx.service.fetch({
         repositoryId: ctx.client.id,
@@ -1118,7 +1203,9 @@ it("uses the captured profile’s saved GitHub OAuth for HTTPS fetch/pull, prese
         tags: false,
       }),
     ).rejects.toMatchObject({ kind: "github-auth-required" });
+
     accessDenied = true;
+
     await expect(
       ctx.service.fetch({
         repositoryId: ctx.client.id,
@@ -1141,16 +1228,19 @@ it("lists remote tags without fetching them, keeping annotated tag object IDs an
   const before = await run(["show-ref"]);
   const operationCount = operations.list(profile.id).length;
   const tags = await service.listTags({ repositoryId: client.id, remote: "origin" });
+
   expect(tags).toEqual([
     { name: "annotated", oid: (await server.run(["rev-parse", "refs/tags/annotated"])).trim() },
     { name: "lightweight", oid: (await server.run(["rev-parse", "refs/tags/lightweight"])).trim() },
   ]);
+
   expect(await run(["show-ref"])).toBe(before);
   expect(operations.list(profile.id)).toHaveLength(operationCount);
   expect(await run(["tag", "--list"])).toBe("private\n");
   await service.change(client.id, { kind: "url", name: "origin", url: client.path, push: false });
   await service.change(client.id, { kind: "url", name: "origin", url: server.path, push: true });
   expect(await service.listTags({ repositoryId: client.id, remote: "origin" })).toEqual(tags);
+
   await expect(
     service.listTags({ repositoryId: client.id, remote: "--all" }),
   ).rejects.toMatchObject({ kind: "invalid-input" });
@@ -1169,20 +1259,24 @@ it.each([false, true])(
     const execute = ctx.source.git.exec.bind(ctx.source.git);
     const transports: string[] = [];
     let expected = manual ? override : saved;
+
     const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
       const push = args.includes("push");
       if (args[0] !== "ls-remote" && !push) return execute(args, options);
       transports.push(push ? "push" : "preview");
       expect(options.identityName).toBe(ctx.profile.name);
+
       expect(Object.values(options.env?.overrides ?? {})).toContain(
         `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
       );
+
       expect(options.redactValues).toContain(expected.password);
       const local = [...args];
       local[local.indexOf("--") + 1] = ctx.server.path;
       expect(options.env?.overrides?.["GIT_ALLOW_PROTOCOL"]).toBe("https");
       return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
     });
+
     try {
       const preview = await ctx.service.preparePush({
         repositoryId: ctx.client.id,
@@ -1193,22 +1287,26 @@ it.each([false, true])(
         setUpstream: false,
         ...(manual ? { credentials: override } : {}),
       });
+
       expect(preview.url).toBe(url);
       expected = manual ? override : refreshed;
       gitlab.forFetch.mockResolvedValue(refreshed);
       await ctx.service.push(ctx.client.id, preview.token, manual ? override : undefined);
       expect(transports).toEqual(["preview", "push"]);
+
       expect(
         (
           await ctx.source.run(["rev-parse", "refs/heads/authenticated-push"], ctx.server.path)
         ).trim(),
       ).toBe(preview.localOid);
+
       if (manual) expect(gitlab.forFetch).not.toHaveBeenCalled();
       else {
         expect(gitlab.forFetch).toHaveBeenCalledTimes(2);
         expect(gitlab.forFetch).toHaveBeenNthCalledWith(1, ctx.profile.id, url);
         expect(gitlab.forFetch).toHaveBeenNthCalledWith(2, ctx.profile.id, url);
       }
+
       const activity = JSON.stringify(ctx.operations.list(ctx.profile.id));
       for (const credential of [saved, refreshed, override])
         expect(activity).not.toContain(credential.password);
@@ -1220,26 +1318,32 @@ it.each([false, true])(
 
 it("uses saved GitLab credentials for nested-group fetch and respects explicit manual credentials", async () => {
   const credentials = { username: "oauth2", password: "gitlab-secret" };
+
   const gitlab = {
     forFetch: vi.fn(async (_profile: string, url: string) =>
       isGitLabHttps(url) ? credentials : undefined,
     ),
   };
+
   const ctx = await setup(undefined, gitlab);
   const url = "https://gitlab.com/team/subgroup/private.git";
   await ctx.run(["remote", "set-url", "origin", url]);
   const execute = ctx.source.git.exec.bind(ctx.source.git);
   let expected = credentials;
+
   const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
     if (args[0] !== "fetch") return execute(args, options);
+
     expect(Object.values(options.env?.overrides ?? {})).toContain(
       `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
     );
+
     expect(options.redactValues).toContain(expected.password);
     const local = [...args];
     local[local.indexOf("--") + 1] = ctx.server.path;
     return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
   });
+
   try {
     const request = { repositoryId: ctx.client.id, remote: "origin", prune: false, tags: false };
     await ctx.service.fetch(request);
@@ -1259,26 +1363,32 @@ it.each([false, true])(
   async (manual) => {
     const saved = { username: "oauth2", password: "gitlab-clone-secret" };
     const override = { username: "manual", password: "manual-clone-secret" };
+
     const gitlab = {
       forFetch: vi.fn(async (_profile: string, url: string) =>
         isGitLabHttps(url) ? saved : undefined,
       ),
     };
+
     const ctx = await setup(undefined, gitlab);
     const url = "https://gitlab.com/team/subgroup/private.git";
     const expected = manual ? override : saved;
     const execute = ctx.source.git.exec.bind(ctx.source.git);
     gitlab.forFetch.mockClear();
+
     const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
       if (args[0] !== "clone") return execute(args, options);
+
       expect(Object.values(options.env?.overrides ?? {})).toContain(
         `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
       );
+
       expect(options.redactValues).toContain(expected.password);
       const local = [...args];
       local[local.indexOf("--") + 1] = ctx.server.path;
       return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
     });
+
     try {
       const result = await ctx.service.clone({
         profileId: ctx.profile.id,
@@ -1287,6 +1397,7 @@ it.each([false, true])(
         name: "gitlab clone",
         ...(manual ? { credentials: override } : {}),
       });
+
       expect(await readFile(join(result.path, "file.txt"), "utf8")).toBe("initial\n");
       if (manual) expect(gitlab.forFetch).not.toHaveBeenCalled();
       else expect(gitlab.forFetch).toHaveBeenCalledExactlyOnceWith(ctx.profile.id, url);
@@ -1301,32 +1412,39 @@ it("uses a self-hosted PAT for clone, fetch, remote tags, push preview and execu
   const saved = { username: "oauth2", password: "self-hosted-private-token" };
   const override = { username: "manual", password: "manual-private-token" };
   const gitlab = { forFetch: vi.fn(async () => undefined) };
+
   const selfHosted = {
     forFetch: vi.fn(async () => saved),
     ignoresTlsErrors: vi.fn(() => true),
   };
+
   const ctx = await setup(undefined, gitlab, selfHosted);
   const url = "https://git.company.test/gitlab/team/subgroup/private.git";
   await ctx.run(["remote", "set-url", "origin", url]);
   const execute = ctx.source.git.exec.bind(ctx.source.git);
   const transports: string[] = [];
   let expected = saved;
+
   const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
     const operation = ["clone", "fetch", "ls-remote", "push"].find((name) => args.includes(name));
     if (!operation) return execute(args, options);
     transports.push(operation);
     const overrides = options.env?.overrides ?? {};
     const config = Object.entries(overrides).filter(([key]) => key.startsWith("GIT_CONFIG_KEY_"));
+
     const header = config.find(
       ([key, value]) =>
         value === `http.${url}/.extraHeader` &&
         overrides[key.replace("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")] ===
           `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
     );
+
     expect(header).toBeDefined();
+
     expect(Object.values(overrides)).toContain(
       `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
     );
+
     expect(Object.values(overrides)).toContain("http.followRedirects");
     const tls = config.find(([, value]) => value === `http.${url}/.sslVerify`);
     expect(tls).toBeDefined();
@@ -1337,6 +1455,7 @@ it("uses a self-hosted PAT for clone, fetch, remote tags, push preview and execu
     local[local.indexOf("--") + 1] = ctx.server.path;
     return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
   });
+
   try {
     const cloned = await ctx.service.clone({
       profileId: ctx.profile.id,
@@ -1344,10 +1463,12 @@ it("uses a self-hosted PAT for clone, fetch, remote tags, push preview and execu
       parent: ctx.source.home,
       name: "self hosted clone",
     });
+
     expect(await readFile(join(cloned.path, "file.txt"), "utf8")).toBe("initial\n");
     const request = { repositoryId: ctx.client.id, remote: "origin", prune: false, tags: false };
     await ctx.service.fetch(request);
     await ctx.service.listTags({ repositoryId: ctx.client.id, remote: "origin" });
+
     const preview = await ctx.service.preparePush({
       repositoryId: ctx.client.id,
       remote: "origin",
@@ -1356,6 +1477,7 @@ it("uses a self-hosted PAT for clone, fetch, remote tags, push preview and execu
       mode: "normal",
       setUpstream: false,
     });
+
     await ctx.service.push(ctx.client.id, preview.token);
     expect(transports).toEqual(["clone", "fetch", "ls-remote", "ls-remote", "push"]);
     expect(selfHosted.forFetch).toHaveBeenCalledWith(ctx.profile.id, url);

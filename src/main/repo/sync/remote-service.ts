@@ -91,6 +91,22 @@ export class RemoteService {
     });
   }
 
+  private async resolveCredentials(
+    profileId: string,
+    url: string,
+    supplied?: TransportCredentials,
+  ): Promise<TransportCredentials | undefined> {
+    if (supplied) return supplied;
+    if (!url.startsWith("https://")) return undefined;
+
+    for (const provider of [this.github, this.gitlab, this.gitlabSelfHosted]) {
+      const credentials = await provider?.forFetch(profileId, url);
+      if (credentials) return credentials;
+    }
+
+    return undefined;
+  }
+
   private transport(url: string, identity: Identity, credentials?: TransportCredentials) {
     return transportOptions(
       url,
@@ -102,6 +118,7 @@ export class RemoteService {
 
   async inspect(id: string): Promise<RemoteState> {
     const { path } = this.repositories.resolveActiveRepository(id);
+
     const [remotes, branches, states] = await Promise.all([
       this.remotes.list(path),
       this.git.listBranches(path),
@@ -124,11 +141,8 @@ export class RemoteService {
     if (!identity)
       throw remoteError(errorText("main.remoteService.theOriginatingProfileNoLongerExists"));
     const url = await this.remotes.destination(path, request.remote, true);
-    const credentials =
-      request.credentials ??
-      (await this.github?.forFetch(identity.id, url)) ??
-      (await this.gitlab?.forFetch(identity.id, url)) ??
-      (await this.gitlabSelfHosted?.forFetch(identity.id, url));
+    const credentials = await this.resolveCredentials(identity.id, url, request.credentials);
+
     const result = await this.git
       .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--tags", "--", url], {
         cwd: path,
@@ -139,6 +153,7 @@ export class RemoteService {
       .catch((error: unknown) => {
         throw this.githubFailure(error, url, !!request.credentials);
       });
+
     return result.stdout
       .split("\n")
       .filter(Boolean)
@@ -240,11 +255,8 @@ export class RemoteService {
       );
 
       try {
-        const credentials =
-          request.credentials ??
-          (await this.github?.forFetch(identity.id, url)) ??
-          (await this.gitlab?.forFetch(identity.id, url)) ??
-          (await this.gitlabSelfHosted?.forFetch(identity.id, url));
+        const credentials = await this.resolveCredentials(identity.id, url, request.credentials);
+
         const result = await this.git.exec(
           [
             "fetch",
@@ -271,10 +283,12 @@ export class RemoteService {
             value2: result.stderr || t("main.remoteService.remoteTrackingBranchesAreUpToDate"),
           }),
         );
+
         completed.push(name);
         this.fetchHistory.record(identity.id, request.repositoryId, name, url, Date.now(), null);
       } catch (error) {
-        const failure = this.githubFailure(error, url);
+        const failure = this.githubFailure(error, url, !!request.credentials);
+
         this.fetchHistory.record(
           identity.id,
           request.repositoryId,
@@ -298,6 +312,7 @@ export class RemoteService {
     remoteName(request.remote);
 
     if (request.mode !== "delete") assertValidRefName(request.branch, t("operations.pushSource"));
+
     if (request.setUpstream && (request.mode === "delete" || request.refKind === "tag"))
       throw remoteError(
         errorText("main.remoteService.upstreamTrackingIsOnlyAvailableWhenPushingABranch"),
@@ -313,6 +328,7 @@ export class RemoteService {
         const namespace = request.refKind === "tag" ? "tags" : "heads";
         const source = request.mode === "delete" ? "" : `refs/${namespace}/${request.branch}`;
         const destination = `refs/${namespace}/${request.destination}`;
+
         const localOid = source
           ? (
               await this.git.exec(["rev-parse", "--verify", source], {
@@ -322,11 +338,8 @@ export class RemoteService {
             ).stdout.trim()
           : null;
 
-        const credentials =
-          request.credentials ??
-          (await this.github?.forFetch(identity.id, url)) ??
-          (await this.gitlab?.forFetch(identity.id, url)) ??
-          (await this.gitlabSelfHosted?.forFetch(identity.id, url));
+        const credentials = await this.resolveCredentials(identity.id, url, request.credentials);
+
         const result = await this.git
           .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--", url, destination], {
             cwd: path,
@@ -336,14 +349,17 @@ export class RemoteService {
           .catch((error: unknown) => {
             throw this.githubFailure(error, url, !!request.credentials);
           });
+
         const match = result.stdout
           .split("\n")
           .map((line) => line.split("\t"))
           .find(([, ref]) => ref === destination);
+
         const remoteOid = match?.[0] ?? null;
 
         if (remoteOid !== null && !isFullObjectId(remoteOid))
           throw remoteError(errorText("main.remoteService.theRemoteReturnedAnInvalidObjectId"));
+
         if (request.mode === "delete" && remoteOid === null)
           throw remoteError(
             errorText("main.remoteService.thatRemoteRefNoLongerExistsRefreshBeforeDeleting"),
@@ -362,6 +378,7 @@ export class RemoteService {
         const savedRequest = { ...request };
 
         delete savedRequest.credentials;
+
         this.pushes.set(preview.token, {
           preview,
           request: savedRequest,
@@ -396,6 +413,7 @@ export class RemoteService {
       async (path) => {
         const { request, preview, identity } = prepared;
         const url = await this.remotes.destination(path, request.remote, true);
+
         const localOid = preview.source
           ? (
               await this.git.exec(["rev-parse", "--verify", preview.source], {
@@ -414,6 +432,7 @@ export class RemoteService {
 
         if (this.git.trust && (isAbsolute(url) || url.startsWith("file://"))) {
           const target = isAbsolute(url) ? url : fileURLToPath(url);
+
           const worktree = await lstat(join(target, ".git")).then(
             () => true,
             (error: NodeJS.ErrnoException) => {
@@ -421,6 +440,7 @@ export class RemoteService {
               return false;
             },
           );
+
           await this.git.trust.authorize(target, !worktree);
         }
 
@@ -451,10 +471,7 @@ export class RemoteService {
               ...this.transport(
                 url,
                 identity,
-                credentials ??
-                  (await this.github?.forFetch(identity.id, url)) ??
-                  (await this.gitlab?.forFetch(identity.id, url)) ??
-                  (await this.gitlabSelfHosted?.forFetch(identity.id, url)),
+                await this.resolveCredentials(identity.id, url, credentials),
               ),
             },
           )
@@ -502,13 +519,12 @@ export class RemoteService {
           if (!this.identities.findById(captured.id))
             throw remoteError(errorText("main.remoteService.theOriginatingProfileNoLongerExists"));
 
-          const credentials =
-            request.credentials ??
-            (request.url.startsWith("https://")
-              ? ((await this.github?.forFetch(captured.id, request.url)) ??
-                (await this.gitlab?.forFetch(captured.id, request.url)) ??
-                (await this.gitlabSelfHosted?.forFetch(captured.id, request.url)))
-              : undefined);
+          const credentials = await this.resolveCredentials(
+            captured.id,
+            request.url,
+            request.credentials,
+          );
+
           const authenticatedTransport = this.transport(request.url, captured, credentials);
 
           this.operations.started(t("main.remoteService.preparingCloneDestination"));
@@ -518,6 +534,7 @@ export class RemoteService {
 
           const destination = join(await realpath(request.parent), request.name);
           await this.git.trust?.approveCreation(destination, request.url);
+
           try {
             await mkdir(destination);
           } catch {
@@ -555,6 +572,7 @@ export class RemoteService {
                 { path: path },
               ),
             );
+
             throw error;
           }
         }),
