@@ -281,13 +281,13 @@ it("does not check or replace development and manual installations", async () =>
   }
 });
 
-it("honors the application setting, startup delay and periodic checks", async () => {
+it("checks after three seconds, repeats every six hours, and honors the automatic check setting", async () => {
   vi.useFakeTimers();
   let enabled = true;
   const { service, driver } = fixture({ automaticChecks: () => enabled });
   vi.mocked(driver.check).mockResolvedValue({ available: false, release });
   service.start();
-  await vi.advanceTimersByTimeAsync(UPDATE_STARTUP_DELAY - 1);
+  await vi.advanceTimersByTimeAsync(2_999);
   expect(driver.check).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(driver.check).toHaveBeenCalledTimes(1);

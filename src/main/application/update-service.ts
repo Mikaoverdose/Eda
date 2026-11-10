@@ -42,7 +42,7 @@ export interface UpdateOptions {
   now?: () => number;
 }
 
-export const UPDATE_STARTUP_DELAY = 30_000;
+export const UPDATE_STARTUP_DELAY = 3_000;
 export const UPDATE_CHECK_INTERVAL = 6 * 60 * 60_000;
 
 export class UpdateService {
