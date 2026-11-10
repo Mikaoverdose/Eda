@@ -20,6 +20,7 @@ const boundaries = {
     files: ["src/renderer/**/*.{ts,tsx}"],
     patterns: [
       ...testOnlyImports,
+      { group: ["lucide-react"], message: "Import icons through components/ui/icons.tsx." },
       {
         group: ["electron", "node:*", ...builtinModules],
         message:
@@ -41,6 +42,18 @@ const boundaries = {
       ),
     ],
   },
+};
+
+const sharedComponentImports = {
+  group: [
+    "**/app/**",
+    "@renderer/app/**",
+    "**/features/**",
+    "@renderer/features/**",
+    "**/devtools/**",
+    "@renderer/devtools/**",
+  ],
+  message: "Shared components may not depend on app composition, features or devtools.",
 };
 
 const rendererSyntaxRestrictions = [
@@ -87,6 +100,7 @@ export default defineConfig([
 
   {
     files: boundaries.renderer.files,
+    ignores: ["src/renderer/components/ui/icons.tsx"],
     rules: {
       "no-restricted-imports": ["error", { patterns: boundaries.renderer.patterns }],
       "no-restricted-syntax": [...rendererSyntaxRestrictions],
@@ -95,23 +109,28 @@ export default defineConfig([
 
   {
     files: ["src/renderer/components/**/*.{ts,tsx}"],
+    ignores: ["src/renderer/components/ui/icons.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [...boundaries.renderer.patterns, sharedComponentImports],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ["src/renderer/components/ui/icons.tsx"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
-            ...boundaries.renderer.patterns,
-            {
-              group: [
-                "**/app/**",
-                "@renderer/app/**",
-                "**/features/**",
-                "@renderer/features/**",
-                "**/devtools/**",
-                "@renderer/devtools/**",
-              ],
-              message: "Shared components may not depend on app composition, features or devtools.",
-            },
+            ...boundaries.renderer.patterns.filter(
+              (pattern) => !pattern.group.includes("lucide-react"),
+            ),
+            sharedComponentImports,
           ],
         },
       ],
@@ -171,7 +190,17 @@ export default defineConfig([
       "no-restricted-imports": [
         "error",
         {
-          patterns: boundaries.main.patterns,
+          patterns: [
+            ...boundaries.main.patterns,
+            ...(!boundary.database
+              ? [
+                  {
+                    group: ["drizzle-orm", "drizzle-orm/**"],
+                    message: "Database access belongs in src/main/persistence/.",
+                  },
+                ]
+              : []),
+          ],
           paths: [
             ...(!boundary.process
               ? ["child_process", "node:child_process"].map((name) => ({
@@ -182,7 +211,7 @@ export default defineConfig([
             ...(!boundary.database
               ? ["sqlite", "node:sqlite"].map((name) => ({
                   name,
-                  message: "Only src/main/persistence/ opens SQLite connections.",
+                  message: "Database access belongs in src/main/persistence/.",
                 }))
               : []),
           ],

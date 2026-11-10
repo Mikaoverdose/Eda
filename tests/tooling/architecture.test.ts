@@ -16,6 +16,15 @@ test("application sources contain no test suites or test-support directories", a
 });
 
 const cases = [
+  ["renderer/features/connections/GitHubConnection.tsx", "lucide-react", false],
+  ["renderer/components/ui/actions/Button.tsx", "lucide-react", false],
+  ["renderer/components/ui/icons.tsx", "lucide-react", true],
+  ["renderer/components/ui/icons.tsx", "node:fs", false],
+  ["renderer/components/ui/icons.tsx", "@renderer/features/changes/ChangesPanel", false],
+  ["main/git/security/repository-trust.ts", "drizzle-orm", false],
+  ["main/identity/profile-service.ts", "drizzle-orm", false],
+  ["main/identity/profile-service.ts", "drizzle-orm/node-sqlite", false],
+  ["main/persistence/repository-memberships.ts", "drizzle-orm", true],
   ["main/services.ts", "node:child_process", false],
   ["main/services.ts", "child_process", false],
   ["main/services.ts", "node:sqlite", false],
