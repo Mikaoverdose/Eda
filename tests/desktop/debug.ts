@@ -39,13 +39,47 @@ try {
   await page.keyboard.press(`${modifier}+,`);
   await page.getByRole("button", { name: "About", exact: true }).click();
   await page.getByRole("checkbox", { name: "Enable developer settings", exact: true }).check();
+  await page.getByRole("button", { name: "Components", exact: true }).click();
+  await page.getByRole("textbox", { name: "Example input", exact: true }).fill("Gallery draft");
+  await page.getByRole("tab", { name: "Activity", exact: true }).click();
+
+  assert.equal(
+    await page.getByRole("tab", { name: "Activity", exact: true }).getAttribute("aria-selected"),
+    "true",
+  );
+
+  for (const [trigger, title] of [
+    ["Open Dialog", "Dialog example"],
+    ["Open right Dialog", "Right dialog example"],
+    ["Open ModalSurface", "ModalSurface example"],
+  ] as const) {
+    await page.getByRole("button", { name: trigger, exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: title, exact: true });
+    await dialog.waitFor();
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+  }
+
+  await page.getByRole("button", { name: "Open menu", exact: true }).click();
+  await page.getByRole("menu", { name: "Example menu", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+
+  assert.equal(
+    await page.getByRole("textbox", { name: "Example input", exact: true }).inputValue(),
+    "Gallery draft",
+  );
+
+  await page.locator("#gallery-actions").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: resolve("screenshots/component-gallery-refactor.png") });
   await page.getByRole("button", { name: "Resilience testing", exact: true }).click();
   await page.getByRole("heading", { name: "Resilience testing", exact: true }).waitFor();
   await page.getByRole("button", { name: "Fail IPC request", exact: true }).click();
+
   await page
     .getByRole("alert")
     .filter({ hasText: "Eda debug simulation: unexpected IPC error." })
     .waitFor();
+
   await page.getByRole("button", { name: "Dismiss", exact: true }).click();
 
   const runtimeError = page.waitForEvent("pageerror");
@@ -62,9 +96,11 @@ try {
 
   await page.getByRole("button", { name: "Trigger render error...", exact: true }).click();
   await page.getByRole("button", { name: "Trigger render error", exact: true }).click();
+
   await page
     .getByRole("heading", { name: "Eda could not display this screen", exact: true })
     .waitFor();
+
   await page.getByRole("button", { name: "Reload Eda", exact: true }).click();
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
   console.log("Render-error reload restored the active profile.");
@@ -87,6 +123,7 @@ try {
       if (title !== "Eda’s window stopped") throw new Error("Expected native renderer recovery.");
     }
   });
+
   await page.keyboard.press(`${modifier}+,`);
   await page.getByRole("button", { name: "Resilience testing", exact: true }).click();
 
@@ -113,6 +150,7 @@ try {
     .catch((error: unknown) => {
       if (!(error instanceof Error) || !error.message.includes("Target crashed")) throw error;
     });
+
   assert.match(await crashed, /^(crashed|killed)$/);
 
   // Playwright still considers the target crashed after Electron reloads it.
@@ -148,6 +186,7 @@ try {
       .windows()[0]
       ?.screenshot({ path: resolve("screenshots/debug-gate-failure.png") })
       .catch(() => {});
+
   throw error;
 } finally {
   if (app) {

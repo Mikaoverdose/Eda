@@ -1,0 +1,136 @@
+import { t } from "@shared/i18n";
+import { useId, useRef, useState } from "react";
+import {
+  Button,
+  Dialog,
+  Disclosure,
+  FolderIcon,
+  MenuItem,
+  AnchoredPopover,
+  RefreshIcon,
+} from "../../components/ui/index";
+import {
+  ModalDescription,
+  ModalSurface,
+  ModalTitle,
+} from "../../components/ui/overlays/ModalSurface";
+import { Name, Sample } from "./GallerySample";
+
+export function GallerySurfaces({ setFeedback }: { setFeedback: (message: string) => void }) {
+  const modalDescriptionId = useId();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const [modal, setModal] = useState<"dialog" | "drawer" | "surface" | null>(null);
+
+  return (
+    <>
+      <Sample id="gallery-surfaces" title={t("settings.componentGallery.surfaces")}>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setModal("dialog")}>
+            {t("settings.componentGallery.openDialog")}
+          </Button>
+          <Button onClick={() => setModal("drawer")}>
+            {t("settings.componentGallery.openRightDialog")}
+          </Button>
+          <Button onClick={() => setModal("surface")}>
+            {t("settings.componentGallery.openModalSurface")}
+          </Button>
+
+          <div className="relative">
+            <Button
+              ref={menuTrigger}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {t("settings.componentGallery.openMenu")}
+            </Button>
+
+            {menuOpen && (
+              <AnchoredPopover
+                role="menu"
+                aria-label={t("settings.componentGallery.exampleMenu")}
+                onClose={() => setMenuOpen(false)}
+                anchorRef={menuTrigger}
+                className="w-52 p-1"
+              >
+                <MenuItem
+                  onClick={() => {
+                    setFeedback(t("settings.componentGallery.menuItemClicked"));
+                    setMenuOpen(false);
+                  }}
+                >
+                  <RefreshIcon size={14} />
+                  {t("settings.componentGallery.refreshPreview")}
+                </MenuItem>
+
+                <MenuItem disabled>
+                  <FolderIcon size={14} />
+                  {t("settings.componentGallery.unavailableAction")}
+                </MenuItem>
+              </AnchoredPopover>
+            )}
+          </div>
+        </div>
+
+        <Disclosure
+          title={t("settings.componentGallery.disclosureExample")}
+          className="mt-3 text-xs"
+        >
+          <p className="mt-2">
+            {t("settings.componentGallery.sharedDisclosureStylingAndFocusState")}
+          </p>
+        </Disclosure>
+
+        <Name>
+          {t("settings.componentGallery.dialogModalSurfaceModalTitleModalDescriptionPopover")}
+        </Name>
+      </Sample>
+
+      {modal === "dialog" && (
+        <Dialog
+          title={t("settings.componentGallery.dialogExample")}
+          description={t("settings.componentGallery.aCenteredModalWithATitleAndDescription")}
+          onClose={() => setModal(null)}
+          footer={<Button onClick={() => setModal(null)}>{t("common.close")}</Button>}
+        >
+          <p className="text-sm">
+            {t("settings.componentGallery.focusIsContainedHereUntilTheDialogCloses")}
+          </p>
+        </Dialog>
+      )}
+
+      {modal === "drawer" && (
+        <Dialog
+          placement="right"
+          title={t("settings.componentGallery.rightDialogExample")}
+          onClose={() => setModal(null)}
+          footer={<Button onClick={() => setModal(null)}>{t("common.close")}</Button>}
+        >
+          <p className="text-sm">
+            {t("settings.componentGallery.theSameDialogComponentSupportsARightSidePlacement")}
+          </p>
+        </Dialog>
+      )}
+
+      {modal === "surface" && (
+        <ModalSurface
+          placement="top"
+          onClose={() => setModal(null)}
+          descriptionId={modalDescriptionId}
+          className="w-[calc(100vw-2rem)] max-w-lg rounded-lg border border-border-default p-6"
+        >
+          <ModalTitle className="text-lg font-semibold">
+            {t("settings.componentGallery.modalSurfaceExample")}
+          </ModalTitle>
+          <ModalDescription id={modalDescriptionId} className="mt-2 text-sm text-text-secondary">
+            {t("settings.componentGallery.aLowerLevelSurfaceUsedByTheRepositoryPicker")}
+          </ModalDescription>
+          <Button className="mt-4" onClick={() => setModal(null)}>
+            {t("common.close")}
+          </Button>
+        </ModalSurface>
+      )}
+    </>
+  );
+}

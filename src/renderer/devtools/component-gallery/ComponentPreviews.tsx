@@ -24,7 +24,8 @@ import {
 import { useViewTransition } from "../../components/layout/hooks/useViewTransition";
 import { useLayoutTransition } from "../../components/layout/hooks/useLayoutTransition";
 import { Split } from "../../components/layout/Split";
-import { PanelControls, type PanelState } from "../../components/layout/PanelControls";
+import type { PanelState } from "../../components/layout/PanelControls";
+import { PanelHeader } from "../../components/layout/PanelHeader";
 import { RebasePlanEditor } from "../../features/workflows/RebasePlanEditor";
 import { SshKeyList } from "../../features/credentials/SshKeyList";
 import { ThemePreferences } from "../../features/settings/appearance/ThemePreferences";
@@ -46,11 +47,13 @@ export function ThemesPreview() {
     ...builtInSetting("theme").value,
     mode: "dark",
   });
+
   return <ThemePreferences value={theme} onChange={setTheme} />;
 }
 
 export function UpdatesPreview() {
   const [phase, setPhase] = useState<UpdatePhase>("available");
+
   const state: UpdateState = {
     revision: 0,
     capability: "automatic",
@@ -78,11 +81,13 @@ export function UpdatesPreview() {
         ? t("settings.componentPreviews.theUpdateServiceIsNotAvailableYetTryAgainLater")
         : null,
   };
+
   return (
     <div className="w-full space-y-4">
       <p className="text-xs text-text-tertiary">
         {t("settings.componentPreviews.localPreviewOnlyNoDownloadsOrInstallationsArePerformed")}
       </p>
+
       <Select
         aria-label={t("settings.componentPreviews.updatePreviewState")}
         value={phase}
@@ -105,6 +110,7 @@ export function UpdatesPreview() {
           </option>
         ))}
       </Select>
+
       <UpdateStatus
         state={state}
         actions={{
@@ -122,6 +128,7 @@ export function UpdatesPreview() {
           },
         }}
       />
+
       {phase === "downloading" && (
         <Button onClick={() => setPhase("ready")}>
           {t("settings.componentPreviews.previewCompletedDownload")}
@@ -151,6 +158,7 @@ const SAMPLE_PLAN: RebasePlanEntry[] = [
 
 export function RebasePreview() {
   const [plan, setPlan] = useState(SAMPLE_PLAN);
+
   return (
     <RebasePlanEditor plan={plan} original={SAMPLE_PLAN} disabled={false} onChange={setPlan} />
   );
@@ -295,6 +303,7 @@ export function DiffPreview() {
         ]}
         onChange={setMode}
       />
+
       <div className="flex h-[360px] min-w-0 flex-col overflow-hidden rounded-md border border-border-default bg-bg-inset">
         <DiffContent key={mode} diff={SAMPLE_DIFF} mode={mode} readOnly />
       </div>
@@ -357,9 +366,11 @@ export function RepositoryRowsPreview() {
   const [checked, setChecked] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [commit, setCommit] = useState(COMMITS[0]!);
+
   const [message, setMessage] = useState(
     t("settings.componentPreviews.interactionsOnlyUpdateThisPreview"),
   );
+
   const directory = buildChangeTree(CHANGES.filter((change) => change.path.startsWith("src/")))[0]!;
 
   return (
@@ -377,6 +388,7 @@ export function RepositoryRowsPreview() {
             setMessage(t("settings.componentPreviews.previewStageFolderSelected"))
           }
         />
+
         {CHANGES.filter((change) => !collapsed || !change.path.startsWith("src/")).map((change) => (
           <ChangeRow
             key={change.path}
@@ -409,6 +421,7 @@ export function RepositoryRowsPreview() {
           />
         ))}
       </div>
+
       <div className="overflow-hidden rounded-md border border-border-default bg-bg-inset">
         {layoutCommitPage(COMMITS).rows.map((row) => (
           <CommitRow
@@ -422,6 +435,7 @@ export function RepositoryRowsPreview() {
             onContextMenu={(event) => event.preventDefault()}
           />
         ))}
+
         <CommitDetails
           commit={commit}
           inspection={{
@@ -434,6 +448,7 @@ export function RepositoryRowsPreview() {
           onSelectParent={(oid) => setCommit(COMMITS.find((item) => item.oid === oid) ?? commit)}
         />
       </div>
+
       <p role="status" className="text-xs text-text-secondary">
         {message}
       </p>
@@ -458,6 +473,7 @@ export function ViewTransitionPreview() {
         ]}
         onChange={setPreset}
       />
+
       <Button
         onClick={() =>
           navigation.transition(
@@ -468,6 +484,7 @@ export function ViewTransitionPreview() {
       >
         {t("settings.componentPreviews.previewViewTransition")}
       </Button>
+
       <ViewTransition
         ref={navigation.ref}
         className="rounded-md border border-border-subtle p-4 text-sm text-text-secondary"
@@ -477,6 +494,7 @@ export function ViewTransitionPreview() {
         </RetainedView>
         {page % 2 !== 0 && <p>{t("settings.componentPreviews.settingsView")}</p>}
       </ViewTransition>
+
       <p className="text-xs text-text-tertiary">
         {t("settings.componentPreviews.settingsAndOnboardingShareTheSameSlideAnd")}
       </p>
@@ -516,18 +534,17 @@ function LayoutPreviewContent() {
             horizontal
             onExpand={() => change("normal")}
           >
-            <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border-subtle px-3">
-              <span className="text-sm font-medium">
-                {t("settings.componentPreviews.previewPanel")}
-              </span>
-              <PanelControls
-                name={t("componentPreviews.previewPanelLabel")}
-                state={state}
-                onToggleCollapse={() => change("collapsed")}
-                onToggleMaximize={() => change(state === "maximized" ? "normal" : "maximized")}
-                collapseDirection="down"
-              />
-            </div>
+            <PanelHeader
+              title={t("settings.componentPreviews.previewPanel")}
+              controls={{
+                name: t("componentPreviews.previewPanelLabel"),
+                state,
+                onToggleCollapse: () => change("collapsed"),
+                onToggleMaximize: () => change(state === "maximized" ? "normal" : "maximized"),
+                collapseDirection: "down",
+              }}
+            />
+
             <p className="p-4 text-sm text-text-secondary">
               {t("settings.componentPreviews.collapseMaximizeRestoreOrResizeThisPanelIt")}
             </p>
@@ -552,6 +569,7 @@ function LayoutPreviewContent() {
 
 export function StatesPreview() {
   const [tone, setTone] = useState<"empty" | "loading" | "error" | "success" | "info">("empty");
+
   const messages = {
     empty: t("settings.componentPreviews.noMatchingFiles"),
     loading: t("settings.componentPreviews.loadingChanges"),
@@ -573,6 +591,7 @@ export function StatesPreview() {
         <option value="success">{t("settings.componentPreviews.success")}</option>
         <option value="info">{t("settings.componentPreviews.information")}</option>
       </Select>
+
       <div className="rounded-md border border-border-subtle bg-bg-inset">
         <StateMessage
           tone={tone}
