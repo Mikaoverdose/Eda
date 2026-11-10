@@ -223,6 +223,18 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
   };
 
   const current = steps[step]!;
+  const stage = complete ? steps.length + 1 : step + 1;
+  let commitStyle: "emoji" | "plain" | "free" = "emoji";
+
+  if (step >= 2 && !welcome) {
+    if (!conventional) commitStyle = "free";
+    else if (!/\p{Extended_Pictographic}/u.test(prefixes)) commitStyle = "plain";
+  }
+
+  let continueLabel = t("common.continue");
+
+  if (saving) continueLabel = t("firstRun.settingThingsUp");
+  else if (step === 3) continueLabel = t("firstRun.startUsingEda");
 
   return (
     <div
@@ -232,27 +244,24 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
     >
       <WelcomeBranches
         quiet={!welcome}
-        stage={complete ? steps.length + 1 : welcome ? 0 : step + 1}
+        stage={welcome && !complete ? 0 : stage}
         stepCount={steps.length}
-        commitStyle={
-          step < 2 || welcome
-            ? "emoji"
-            : !conventional
-              ? "free"
-              : /\p{Extended_Pictographic}/u.test(prefixes)
-                ? "emoji"
-                : "plain"
-        }
+        commitStyle={commitStyle}
       />
-      {complete ? (
+
+      {complete && (
         <ViewTransition ref={navigation.ref} className="min-h-full">
           <WelcomeComplete onOpen={() => onComplete(false)} onTour={() => onComplete(true)} />
         </ViewTransition>
-      ) : welcome ? (
+      )}
+
+      {!complete && welcome && (
         <ViewTransition ref={navigation.ref} className="min-h-full">
           <Welcome onStart={() => navigation.transition(() => setWelcome(false), "forward")} />
         </ViewTransition>
-      ) : (
+      )}
+
+      {!complete && !welcome && (
         <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[28rem] shrink-0 flex-col px-6 py-6">
           <nav aria-label={t("firstRun.setupProgress")} className="mb-8 shrink-0">
             <ol className="flex gap-4">
@@ -268,6 +277,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                       data-active={index <= step}
                     />
                   </div>
+
                   <span
                     className={cx(
                       "flex items-center gap-1.5 text-xs",
@@ -283,12 +293,14 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                     ) : (
                       <span className="font-mono text-[10px]">0{index + 1}</span>
                     )}
+
                     {item.label}
                   </span>
                 </li>
               ))}
             </ol>
           </nav>
+
           <form
             noValidate
             className="flex min-h-0 min-w-0 flex-1 flex-col"
@@ -313,6 +325,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                         <GitBranch size={36} strokeWidth={1.5} />
                       </div>
                     )}
+
                     <h1
                       ref={heading}
                       tabIndex={-1}
@@ -320,10 +333,12 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                     >
                       {current.title}
                     </h1>
+
                     <p className="mt-2 text-sm leading-relaxed text-text-secondary">
                       {current.description}
                     </p>
                   </div>
+
                   {step === 0 && (
                     <div className="onboarding-fields space-y-4">
                       <Field
@@ -344,6 +359,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                           />
                         )}
                       </Field>
+
                       <Field label={t("firstRun.gitAuthorName")}>
                         {(props) => (
                           <Input
@@ -358,6 +374,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                           />
                         )}
                       </Field>
+
                       <Field
                         label={t("firstRun.gitEmail")}
                         hint={t("firstRun.yourAuthorNameAndEmailAppearOnCommits")}
@@ -379,6 +396,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                           />
                         )}
                       </Field>
+
                       <div className="space-y-1.5 border-t border-border-subtle pt-4">
                         <Checkbox
                           checked={sync}
@@ -386,12 +404,14 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                         >
                           {t("firstRun.syncThisProfileWithGlobalGit")}
                         </Checkbox>
+
                         <p className="text-xs leading-relaxed text-text-tertiary">
                           {t("firstRun.activatingThisProfileUpdatesGlobalGitAuthorAnd")}
                         </p>
                       </div>
                     </div>
                   )}
+
                   {step === 1 && (
                     <AppearanceStep
                       theme={theme}
@@ -404,9 +424,11 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                       onReducedMotion={setReducedMotion}
                     />
                   )}
+
                   {step === 3 && activeIdentity && (
                     <ConnectionsStep profileId={activeIdentity.id} />
                   )}
+
                   {step === 2 && (
                     <CommitStyleStep
                       enabled={conventional}
@@ -418,11 +440,13 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                 </div>
               </ViewTransition>
             </fieldset>
+
             {(error || appError) && (
               <p role="alert" className="py-3 text-sm text-git-deleted">
                 {error || errorMessage(appError)}
               </p>
             )}
+
             <footer className="onboarding-footer mt-5 flex shrink-0 items-center justify-between gap-3 border-t border-border-subtle pt-5">
               {step > 0 && step < 3 && (
                 <Button
@@ -434,6 +458,7 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                   {t("common.back")}
                 </Button>
               )}
+
               <Button
                 className="ml-auto"
                 type={step === 3 ? "button" : "submit"}
@@ -448,15 +473,13 @@ export function FirstRun({ onComplete = () => {} }: { onComplete?: (takeTour?: b
                 busy={saving}
                 disabled={!canSave || (step === 2 && conventional && !prefixesValid)}
               >
-                {saving
-                  ? t("firstRun.settingThingsUp")
-                  : step === 3
-                    ? t("firstRun.startUsingEda")
-                    : t("common.continue")}
+                {continueLabel}
+
                 {!saving && <ArrowRight size={14} aria-hidden="true" />}
               </Button>
             </footer>
           </form>
+
           <p className="mt-5 shrink-0 text-center text-xs text-text-tertiary">
             {t("firstRun.youCanChangeTheseLaterInSettings")}
           </p>

@@ -45,19 +45,21 @@ function initialChoice(preview: ConflictPreview): ResolveConflictRequest["choice
 }
 
 function Version({ title, value }: { title: string; value: ConflictVersion | null }) {
+  let content = t("conflictDialog.absentOnThisSide");
+
+  if (value?.mode === GIT_FILE_MODE.submodule)
+    content = t("conflictDialog.submoduleCommit", { oid: value.oid });
+  else if (value)
+    content =
+      value.text ??
+      t("conflictDialog.binaryOrLargeContentBytes", { bytes: value.bytes, oid: value.oid });
+
   return (
     <section className="min-w-0 rounded border border-border-default">
       <h3 className="border-b border-border-subtle px-3 py-2 text-xs font-medium">{title}</h3>
+
       <CodeBlock label={title} className="h-44 rounded-none border-0">
-        {!value
-          ? t("conflictDialog.absentOnThisSide")
-          : value.mode === GIT_FILE_MODE.submodule
-            ? t("conflictDialog.submoduleCommit", { oid: value.oid })
-            : (value.text ??
-              t("conflictDialog.binaryOrLargeContentBytes", {
-                bytes: value.bytes,
-                oid: value.oid,
-              }))}
+        {content}
       </CodeBlock>
     </section>
   );
@@ -194,8 +196,7 @@ export function ConflictDialog({
 
     const current = block[1]!.split(/^\|\|\|\|\|\|\|[^\n]*\n/m)[0]!;
     const incoming = block[2]!;
-    const replacement =
-      side === "current" ? current : side === "incoming" ? incoming : current + incoming;
+    const replacement = { current, incoming, both: current + incoming }[side];
 
     setOutput(
       output.slice(0, block.index) + replacement + output.slice(block.index + block[0].length),
@@ -206,8 +207,7 @@ export function ConflictDialog({
   const submodule = [preview?.base, preview?.current, preview?.incoming].some(
     (value) => value?.mode === GIT_FILE_MODE.submodule,
   );
-  const selectedSide =
-    choice === "current" ? preview?.current : choice === "incoming" ? preview?.incoming : null;
+  const selectedSide = choice === "current" || choice === "incoming" ? preview?.[choice] : null;
   const indexOnly = submodule && (!selectedSide || selectedSide.mode === GIT_FILE_MODE.submodule);
   const markers = choice === "text" && /^(?:<{7}|={7}|>{7}|\|{7})(?: |\r?$)/m.test(output);
   const sides = conflictSides(preview?.workflow?.kind);
@@ -225,9 +225,11 @@ export function ConflictDialog({
           <Button variant="quiet" disabled={busy} onClick={() => guard(onClose)}>
             {t("common.close")}
           </Button>
+
           <Button disabled={busy || !preview || indexOnly} onClick={() => void save(false)}>
             {t("conflictDialog.saveOutput")}
           </Button>
+
           <Button
             variant="primary"
             disabled={busy || !preview || markers}
@@ -241,6 +243,7 @@ export function ConflictDialog({
       <div className="space-y-4">
         <label className="block text-xs">
           {t("conflictDialog.unresolvedPath")}
+
           <Select
             aria-label={t("conflictDialog.unresolvedPath")}
             className="mt-1 w-full"
@@ -256,6 +259,7 @@ export function ConflictDialog({
                 ? t("conflictDialog.chooseAConflict")
                 : t("conflictDialog.allPathsResolved")}
             </option>
+
             {conflicts.map((change) => (
               <option key={change.path} value={change.path}>
                 {change.path},{" "}
@@ -264,9 +268,11 @@ export function ConflictDialog({
             ))}
           </Select>
         </label>
+
         {preview && (
           <>
             <p className="text-xs text-text-secondary">{sides.explanation}</p>
+
             {preview.workflow && (
               <p className="text-xs text-text-tertiary">
                 {t("conflictDialog.currentHead", {
@@ -282,17 +288,20 @@ export function ConflictDialog({
                 })}
               </p>
             )}
+
             <div className="grid gap-3 md:grid-cols-3">
               <Version
                 title={t("conflictDialog.indexStage1", { base: sides.base })}
                 value={preview.base}
               />
+
               <Version
                 title={
                   preview.workflow?.currentLabel ?? t("conflictDialog.currentContentIndexStage2")
                 }
                 value={preview.current}
               />
+
               <Version
                 title={
                   preview.workflow?.incomingLabel ?? t("conflictDialog.incomingContentIndexStage3")
@@ -300,13 +309,16 @@ export function ConflictDialog({
                 value={preview.incoming}
               />
             </div>
+
             {!canEdit(preview) && !submodule && (
               <p className="text-xs text-text-secondary">
                 {t("conflictDialog.thisContentCannotBeEditedInTheText")}
               </p>
             )}
+
             <label className="block text-xs">
               {t("conflictDialog.resolution")}
+
               <Select
                 aria-label={t("conflictDialog.resolutionChoice")}
                 value={choice}
@@ -317,6 +329,7 @@ export function ConflictDialog({
                 {canEdit(preview) && (
                   <option value="text">{t("conflictDialog.editedOutputBelow")}</option>
                 )}
+
                 <option value="current">
                   {preview.current
                     ? t("conflictDialog.useWhole", { current: sides.current.toLowerCase() })
@@ -324,6 +337,7 @@ export function ConflictDialog({
                         current: sides.current.toLowerCase(),
                       })}
                 </option>
+
                 <option value="incoming">
                   {preview.incoming
                     ? t("conflictDialog.useIncomingVersion", {
@@ -333,7 +347,9 @@ export function ConflictDialog({
                         incoming: sides.incoming.toLowerCase(),
                       })}
                 </option>
+
                 <option value="delete">{t("conflictDialog.deleteThisPathFromTheResult")}</option>
+
                 {!submodule && (
                   <option value="worktree">
                     {t(
@@ -343,6 +359,7 @@ export function ConflictDialog({
                 )}
               </Select>
             </label>
+
             <div className="space-y-2">
               <Button
                 size="sm"
@@ -351,20 +368,24 @@ export function ConflictDialog({
               >
                 {t("conflictDialog.openExternalMergeTool")}
               </Button>
+
               <p className="text-xs text-text-tertiary">
                 {t("conflictDialog.configureTheToolInApplicationSettingsItReceives")}
               </p>
             </div>
+
             {indexOnly && (
               <p className="text-xs text-text-secondary">
                 {t("conflictDialog.thisRecordsTheSelectedSubmoduleCommitOrDeletion")}
               </p>
             )}
+
             {submodule && !indexOnly && preview.outputKind === "directory" && (
               <p className="text-xs text-text-secondary">
                 {t("conflictDialog.aFolderOccupiesThisPathMoveItTo")}
               </p>
             )}
+
             {[preview.current, preview.incoming].some(
               (value) => value?.mode === GIT_FILE_MODE.symlink,
             ) && (
@@ -372,6 +393,7 @@ export function ConflictDialog({
                 {t("conflictDialog.chooseAWholeSideToKeepItsLink")}
               </p>
             )}
+
             {choice === "text" && (
               <>
                 {!!blocks.length && (
@@ -382,6 +404,7 @@ export function ConflictDialog({
                         className="flex items-center gap-1 rounded border border-border-subtle p-1 text-xs"
                       >
                         <span>{t("conflictDialog.conflict", { value1: index + 1 })}</span>
+
                         {(["current", "incoming", "both"] as const).map((side) => (
                           <Button
                             key={side}
@@ -402,8 +425,10 @@ export function ConflictDialog({
                     ))}
                   </div>
                 )}
+
                 <label className="block text-xs">
                   {t("conflictDialog.resolvedOutput")}
+
                   <Textarea
                     aria-label={t("conflictDialog.resolvedOutput")}
                     spellCheck={false}
@@ -414,6 +439,7 @@ export function ConflictDialog({
                     className="mt-1 h-60 resize-y font-mono"
                   />
                 </label>
+
                 {markers && (
                   <p className="text-xs text-git-modified">
                     {t(
@@ -423,6 +449,7 @@ export function ConflictDialog({
                 )}
               </>
             )}
+
             <Button
               size="sm"
               variant="quiet"
@@ -433,13 +460,16 @@ export function ConflictDialog({
             </Button>
           </>
         )}
+
         {message && (
           <p role="status" className="text-xs text-git-added">
             {message}
           </p>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
+
       {leave && (
         <Dialog
           title={t("conflictDialog.discardUnsavedResolutionEdits")}
@@ -450,6 +480,7 @@ export function ConflictDialog({
               <Button variant="quiet" onClick={() => setLeave(null)}>
                 {t("conflictDialog.keepEditing")}
               </Button>
+
               <Button
                 onClick={() => {
                   const next = leave;

@@ -107,12 +107,11 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
           action === "apply"
             ? t("profileGitSettings.profileSavedForThisRepository")
             : t("profileGitSettings.localSettingsRemoved", {
-                value1:
-                  group === "all"
-                    ? t("profileGitSettings.authorAndSigning")
-                    : group === "author"
-                      ? t("profileGitSettings.authorGroup")
-                      : t("profileGitSettings.signingGroup"),
+                value1: {
+                  all: t("profileGitSettings.authorAndSigning"),
+                  author: t("profileGitSettings.authorGroup"),
+                  signing: t("profileGitSettings.signingGroup"),
+                }[group],
               }),
         );
 
@@ -180,13 +179,17 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
       data?.localOverrides?.some((key) => commitConfigKeys(group).includes(key)) ?? false;
     const signing = entry("commit.gpgsign")?.value;
     const signingEnabled = signing !== undefined && !/^(false|no|off|0)$/i.test(signing);
-    const signingLabel = !signingEnabled
-      ? t("profileGitSettings.off")
-      : /^(true|yes|on|1)?$/i.test(signing)
-        ? t("profileGitSettings.on")
-        : signing;
+    let signingLabel = t("profileGitSettings.off");
+
+    if (signingEnabled)
+      signingLabel = /^(true|yes|on|1)?$/i.test(signing) ? t("profileGitSettings.on") : signing;
 
     const format = entry("gpg.format")?.value;
+    let formatLabel = format || "GPG";
+
+    if (format === "ssh") formatLabel = "SSH";
+    else if (format === "openpgp") formatLabel = "GPG";
+
     const key = entry("user.signingkey")?.value;
     const profileSigning =
       profile.signing.format !== "none" && profile.signing.keyRef && profile.signing.signCommits
@@ -213,10 +216,13 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
     return (
       <div className="space-y-6">
         <RepositoryCommitIdentity />
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+
         <p role="status" className="sr-only">
           {feedback}
         </p>
+
         <section className="space-y-4" aria-labelledby={`${headingId}-current`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2
@@ -227,15 +233,18 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
             >
               {t("profileGitSettings.currentGitSettings")}
             </h2>
+
             <RefreshButton
               label={t("profileGitSettings.refreshGitSettings")}
               disabled={!!busy}
               onRefresh={refresh}
             />
           </div>
+
           {!data && !error && (
             <StateMessage tone="loading" title={t("profileGitSettings.readingGitConfiguration")} />
           )}
+
           {data && (
             <>
               <div className="grid min-w-0 gap-6 lg:grid-cols-2">
@@ -243,6 +252,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
                   <h3 id={`${headingId}-author`} className="text-sm font-medium">
                     {t("profileGitSettings.authorHeading")}
                   </h3>
+
                   <DefinitionList
                     items={[
                       {
@@ -257,13 +267,16 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
                       },
                     ]}
                   />
+
                   {hasLocal("author") &&
                     remove("author", t("profileGitSettings.removeLocalAuthor"))}
                 </section>
+
                 <section className="min-w-0 space-y-3" aria-labelledby={`${headingId}-signing`}>
                   <h3 id={`${headingId}-signing`} className="text-sm font-medium">
                     {t("profileGitSettings.signingHeading")}
                   </h3>
+
                   <DefinitionList
                     items={[
                       {
@@ -275,12 +288,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
                         ? [
                             {
                               label: t("profileGitSettings.format"),
-                              value:
-                                format === "ssh"
-                                  ? "SSH"
-                                  : !format || format === "openpgp"
-                                    ? "GPG"
-                                    : format,
+                              value: formatLabel,
                               description: source("gpg.format"),
                             },
                             {
@@ -292,16 +300,19 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
                         : []),
                     ]}
                   />
+
                   {hasLocal("signing") &&
                     remove("signing", t("profileGitSettings.removeLocalSigning"))}
                 </section>
               </div>
+
               <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-secondary">
                 <p>
                   {hasLocal("all")
                     ? t("profileGitSettings.removingLocalValuesLetsGitUseItsRemainingConfiguration")
                     : t("profileGitSettings.noLocalAuthorOrSigningOverridesInThisRepository")}
                 </p>
+
                 {hasLocal("author") &&
                   hasLocal("signing") &&
                   remove("all", t("profileGitSettings.removeBothLocalOverrides"))}
@@ -309,6 +320,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
             </>
           )}
         </section>
+
         <section
           className="space-y-3 border-t border-border-subtle pt-5"
           aria-labelledby={`${headingId}-profile`}
@@ -318,10 +330,12 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
               <h2 id={`${headingId}-profile`} className="text-sm font-medium">
                 {t("profileGitSettings.useProfile", { name: profile.name })}
               </h2>
+
               <p className="break-words text-xs text-text-secondary">
                 {profile.gitName}, {profile.gitEmail}, {profileSigning}
               </p>
             </div>
+
             <AsyncButton
               size="sm"
               label={t("profileGitSettings.useThisProfile")}
@@ -332,10 +346,12 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
               {t("profileGitSettings.useThisProfile")}
             </AsyncButton>
           </div>
+
           <p className="text-xs text-text-tertiary">
             {t("profileGitSettings.saveThisProfileSAuthorAndSigningSettings")}
           </p>
         </section>
+
         <Disclosure
           title={t("profileGitSettings.advancedGitConfiguration")}
           className="border-t border-border-subtle pt-5"
@@ -344,6 +360,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
             {repository && (
               <p className="break-all text-xs text-text-tertiary">{repository.path}</p>
             )}
+
             {data && <ConfigurationEntries entries={entries} />}
           </div>
         </Disclosure>
@@ -355,6 +372,7 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
     <div className="space-y-6">
       <section className="space-y-3">
         <h2 className="text-sm font-medium">{t("profileGitSettings.commitIdentity")}</h2>
+
         <DefinitionList
           items={[
             { label: t("profileGitSettings.authorHeading"), value: profile.gitName },
@@ -362,9 +380,11 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
           ]}
         />
       </section>
+
       <section className="space-y-3 border-t border-border-subtle pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-medium">{t("profileGitSettings.configurationDetails")}</h2>
+
           <AsyncButton
             size="sm"
             label={t("profileGitSettings.refreshGitOrigins")}
@@ -374,13 +394,17 @@ function GitSettings({ scope }: { scope: "profile" | "repository" }) {
             {t("profileGitSettings.refreshGitOrigins")}
           </AsyncButton>
         </div>
+
         <p className="text-xs text-text-secondary">
           {t("profileGitSettings.inspectTheValuesGitReadsAndTheirSourceFiles")}
         </p>
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+
         {!data && !error && (
           <StateMessage tone="loading" title={t("profileGitSettings.readingGitConfiguration")} />
         )}
+
         {data && (
           <Disclosure title={t("profileGitSettings.globalGitConfiguration")}>
             <div className="mt-3">
@@ -402,6 +426,7 @@ function ConfigurationEntries({ entries }: { entries: GitConfigEntry[] }) {
         description: (
           <>
             {entry.scope ? `${entry.scope}, ` : ""}
+
             {entry.origin ?? t("profileGitSettings.noConfiguredSource")}
           </>
         ),
