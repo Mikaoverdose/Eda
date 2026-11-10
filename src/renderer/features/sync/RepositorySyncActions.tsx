@@ -2,7 +2,7 @@ import { HttpsAuthenticationDialog } from "./HttpsAuthenticationDialog";
 import { t } from "@shared/i18n";
 import { DirectFetchActions } from "./DirectFetchActions";
 import { useRef, useState } from "react";
-import { ArrowDown, ChevronDown } from "lucide-react";
+import { ArrowDown, ChevronDown, FastForward, GitMerge, GitPullRequestArrow } from "lucide-react";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { Button, MenuItem, AnchoredPopover, ErrorDialog } from "../../components/ui/index";
@@ -108,11 +108,11 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
             >
               {(
                 [
-                  ["ff", t("repositorySyncActions.fastForwardIfPossibleOtherwiseMerge")],
-                  ["ff-only", t("repositorySyncActions.fastForwardOnly")],
-                  ["rebase", t("repositorySyncActions.rebaseLocalCommits")],
+                  ["ff", t("repositorySyncActions.fastForwardIfPossibleOtherwiseMerge"), GitMerge],
+                  ["ff-only", t("repositorySyncActions.fastForwardOnly"), FastForward],
+                  ["rebase", t("repositorySyncActions.rebaseLocalCommits"), GitPullRequestArrow],
                 ] as const
-              ).map(([strategy, label]) => (
+              ).map(([strategy, label, Icon]) => (
                 <MenuItem
                   key={strategy}
                   onClick={() => {
@@ -120,6 +120,7 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
                     void pull(strategy);
                   }}
                 >
+                  <Icon size={13} className="shrink-0" aria-hidden="true" />
                   {label}
                 </MenuItem>
               ))}

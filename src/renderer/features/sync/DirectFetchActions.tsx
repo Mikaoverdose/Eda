@@ -2,7 +2,7 @@ import type { TransportCredentials } from "@shared/integrations/remotes";
 import { HttpsAuthenticationDialog } from "./HttpsAuthenticationDialog";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ChevronDown, RefreshCw } from "lucide-react";
+import { ChevronDown, Globe, RefreshCw, Settings } from "lucide-react";
 import { useRef, useState } from "react";
 import { openSettings } from "../../stores/shell-store";
 import { Button, ErrorDialog, MenuItem, AnchoredPopover } from "../../components/ui/index";
@@ -95,6 +95,7 @@ export function DirectFetchActions({
                   void fetch(remote.name);
                 }}
               >
+                <RefreshCw size={13} className="shrink-0" aria-hidden="true" />
                 {t("directFetchActions.fetchRemote", { name: remote.name })}
               </MenuItem>
             ))}
@@ -105,6 +106,7 @@ export function DirectFetchActions({
                 void fetch(null);
               }}
             >
+              <RefreshCw size={13} className="shrink-0" aria-hidden="true" />
               {t("directFetchActions.fetchAllRemotes")}
             </MenuItem>
 
@@ -114,6 +116,7 @@ export function DirectFetchActions({
                 openSettings("repository-fetch");
               }}
             >
+              <Settings size={13} className="shrink-0" aria-hidden="true" />
               {t("directFetchActions.fetchSettings")}
             </MenuItem>
 
@@ -123,6 +126,7 @@ export function DirectFetchActions({
                 openSettings("repository-remotes");
               }}
             >
+              <Globe size={13} className="shrink-0" aria-hidden="true" />
               {t("directFetchActions.manageRemotes")}
             </MenuItem>
           </AnchoredPopover>
