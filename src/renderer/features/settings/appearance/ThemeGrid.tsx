@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { BUILT_IN_THEMES } from "../../../styles/themes";
+import { BUILT_IN_THEMES, type Theme } from "../../../styles/themes";
 import { useId } from "react";
 import { cx, RadioCard } from "../../../components/ui/index";
 
@@ -41,17 +41,8 @@ export function ThemeGrid({
               checked={isActive}
               onChange={onChange}
             >
-              <span
-                aria-hidden="true"
-                className="flex h-7 w-10 shrink-0 overflow-hidden rounded-sm border border-border-default"
-                style={{ backgroundColor: t.preview.background }}
-              >
-                <span className="w-1/3" style={{ backgroundColor: t.preview.surface }} />
-                <span
-                  className="ml-auto mt-auto h-1.5 w-4"
-                  style={{ backgroundColor: t.preview.accent }}
-                />
-              </span>
+              <ThemePreview theme={t} compact />
+
               <span
                 className={cx(
                   "flex min-w-0 flex-1 items-center gap-2 text-sm",
@@ -66,5 +57,43 @@ export function ThemeGrid({
         },
       )}
     </div>
+  );
+}
+
+export function ThemePreview({ theme, compact = false }: { theme: Theme; compact?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-theme={theme.id}
+      data-appearance={theme.appearance}
+      className={cx(
+        "flex shrink-0 overflow-hidden rounded-sm border border-border-default",
+        compact ? "h-7 w-10" : "h-14 w-full",
+      )}
+      style={{ backgroundColor: theme.preview.background }}
+    >
+      <span className="w-1/3" style={{ backgroundColor: theme.preview.surface }} />
+
+      <span className="flex flex-1 flex-col justify-center gap-1.5 px-[8%]">
+        <span
+          className="h-1 w-3/4 rounded-full"
+          style={{ backgroundColor: theme.preview.accent }}
+        />
+
+        {!compact && (
+          <>
+            <span
+              className="h-1 w-full rounded-full"
+              style={{ backgroundColor: theme.preview.surface }}
+            />
+
+            <span
+              className="h-1 w-1/2 rounded-full"
+              style={{ backgroundColor: theme.preview.surface }}
+            />
+          </>
+        )}
+      </span>
+    </span>
   );
 }

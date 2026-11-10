@@ -17,6 +17,12 @@ describe("accent colors", () => {
     ["#ff0000", 29.2339, 0.2576833],
     ["#00ff00", 142.4953, 0.2948272],
     ["#0000ff", 264.052, 0.3132144],
+    ["#112233", 249.7316186, 0.039848312],
+    ["#5566ff", 272.5227202, 0.225225018],
+    ["#eeffee", 145.3536248, 0.028574851],
+    ["#ff00ff", 328.3634152, 0.322490988],
+    ["#ffaa77", 51.3030566, 0.120375581],
+    ["#ffff00", 109.7692361, 0.211005874],
   ] as const)("extracts the OKLCH hue and chroma from %s", (color, hue, chroma) => {
     const actual = accentComponents(color);
     expect(actual.hue).toBeCloseTo(hue, 3);
@@ -38,6 +44,12 @@ describe("accent colors", () => {
 
   it("normalizes custom hex colors without changing their channels", () => {
     expect(accentToHex("#ABCDEF")).toBe("#abcdef");
+  });
+
+  it("wraps hue angles and clamps out-of-gamut channels", () => {
+    expect(accentToHex(-120)).toBe(accentToHex(240));
+    expect(accentToHex(720)).toBe(accentToHex(0));
+    expect(accentToHex(180)).toBe("#00a089");
   });
 
   it("accepts only opaque six-digit hex colors", () => {
