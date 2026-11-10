@@ -1,3 +1,4 @@
+import { ACTION_FEEDBACK } from "@renderer/motion";
 import { errorFixture } from "../../../../helpers/error";
 import { act } from "react";
 import { useShellStore } from "@renderer/stores/shell-store";
@@ -17,12 +18,21 @@ const execute = vi.fn();
 const preference = vi.fn();
 const inspect = vi.fn();
 
+async function perform(work: () => Promise<unknown>) {
+  await act(async () => {
+    const pending = work();
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
+    await pending;
+  });
+}
+
 function Harness() {
   api = useDirectPull("repo");
   return null;
 }
 
 beforeEach(async () => {
+  vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   useAppStore.setState({
     selectedRepositoryId: "repo",
@@ -54,25 +64,26 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 it("pulls immediately using the saved default and applies the pinned upstream", async () => {
-  await act(async () => api.pull());
+  await perform(() => api.pull());
   expect(prepare).toHaveBeenCalledWith({ repositoryId: "repo", strategy: "ff-only" });
   expect(execute).toHaveBeenCalledWith("repo", "pinned");
   expect(api.message).toBe("Pull completed.");
 });
 
 it("uses the dropdown strategy for this pull without changing the default", async () => {
-  await act(async () => api.pull("rebase"));
+  await perform(() => api.pull("rebase"));
   expect(preference).not.toHaveBeenCalled();
   expect(prepare).toHaveBeenCalledWith({ repositoryId: "repo", strategy: "rebase" });
 });
 
 it("does not execute a blocked fast-forward-only pull", async () => {
   prepare.mockResolvedValue(ok({ ...prepared, blockedReason: "The branches have diverged." }));
-  await act(async () => api.pull());
+  await perform(() => api.pull());
   expect(execute).not.toHaveBeenCalled();
   expect(api.error).toContain("diverged");
 });
@@ -83,11 +94,11 @@ it("requests HTTPS credentials only after auth failure and retries with the same
       errorFixture({ kind: "auth-failed", operation: "fetch", message: "Authentication failed" }),
     ),
   );
-  await act(async () => api.pull("rebase"));
+  await perform(() => api.pull("rebase"));
   expect(api.authentication).toBe("rebase");
   expect(execute).not.toHaveBeenCalled();
   const credentials = { username: "user", password: "token" };
-  await act(async () => api.pull(api.authentication!, credentials));
+  await perform(() => api.pull(api.authentication!, credentials));
   expect(prepare).toHaveBeenLastCalledWith({
     repositoryId: "repo",
     strategy: "rebase",
@@ -103,12 +114,12 @@ it.each(["github-auth-required", "github-access-required"] as const)(
     prepare.mockResolvedValueOnce(
       err({ kind, operation: "fetch", message: "Sign in with GitHub" }),
     );
-    await act(async () => api.pull("rebase"));
+    await perform(() => api.pull("rebase"));
     expect(api.githubAuthentication).toBe("rebase");
     expect(api.githubAccessDenied).toBe(kind === "github-access-required");
     expect(api.authentication).toBeNull();
     expect(inspect).not.toHaveBeenCalled();
-    await act(async () => api.pull(api.githubAuthentication!));
+    await perform(() => api.pull(api.githubAuthentication!));
     expect(prepare).toHaveBeenLastCalledWith({ repositoryId: "repo", strategy: "rebase" });
     expect(api.githubAuthentication).toBeNull();
     expect(execute).toHaveBeenCalledOnce();
@@ -120,7 +131,7 @@ it("does not apply a pull after the selected repository changes during fetch", a
     useAppStore.setState({ selectedRepositoryId: "other" });
     return ok(prepared);
   });
-  await act(async () => api.pull());
+  await perform(() => api.pull());
   expect(execute).not.toHaveBeenCalled();
 });
 
@@ -134,7 +145,7 @@ it("does not offer HTTPS credentials for SSH authentication failures", async () 
       remotes: [{ name: "origin", fetchUrls: ["git@example.com:repo"] }],
     }),
   );
-  await act(async () => api.pull());
+  await perform(() => api.pull());
   expect(api.authentication).toBeNull();
   expect(api.error).toBe("Unlock your SSH key");
 });
@@ -156,7 +167,7 @@ it("shows the shared spinner and check inside Pull without opening a progress di
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   await act(async () => {
     finish(ok(prepared));
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
   });
   expect(pullButton.querySelector(".ui-action-visible .lucide-check")).not.toBeNull();
   expect(container.querySelector('[role="status"]')?.className).toBe("sr-only");
@@ -174,7 +185,7 @@ it("shows an inline X on failure and only opens error details when requested", a
   )!;
   await act(async () => {
     pullButton.click();
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
   });
   expect(pullButton.querySelector(".ui-action-visible .lucide-x")).not.toBeNull();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -198,7 +209,7 @@ it("allows cancelling the GitHub settings prompt without navigating or retrying 
     [...document.querySelectorAll("button")].find((item) => item.textContent === label)!;
   await act(async () => {
     button("Pull").click();
-    await new Promise((done) => setTimeout(done, 400));
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
   });
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Open Settings");
   expect(document.querySelector('[aria-label="GitHub connection"]')).toBeNull();
@@ -212,10 +223,10 @@ it("allows cancelling the GitHub settings prompt without navigating or retrying 
 
 it("does not start work for an inactive repository or without an active profile", async () => {
   useAppStore.setState({ selectedRepositoryId: "another-repo" });
-  await act(async () => api.pull("rebase"));
+  await perform(() => api.pull("rebase"));
   expect(prepare).not.toHaveBeenCalled();
   useAppStore.setState({ selectedRepositoryId: "repo", activeIdentity: null });
-  await act(async () => api.pull("rebase"));
+  await perform(() => api.pull("rebase"));
   expect(prepare).not.toHaveBeenCalled();
   expect(preference).not.toHaveBeenCalled();
   expect(api.busy).toBe(false);

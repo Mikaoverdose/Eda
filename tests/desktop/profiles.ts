@@ -366,8 +366,9 @@ try {
 
   const beta = await openRepository("beta");
 
-  await page.getByRole("textbox", { name: "Commit title" }).fill("Work beta draft");
   await page.getByLabel("Amend the previous commit").check();
+  await draftIs("initial");
+  await page.getByRole("textbox", { name: "Commit title" }).fill("Work beta draft");
   await page.getByRole("tab", { name: "alpha", exact: true }).click();
   await draftIs("Work alpha draft\n\nprivate details");
   assert.equal(await page.getByRole("button", { name: "Expand History", exact: true }).count(), 1);

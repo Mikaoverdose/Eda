@@ -1,3 +1,4 @@
+import { ACTION_FEEDBACK } from "@renderer/motion";
 import { errorFixture } from "../../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -14,11 +15,20 @@ let api: ReturnType<typeof useDirectFetch>;
 const inspect = vi.fn();
 const fetchRemote = vi.fn();
 const resolve = vi.fn();
+async function perform(work: () => Promise<unknown>) {
+  await act(async () => {
+    const pending = work();
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
+    await pending;
+  });
+}
+
 function Harness() {
   api = useDirectFetch("repo");
   return null;
 }
 beforeEach(async () => {
+  vi.useFakeTimers();
   useShellStore.setState({ request: null });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   useAppStore.setState({
@@ -56,11 +66,12 @@ afterEach(async () => {
   container.remove();
   useShellStore.setState({ request: null });
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 it("fetches the upstream remote directly with repository defaults", async () => {
-  await act(async () => api.fetch());
+  await perform(() => api.fetch());
   expect(fetchRemote).toHaveBeenCalledExactlyOnceWith({
     repositoryId: "repo",
     remote: "team",
@@ -74,7 +85,7 @@ it("fetches the upstream remote directly with repository defaults", async () => 
   expect(api.message).toBe("Fetched team.");
 });
 it("fetches all remotes sequentially", async () => {
-  await act(async () => api.fetch(null));
+  await perform(() => api.fetch(null));
   expect(fetchRemote.mock.calls.map(([request]) => request.remote)).toEqual(["origin", "team"]);
   expect(api.message).toBe("Fetched all remotes.");
 });
@@ -84,10 +95,10 @@ it("requests credentials only after an HTTPS auth failure and pins the retry", a
       errorFixture({ kind: "auth-failed", operation: "fetch", message: "Authentication failed." }),
     ),
   );
-  await act(async () => api.fetch());
+  await perform(() => api.fetch());
   expect(api.authentication).toBe("team");
   const credentials = { username: "user", password: "token" };
-  await act(async () => api.fetch(api.authentication!, credentials));
+  await perform(() => api.fetch(api.authentication!, credentials));
   expect(fetchRemote).toHaveBeenLastCalledWith({
     repositoryId: "repo",
     remote: "team",
@@ -102,20 +113,18 @@ it("does not start a transfer after switching repository while resolving default
     useAppStore.setState({ selectedRepositoryId: "other" });
     return ok({ value: false });
   });
-  await act(async () => api.fetch());
+  await perform(() => api.fetch());
   expect(fetchRemote).not.toHaveBeenCalled();
 });
 it("prevents duplicate transfers", async () => {
-  await act(async () => {
-    await Promise.all([api.fetch(), api.fetch()]);
-  });
+  await perform(() => Promise.all([api.fetch(), api.fetch()]));
   expect(fetchRemote).toHaveBeenCalledOnce();
 });
 it("stops Fetch all on failure without fetching later remotes", async () => {
   fetchRemote.mockResolvedValueOnce(
     err(errorFixture({ kind: "unknown", operation: "fetch", message: "Network unavailable." })),
   );
-  await act(async () => api.fetch(null));
+  await perform(() => api.fetch(null));
   expect(fetchRemote).toHaveBeenCalledOnce();
   expect(api.error).toBe("Network unavailable.");
 });
@@ -126,7 +135,7 @@ it("clicking the toolbar Fetch starts a transfer without opening a modal", async
   )!;
   await act(async () => {
     button.click();
-    await new Promise((done) => setTimeout(done, 400));
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
   });
   expect(fetchRemote).toHaveBeenCalledOnce();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -143,7 +152,7 @@ it.each(["github-auth-required", "github-access-required"] as const)(
       [...document.querySelectorAll("button")].find((item) => item.textContent === label)!;
     await act(async () => {
       button("Fetch").click();
-      await new Promise((done) => setTimeout(done, 400));
+      await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
     });
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Open Settings");
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(

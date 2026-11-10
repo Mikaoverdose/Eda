@@ -21,7 +21,7 @@ const button = () =>
   [...container.querySelectorAll("button")].find((item) => item.textContent === "Push")!;
 const finish = async () => {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, ACTION_FEEDBACK.minimumPending + 50));
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
   });
 };
 
@@ -50,6 +50,7 @@ const useGitHubRemote = () => {
 };
 
 beforeEach(async () => {
+  vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   useAppStore.setState({
     selectedRepositoryId: "repo",
@@ -73,6 +74,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -85,7 +87,7 @@ it("shows pending then a check, resets the outcome and supports another push", a
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(container.querySelector('[role="status"]')?.textContent).toBe("Push completed.");
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, ACTION_FEEDBACK.outcomeHold + 50));
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.outcomeHold);
   });
   expect(button().querySelector(".ui-action-visible .lucide-arrow-up")).not.toBeNull();
   await act(async () => button().click());

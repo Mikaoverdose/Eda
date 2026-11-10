@@ -58,6 +58,7 @@ async function submit() {
 }
 
 beforeEach(async () => {
+  vi.useFakeTimers();
   document.documentElement.style.setProperty("--duration-fade", "240ms");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("eda", {
@@ -100,6 +101,7 @@ afterEach(async () => {
   document.documentElement.style.removeProperty("--duration-fade");
   useAppStore.setState(app);
   usePreferencesStore.setState(preferences);
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -202,7 +204,7 @@ it("imports an editable first-name suggestion, retains inputs across steps, and 
 it("retains the emoji preset when switching back to free-form messages", async () => {
   const finishFade = async () => {
     expect(container.querySelector('.welcome-commit-layer[data-changing="true"]')).not.toBeNull();
-    await act(async () => new Promise((resolve) => window.setTimeout(resolve, 260)));
+    await act(async () => vi.advanceTimersByTimeAsync(260));
     expect(container.querySelector('.welcome-commit-layer[data-changing="true"]')).toBeNull();
   };
   const messages = () =>
