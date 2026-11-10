@@ -14,8 +14,10 @@ it("blocks shell shortcuts until the last overlay closes, then resumes them", as
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   function Example({ overlays }: { overlays: number }) {
     useShellCommands({
+      transitionLayout: (update) => update(),
       workspace: true,
       openCommands,
       openShortcuts: vi.fn(),
@@ -25,6 +27,7 @@ it("blocks shell shortcuts until the last overlay closes, then resumes them", as
       toggleSettings: vi.fn(),
       showWorkspace: vi.fn(),
     });
+
     return (
       <>
         {Array.from({ length: overlays }, (_, index) => (
@@ -35,6 +38,7 @@ it("blocks shell shortcuts until the last overlay closes, then resumes them", as
       </>
     );
   }
+
   const shortcut = async () => {
     const event = new KeyboardEvent("keydown", {
       key: "p",
@@ -43,17 +47,21 @@ it("blocks shell shortcuts until the last overlay closes, then resumes them", as
       bubbles: true,
       cancelable: true,
     });
+
     await act(async () => {
       window.dispatchEvent(event);
     });
+
     expect(event.defaultPrevented).toBe(true);
   };
+
   try {
     useAppStore.setState({
       loading: false,
       switchingIdentityId: null,
       activeIdentity: { id: "profile" } as NonNullable<typeof previousApp.activeIdentity>,
     });
+
     useSessionStore.setState({ transitioning: false });
     await act(async () => root.render(<Example overlays={2} />));
     await shortcut();

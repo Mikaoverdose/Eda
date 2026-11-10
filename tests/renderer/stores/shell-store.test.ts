@@ -1,4 +1,4 @@
-import { openSettings } from "@renderer/commands/open-settings";
+import { openSettings } from "@renderer/stores/shell-store";
 import { useShellStore } from "@renderer/stores/shell-store";
 
 afterEach(() => useShellStore.setState({ request: null }));

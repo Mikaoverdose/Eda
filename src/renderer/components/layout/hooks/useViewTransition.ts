@@ -32,13 +32,41 @@ export function afterViewTransition(effect: () => void): void {
     });
 }
 
+export function animateViewEntry(element: HTMLElement, motion: Exclude<ViewMotion, "layout">) {
+  if (prefersReducedMotion()) return;
+
+  element.dataset["navigationFallback"] = motion;
+
+  const animation = element
+    .getAnimations?.()
+    .find((item) => "animationName" in item && item.animationName === "ui-navigation-in");
+
+  let active = true;
+
+  const clear = () => {
+    if (!active) return;
+    active = false;
+    delete element.dataset["navigationFallback"];
+  };
+
+  if (animation) {
+    animation.currentTime = 0;
+    animation.play();
+    void animation.finished.then(clear, clear);
+  } else clear();
+
+  return clear;
+}
+
 export function useViewTransition() {
   const target = useRef<HTMLElement | null>(null);
   const fallbackCleanup = useRef<(() => void) | undefined>(undefined);
+
   const ref = useCallback((element: HTMLElement | null) => {
     fallbackCleanup.current?.();
     target.current = element;
   }, []);
+
   const transition = useCallback((update: () => void, motion: ViewMotion = "section") => {
     if (updating) {
       update();
@@ -72,6 +100,7 @@ export function useViewTransition() {
     }
 
     const started = performance.now();
+
     for (const region of [
       element,
       ...element.querySelectorAll<HTMLElement>("[data-navigation-fallback]"),
@@ -88,10 +117,12 @@ export function useViewTransition() {
     let oldKeyframe: string | undefined;
     let newKeyframe: string | undefined;
     const transforms = new Set<string>();
+
     const regions =
       motion === "layout"
         ? Array.from(element.querySelectorAll<HTMLElement>("[data-layout-region]"))
         : [element];
+
     const previousStyles = regions.map((region, index) => {
       const name = region.style.viewTransitionName;
       const classes = region.style.getPropertyValue("view-transition-class");
@@ -102,10 +133,12 @@ export function useViewTransition() {
 
       return { region, name, classes };
     });
+
     const oldSnapshot =
       motion === "layout"
         ? "::view-transition-old(layout-pane-0)"
         : "::view-transition-old(navigation-content)";
+
     const newSnapshot =
       motion === "layout"
         ? "::view-transition-new(layout-pane-0)"
@@ -119,8 +152,10 @@ export function useViewTransition() {
         if (classes) region.style.setProperty("view-transition-class", classes);
         else region.style.removeProperty("view-transition-class");
       }
+
       delete document.documentElement.dataset["navigationMotion"];
     };
+
     const native = document.startViewTransition(() => {
       const beforeUpdate = performance.now();
       updating = true;
@@ -133,9 +168,11 @@ export function useViewTransition() {
 
       updateMs = performance.now() - beforeUpdate;
     });
+
     const job = { transition: native, cleanup };
 
     running = job;
+
     void native.ready
       .then(() => {
         readyAt = performance.now();
@@ -172,23 +209,9 @@ export function useViewTransition() {
 
         if (!destination) return;
 
-        destination.dataset["navigationFallback"] = motion;
-
-        const clear = () => {
-          delete destination.dataset["navigationFallback"];
-          destination.removeEventListener("animationend", end);
-          destination.removeEventListener("animationcancel", end);
-          fallbackCleanup.current = undefined;
-        };
-
-        const end = (event: AnimationEvent) => {
-          if (event.target === destination) clear();
-        };
-
-        fallbackCleanup.current = clear;
-        destination.addEventListener("animationend", end);
-        destination.addEventListener("animationcancel", end);
+        fallbackCleanup.current = animateViewEntry(destination, motion);
       });
+
     void native.finished
       .catch(() => {})
       .finally(() => {

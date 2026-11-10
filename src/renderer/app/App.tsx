@@ -7,11 +7,10 @@ import { RetainedView } from "../components/layout/ViewTransition";
 import { useViewTransition } from "../components/layout/hooks/useViewTransition";
 import { TextButton } from "../components/ui/actions/TextButton";
 import { ErrorDialog } from "../components/ui/index";
-import { FirstRun } from "../features/onboarding/FirstRun";
 import { IdentityDialog } from "../features/profiles/IdentityDialog";
 import { RepositoryPicker } from "../features/repositories/RepositoryPicker";
 import { RepositoryTabs } from "../features/repositories/RepositoryTabs";
-import type { SettingsSection } from "../features/settings/Settings";
+import type { SettingsSection } from "../features/settings/settings-sections";
 import {
   showOpenedRepository,
   useRepositoryNavigation,
@@ -28,9 +27,13 @@ import { CommandPalette } from "./CommandPalette";
 import { FailureScreen } from "./RendererFailure";
 import { ShortcutHelp } from "./ShortcutHelp";
 import { Toolbar } from "./Toolbar";
-import { StartupTitlebar } from "./WindowControls";
+import { WindowTitlebar } from "./WindowControls";
 import { Workspace } from "./Workspace";
 import { WorkspaceFrame } from "./WorkspaceFrame";
+
+const FirstRun = lazy(() =>
+  import("../features/onboarding/FirstRun").then((module) => ({ default: module.FirstRun })),
+);
 
 const Settings = lazy(() =>
   import("../features/settings/Settings").then((module) => ({ default: module.Settings })),
@@ -52,6 +55,7 @@ export function App() {
   const [tour, setTour] = useState(false);
 
   const [onboarding, setOnboarding] = useState(false);
+
   useEffect(() => {
     if (!loading && identities.length === 0) setOnboarding(true);
   }, [loading, identities.length]);
@@ -62,12 +66,14 @@ export function App() {
   const requestedView = useRef(view);
   const navigation = useViewTransition();
   const onboardingTransition = useViewTransition();
+
   const closeTour = useCallback(() => {
     onboardingTransition.transition(() => {
       setTour(false);
       setOnboarding(false);
     }, "forward");
   }, [onboardingTransition.transition]);
+
   const setView = useCallback(
     (
       next:
@@ -77,12 +83,14 @@ export function App() {
       section?: SettingsSection,
     ) => {
       const target = typeof next === "function" ? next(requestedView.current) : next;
+
       if (target === requestedView.current) {
         if (section !== undefined) setSettingsSection(section);
         return;
       }
 
       requestedView.current = target;
+
       navigation.transition(
         () => {
           if (section !== undefined) setSettingsSection(section);
@@ -99,18 +107,24 @@ export function App() {
   useRepositoryNavigation(loading || switching ? undefined : activeProfileId, showWorkspace);
 
   const shellRequest = useShellStore((state) => state.request);
+
   useEffect(() => {
     if (!shellRequest) return;
+
     if (shellRequest.kind === "settings") {
       setView("settings", shellRequest.section);
     } else setTour(true);
+
     useShellStore.getState().consume(shellRequest);
   }, [shellRequest, setView]);
+
   const [pickerOpen, setPickerOpen] = useState(false);
   const [commandMode, setCommandMode] = useState<"palette" | "shortcuts" | null>(null);
   const [startupError, setStartupError] = useState<string | null>(null);
+
   const commands = useShellCommands({
     workspace: view === "repositories",
+    transitionLayout: (update) => navigation.transition(update, "layout"),
     openCommands: () => setCommandMode("palette"),
     openShortcuts: () => setCommandMode("shortcuts"),
     browse: () => {
@@ -138,7 +152,7 @@ export function App() {
   if (loading) {
     return (
       <div className="flex h-full flex-col">
-        <StartupTitlebar />
+        <WindowTitlebar />
         <div className="flex flex-1 items-center justify-center">
           <span className="text-sm text-text-tertiary">{t("app.startingEda")}</span>
         </div>
@@ -149,15 +163,19 @@ export function App() {
   if (identities.length === 0 || onboarding) {
     return (
       <div ref={onboardingTransition.ref} className="flex h-full flex-col">
-        <StartupTitlebar />
+        <WindowTitlebar />
+
         <div className="min-h-0 flex-1" inert={tour} aria-busy={tour}>
-          <FirstRun
-            onComplete={(takeTour = false) => {
-              if (takeTour) setTour(true);
-              else onboardingTransition.transition(() => setOnboarding(false), "forward");
-            }}
-          />
+          <Suspense fallback={null}>
+            <FirstRun
+              onComplete={(takeTour = false) => {
+                if (takeTour) setTour(true);
+                else onboardingTransition.transition(() => setOnboarding(false), "forward");
+              }}
+            />
+          </Suspense>
         </div>
+
         {tour && <TourHost onClose={closeTour} />}
       </div>
     );
@@ -196,6 +214,7 @@ export function App() {
       }}
     >
       {tour && <TourHost onClose={closeTour} />}
+
       <div className="contents" inert={tour}>
         <Toolbar
           onAddIdentity={() => commands.execute("profiles.create")}
@@ -210,7 +229,9 @@ export function App() {
             ) : undefined
           }
         />
+
         <AppErrorDialog />
+
         <AppNotices
           aboutOpen={view === "settings" && settingsSection === "about"}
           onReviewGitSettings={() => {
@@ -227,11 +248,13 @@ export function App() {
               {sessionError || recovery}{" "}
               {sessionError && t("app.yourInputIsStillInThisWindowSwitching")}
             </span>
+
             {sessionError && (
               <TextButton onClick={() => void useSessionStore.getState().flush()}>
                 {t("app.retrySave")}
               </TextButton>
             )}
+
             {recovery && (
               <TextButton
                 onClick={() =>
@@ -248,6 +271,7 @@ export function App() {
             )}
           </ErrorDialog>
         )}
+
         <WorkspaceFrame
           contentRef={navigation.ref}
           settings={view === "settings"}
@@ -256,6 +280,7 @@ export function App() {
           <RetainedView active={view === "repositories"}>
             <Workspace />
           </RetainedView>
+
           {view === "settings" && (
             <Suspense fallback={null}>
               <Settings
@@ -267,8 +292,10 @@ export function App() {
             </Suspense>
           )}
         </WorkspaceFrame>
+
         {pickerOpen && <RepositoryPicker onClose={() => setPickerOpen(false)} />}
         {dialogOpen && <IdentityDialog onClose={() => setDialogOpen(false)} />}
+
         {commandMode === "palette" && (
           <CommandPalette
             context={commands.context}
@@ -280,9 +307,11 @@ export function App() {
             }}
           />
         )}
+
         {commandMode === "shortcuts" && (
           <ShortcutHelp platform={commands.platform} onClose={() => setCommandMode(null)} />
         )}
+
         {switching !== null && (
           <div
             className="absolute inset-0 z-40 flex items-center justify-center bg-bg-base/70"

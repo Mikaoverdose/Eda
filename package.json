@@ -13,7 +13,8 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm run typecheck && vite build",
+    "build": "pnpm run typecheck && vite build && pnpm run bundle:check",
+    "bundle:check": "node scripts/check-renderer-bundle.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc -p tsconfig.tooling.json",
     "lint": "eslint src scripts tests *.ts --max-warnings 0",
     "test": "node --test tests/tooling/*.test.ts && vitest run",

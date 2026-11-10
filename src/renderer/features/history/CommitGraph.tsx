@@ -2,8 +2,8 @@ import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { defaultGraphColumns } from "@shared/preferences/graph-view";
 import { ArrowLeft, ArrowRight, GitCommitHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
-import { PanelControls } from "../../components/layout/PanelControls";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
 import { LoadingContent, Skeleton } from "../../components/ui/feedback/Skeleton";
@@ -12,23 +12,34 @@ import { layoutCommitPages } from "../../repository/dag-layout";
 import { ROW_HEIGHT, graphColumnWidth } from "../../repository/graph-geometry";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { useSessionStore } from "../../stores/session-store";
-import { CommitMenu, type CommitMenuTarget } from "./CommitMenu";
+import type { CommitMenuTarget } from "./CommitMenu";
 import { CommitRow } from "./CommitRow";
 import { GraphColumnsDialog } from "./GraphColumnsDialog";
-import { GraphFilterDialog } from "./GraphFilterDialog";
+
+const CommitMenu = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.CommitMenu })),
+);
+
+const GraphFilterDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.GraphFilterDialog })),
+);
 
 export function CommitGraph({ pending = false }: { pending?: boolean }) {
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
   const identityId = useRepositoryStore((state) => state.identityId);
+
   const savedColumns = useSessionStore((state) =>
     repositoryId ? state.snapshot?.session.views[repositoryId]?.graphColumns : undefined,
   );
+
   const columns = savedColumns ?? defaultGraphColumns();
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+
   const graphFilter = useSessionStore((state) =>
     repositoryId ? state.snapshot?.session.views[repositoryId]?.graphFilter : undefined,
   );
+
   const dagBoundary = useRepositoryStore((state) => state.dagBoundary);
   const hoveredRefOid = useRepositoryStore((state) => state.hoveredRefOid);
   const pages = useRepositoryStore((state) => state.pages);
@@ -47,6 +58,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
   const historyError = useRepositoryStore((state) => state.historyError);
   const panel = usePanel("graph");
   const [menu, setMenu] = useState<CommitMenuTarget | null>(null);
+
   const rows = useMemo(
     () =>
       layoutCommitPages(
@@ -55,8 +67,10 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
       ),
     [pages, dagBoundary],
   );
+
   const gutter = useMemo(() => graphColumnWidth(rows), [rows]);
   const byOid = useMemo(() => new Map(rows.map((row) => [row.commit.oid, row.commit])), [rows]);
+
   const related = useMemo(() => {
     const result = new Set<string>();
     const ancestors = hoveredRefOid ? [hoveredRefOid] : [];
@@ -119,8 +133,16 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
         }
       }}
     >
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
-        <h3 className="text-sm font-semibold text-text-secondary">{t("commitGraph.history")}</h3>
+      <PanelHeader
+        title={t("commitGraph.history")}
+        controls={{
+          name: t("commitGraph.historyLabel"),
+          state: panel.state,
+          onToggleMaximize: panel.toggleMaximize,
+          onToggleCollapse: panel.toggleCollapse,
+          collapseDirection: "up",
+        }}
+      >
         <IconButton
           size="xs"
           aria-label={t("commitGraph.backInSelectionHistory")}
@@ -129,6 +151,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
           onClick={() => void navigate(-1)}
           icon={<ArrowLeft size={14} aria-hidden="true" />}
         />
+
         <IconButton
           size="xs"
           aria-label={t("commitGraph.forwardInSelectionHistory")}
@@ -137,6 +160,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
           onClick={() => void navigate(1)}
           icon={<ArrowRight size={14} aria-hidden="true" />}
         />
+
         <TextButton
           aria-label={t("commitGraph.jumpToHead")}
           disabled={pending || !status?.branch.oid}
@@ -147,11 +171,13 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
         >
           {t("commitGraph.head")}
         </TextButton>
+
         <TextButton disabled={pending} onClick={() => setFilterOpen(true)}>
           {graphFilter?.refs.length || graphFilter?.hiddenRefs.length
             ? t("commitGraph.filteredGraph")
             : t("commitGraph.allBranches")}
         </TextButton>
+
         <span className="mono ml-auto text-xs text-text-tertiary">
           {pending ? (
             <Skeleton className="w-16" />
@@ -160,26 +186,24 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
           ) : (
             t("commitGraph.noCommits")
           )}
+
           {pending || nextOffset === null ? "" : "+"}
         </span>
+
         <TextButton disabled={pending} onClick={() => setColumnsOpen(true)}>
           {t("commitGraph.columns")}
         </TextButton>
-        <PanelControls
-          name={t("commitGraph.historyLabel")}
-          state={panel.state}
-          onToggleMaximize={panel.toggleMaximize}
-          onToggleCollapse={panel.toggleCollapse}
-          collapseDirection="up"
-        />
-      </header>
+      </PanelHeader>
+
       <div
         role="row"
         className="app-surface-chrome flex h-6 shrink-0 items-center border-b border-border-subtle bg-bg-surface text-xs font-medium uppercase tracking-wide text-text-tertiary"
       >
         <span className="shrink-0" style={{ width: gutter }} />
+
         <div className="flex min-w-0 flex-1 items-center gap-3 pr-3">
           <span className="min-w-0 flex-1 truncate">{t("commitGraph.commit")}</span>
+
           {columns
             .filter((column) => column.visible)
             .map((column) => (
@@ -193,6 +217,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
             ))}
         </div>
       </div>
+
       {pending ? (
         <LoadingContent label={t("commitGraph.loadingHistory")} rows={12} />
       ) : (
@@ -210,9 +235,11 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
               <p>{errorAction(historyError)}</p>
             </ErrorDialog>
           )}
+
           {historyTip && (
             <p className="px-3 py-1 text-xs text-text-tertiary">
               {t("commitGraph.ancestryOf", { historyTip: historyTip.slice(0, 8) })}
+
               <TextButton
                 className="underline"
                 onClick={() => void useRepositoryStore.getState().refresh()}
@@ -221,11 +248,13 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
               </TextButton>
             </p>
           )}
+
           {rows.some((row) => row.topologyUnavailable) && (
             <p role="status" className="px-3 py-1 text-xs text-git-modified">
               {t("commitGraph.thisHistoryExceeds512SimultaneousGraphLanesParentRelationships")}
             </p>
           )}
+
           {rows.length === 0 && !historyError && (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-5 text-sm text-text-tertiary">
               <GitCommitHorizontal size={22} />
@@ -233,6 +262,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
               <p className="text-xs">{t("commitGraph.stageChangesToCreateTheFirstCommit")}</p>
             </div>
           )}
+
           <VirtualRows
             scrollKey={`${identityId}:${repositoryId}:graph`}
             horizontalScroll={false}
@@ -264,10 +294,19 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
               />
             )}
           />
-          {menu && <CommitMenu target={menu} onClose={() => setMenu(null)} />}
-          {filterOpen && repositoryId && (
-            <GraphFilterDialog repositoryId={repositoryId} onClose={() => setFilterOpen(false)} />
+
+          {menu && (
+            <Suspense fallback={null}>
+              <CommitMenu target={menu} onClose={() => setMenu(null)} />
+            </Suspense>
           )}
+
+          {filterOpen && repositoryId && (
+            <Suspense fallback={null}>
+              <GraphFilterDialog repositoryId={repositoryId} onClose={() => setFilterOpen(false)} />
+            </Suspense>
+          )}
+
           {columnsOpen && repositoryId && (
             <GraphColumnsDialog
               repositoryId={repositoryId}

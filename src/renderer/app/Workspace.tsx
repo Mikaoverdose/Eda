@@ -1,33 +1,29 @@
 import { errorText } from "@shared/error-codes";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { CollapsiblePanel } from "../components/layout/CollapsiblePanel";
 import { usePanel } from "../components/layout/hooks/usePanel";
 import { Split } from "../components/layout/Split";
 import { LayoutTransition, ViewTransition } from "../components/layout/ViewTransition";
-import { Button, Dialog } from "../components/ui/index";
+import { Button, Dialog, StateMessage } from "../components/ui/index";
 import { ChangesPanel } from "../features/changes/ChangesPanel";
 import { CommitBox } from "../features/changes/CommitBox";
-import { DiscardDialog } from "../features/changes/DiscardDialog";
 import { DiffViewer } from "../features/diff/DiffViewer";
 import { CommitChangesPanel } from "../features/history/CommitChangesPanel";
 import { CommitGraph } from "../features/history/CommitGraph";
-import { CommitMenu } from "../features/history/CommitMenu";
-import { GraphFilterDialog } from "../features/history/GraphFilterDialog";
-import { ManageReferencesDialog } from "../features/references/ManageReferencesDialog";
 import { ReferenceSidebar } from "../features/references/ReferenceSidebar";
 import { MissingRepository } from "../features/repositories/MissingRepository";
 import { RepositoryHome } from "../features/repositories/RepositoryHome";
 import { RepositoryOverview } from "../features/repositories/RepositoryOverview";
-import { StashesDialog } from "../features/stashes/StashesDialog";
-import { RemotesDialog } from "../features/sync/RemotesDialog";
-import { HistoryRecoveryDialog } from "../features/workflows/HistoryRecoveryDialog";
-import { UndoRedoDialog } from "../features/workflows/UndoRedoDialog";
 import { useAppStore } from "../stores/app-store";
 import { useLayoutStore, type PanelId } from "../stores/layout-store";
 import { useRepositoryStore } from "../stores/repository-store";
+
+const WorkspaceDialogs = lazy(() =>
+  import("./WorkspaceDialogs").then((module) => ({ default: module.WorkspaceDialogs })),
+);
 
 const PANELS: readonly PanelId[] = ["graph", "diff", "rail"];
 
@@ -46,32 +42,42 @@ export function Workspace() {
 
 function WorkspaceContent() {
   const [narrow, setNarrow] = useState(() => window.innerWidth < 1100);
+
   const [drawer, setDrawer] = useState<{ owner: string; kind: "references" | "commit" } | null>(
     null,
   );
+
   const repositories = useAppStore((state) => state.repositories);
   const selectedId = useAppStore((state) => state.selectedRepositoryId);
   const active = useAppStore((state) => state.activeIdentity);
+
   const phase = useRepositoryStore((state) =>
     state.repositoryId === selectedId && state.identityId === active?.id ? state.phase : "loading",
   );
+
   const loading = phase === "loading" || phase === "idle";
   const error = useRepositoryStore((state) => state.error);
+
   const commandDialog = useRepositoryStore((state) =>
     state.repositoryId === selectedId && state.identityId === active?.id
       ? state.commandDialog
       : null,
   );
+
   const closeCommand = () => useRepositoryStore.setState({ commandDialog: null });
   const watchWarning = useRepositoryStore((state) => state.watchWarning);
+
   const writeUnavailable = useRepositoryStore((state) =>
     state.status?.capabilities?.write === false ? state.status.capabilities.reason : undefined,
   );
+
   const open = useRepositoryStore((state) => state.open);
   const refresh = useRepositoryStore((state) => state.refresh);
+
   const [graphVisible, diffVisible, railVisible] = useLayoutStore(
     useShallow((state) => PANELS.map(state.isVisible)),
   );
+
   const graphPanel = usePanel("graph");
   const diffPanel = usePanel("diff");
   const railPanel = usePanel("rail");
@@ -97,6 +103,7 @@ function WorkspaceContent() {
       useRepositoryStore.getState().clear();
       return;
     }
+
     void open(selected.id, active.id, selected.available);
   }, [active, open, selected]);
 
@@ -134,62 +141,30 @@ function WorkspaceContent() {
           )}
         </Dialog>
       )}
-      {commandDialog?.kind === "repository.graph" && (
-        <GraphFilterDialog
-          key={`${active?.id}:${selected.id}`}
-          repositoryId={selected.id}
-          onClose={closeCommand}
-        />
-      )}
-      {commandDialog?.kind === "repository.references" && (
-        <ManageReferencesDialog
-          key={`${active?.id}:${selected.id}`}
-          repositoryId={selected.id}
-          onClose={closeCommand}
-        />
-      )}
-      {commandDialog?.kind === "repository.stashes" && (
-        <StashesDialog key={owner} repositoryId={selected.id} onClose={closeCommand} />
-      )}
-      {commandDialog?.kind === "repository.remotes" && (
-        <RemotesDialog
-          key={`${active?.id}:${selected.id}`}
-          repositoryId={selected.id}
-          onClose={closeCommand}
-        />
-      )}
-      {commandDialog?.kind === "repository.recovery" && (
-        <DiscardDialog
-          key={`${active?.id}:${selected.id}`}
-          repositoryId={selected.id}
-          paths={null}
-          onClose={closeCommand}
-        />
-      )}
-      {commandDialog?.kind === "repository.historyRecovery" && (
-        <HistoryRecoveryDialog key={owner} repositoryId={selected.id} onClose={closeCommand} />
-      )}
-      {commandDialog?.kind === "repository.undoRedo" && (
-        <UndoRedoDialog key={owner} repositoryId={selected.id} onClose={closeCommand} />
-      )}
-      {commandDialog?.oid &&
-        (commandDialog.kind === "repository.createBranch" ||
-          commandDialog.kind === "repository.createTag") && (
-          <CommitMenu
-            key={`${active?.id}:${selected.id}`}
-            target={{ oid: commandDialog.oid, x: window.innerWidth / 2 - 120, y: 100 }}
-            initialMode={commandDialog.kind === "repository.createBranch" ? "branch" : "tag"}
+
+      {commandDialog && (
+        <Suspense fallback={null}>
+          <WorkspaceDialogs
+            key={owner}
+            command={commandDialog}
+            repositoryId={selected.id}
             onClose={closeCommand}
           />
-        )}
+        </Suspense>
+      )}
+
       {phase === "missing" && <MissingRepository key={selected.id} repository={selected} />}
+
       {phase === "error" && (
-        <WorkspaceState
+        <StateMessage
+          tone="error"
+          className="min-h-0 flex-1"
           title={t("workspace.repositoryCouldNotBeRead")}
-          detail={errorMessage(error, errorText("workspace.anUnexpectedReadErrorOccurred"))}
-          action={() => void refresh()}
+          description={errorMessage(error, errorText("workspace.anUnexpectedReadErrorOccurred"))}
+          action={<Button onClick={() => void refresh()}>{t("workspace.tryAgain")}</Button>}
         />
       )}
+
       {(loading || phase === "ready") && (
         <>
           <RepositoryOverview
@@ -198,16 +173,19 @@ function WorkspaceContent() {
             repository={selected}
             {...(!railVisible && { onOpenCommit: () => setDrawer({ owner, kind: "commit" }) })}
           />
+
           {!loading && watchWarning && (
             <p role="status" className="px-3 py-1 text-xs text-git-modified">
               {watchWarning}
             </p>
           )}
+
           {!loading && writeUnavailable && (
             <p role="status" className="px-3 py-1 text-xs text-git-modified">
               {writeUnavailable}
             </p>
           )}
+
           <div className="flex min-h-0 flex-1">
             <ReferenceSidebar
               key={`${active?.id}:${selected.id}`}
@@ -216,6 +194,7 @@ function WorkspaceContent() {
               pending={loading}
               onExpand={() => setDrawer({ owner, kind: "references" })}
             />
+
             <Split
               direction="horizontal"
               className="flex-1"
@@ -277,30 +256,6 @@ function WorkspaceContent() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function WorkspaceState({
-  title,
-  detail,
-  action,
-}: {
-  title: string;
-  detail: string;
-  action?: () => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-      <div className="max-w-[42ch] text-center">
-        <h3 className="text-base font-semibold">{title}</h3>
-        <p className="mt-2 text-sm text-text-tertiary">{detail}</p>
-        {action && (
-          <Button variant="secondary" className="mt-4" onClick={action}>
-            {t("workspace.tryAgain")}
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

@@ -9,9 +9,10 @@ import {
   type Ref,
   type ReactNode,
 } from "react";
-import { LayoutMotion } from "./layout-motion-context";
+import { LayoutMotion } from "./hooks/useLayoutTransition";
 import {
   hasActiveViewTransition,
+  animateViewEntry,
   useViewTransition,
   type ViewMotion,
 } from "./hooks/useViewTransition";
@@ -43,25 +44,7 @@ export function ViewTransition({
     if (!target || hasActiveViewTransition() || prefersReducedMotion()) return;
     if (target.parentElement?.closest("[data-navigation-fallback]")) return;
 
-    target.dataset["navigationFallback"] = motion;
-
-    const animation = target
-      .getAnimations?.()
-      .find((item) => "animationName" in item && item.animationName === "ui-navigation-in");
-    let active = true;
-    const clear = () => {
-      if (!active) return;
-      active = false;
-      delete target.dataset["navigationFallback"];
-    };
-
-    if (animation) {
-      animation.currentTime = 0;
-      animation.play();
-      void animation.finished.then(clear, clear);
-    } else clear();
-
-    return clear;
+    return animateViewEntry(target, motion);
   }, [viewKey, motion]);
 
   return createElement(Element, { ...props, ref: element });

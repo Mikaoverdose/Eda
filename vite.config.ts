@@ -19,6 +19,7 @@ function devElectronEnv(): Record<string, string> {
 export default defineConfig(async ({ command }) => {
   await Promise.all([prepareGit(), prepareComponentInventory()]);
   const buildInfo = readBuildInfo();
+
   return {
     root: resolve("./src/renderer"),
     server: { host: "127.0.0.1" },
@@ -39,6 +40,7 @@ export default defineConfig(async ({ command }) => {
               env: devElectronEnv(),
               stdio: ["inherit", "inherit", "pipe", "ipc"],
             });
+
             (process as NodeJS.Process & { electronApp?: ChildProcess }).electronApp?.stderr
               ?.pipe(electronStderr(process.env["EDA_CHROMIUM_DIAGNOSTICS"] === "1"))
               .pipe(process.stderr, { end: false });
@@ -73,6 +75,14 @@ export default defineConfig(async ({ command }) => {
     build: {
       outDir: resolve("./dist/renderer"),
       emptyOutDir: true,
+      manifest: true,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [{ name: "messages", test: /[\\/]shared[\\/]locales[\\/]/ }],
+          },
+        },
+      },
     },
   };
 });

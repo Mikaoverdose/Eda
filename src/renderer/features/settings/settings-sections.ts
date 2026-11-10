@@ -1,0 +1,184 @@
+import { t } from "@shared/i18n";
+import {
+  FlaskConical,
+  FolderGit2,
+  GitBranch,
+  Info,
+  KeyRound,
+  Monitor,
+  Palette,
+  PanelsTopLeft,
+  Plug,
+  SlidersHorizontal,
+  Trash2,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react";
+
+export type SettingsSection =
+  | "profiles"
+  | "preferences"
+  | "repositories"
+  | "credentials"
+  | "global-git"
+  | "global"
+  | "application"
+  | "about"
+  | "workspace-application"
+  | "git"
+  | "repository-sync"
+  | "repository-fetch"
+  | "repository-remotes"
+  | "repository-pull"
+  | "repository-git"
+  | "integrations"
+  | "debug"
+  | "debug-states"
+  | "debug-failures"
+  | "debug-reset";
+
+export const SETTINGS_SECTIONS: {
+  id: SettingsSection;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  group: "global" | "profile" | "repository" | "debug";
+  keywords: string;
+}[] = [
+  {
+    id: "global",
+    keywords: t("settings.globalThemeAppearanceDarkLightAccentColorTint"),
+    title: t("settings.appearance"),
+    description: t("settings.chooseThemesAccentColorInterfaceScaleAndMotion"),
+    icon: Palette,
+    group: "global",
+  },
+  {
+    id: "profiles",
+    keywords: t("settings.nameEmailAuthorIdentityAvatarDuplicateDeletePathRules"),
+    title: t("settings.profiles"),
+    description: t("settings.manageCommitIdentitiesRepositoryAccessAndSavedSessions"),
+    icon: UsersRound,
+    group: "global",
+  },
+  {
+    id: "application",
+    keywords: t("settings.globalExternalEditorExecutableMergeToolArgumentsGraphics"),
+    title: t("settings.application"),
+    description: t("settings.defaultToolsForYourProfilesAndApplicationGraphics"),
+    icon: Monitor,
+    group: "global",
+  },
+  {
+    id: "global-git",
+    keywords: t("settings.globalFetchBackgroundIntervalGitSyncAuthorSigning"),
+    title: t("settings.git"),
+    description: t("settings.configureGitSynchronizationAndTheGitInstallationUsedByEda"),
+    icon: GitBranch,
+    group: "global",
+  },
+  {
+    id: "about",
+    keywords: `${t("settings.versionBuildCommitHashDirtyMaintainerYuzuZensai")} ${t("settings.aboutSettings.developerSettings")}`,
+    title: t("settings.about"),
+    description: t("settings.versionInformationThePeopleBehindEdaAndItsLicense"),
+    icon: Info,
+    group: "global",
+  },
+  {
+    id: "preferences",
+    keywords: t("settings.profileWorkspaceThemeAppearanceDarkLightNordAccent"),
+    title: t("settings.appearance"),
+    description: t("settings.customizeThemesAccentColorScaleAndMotionForThisProfile"),
+    icon: Palette,
+    group: "profile",
+  },
+  {
+    id: "workspace-application",
+    keywords: t("settings.profileWorkspaceApplicationExternalEditorMergeToolInheritance"),
+    title: t("settings.application"),
+    description: t("settings.chooseAnEditorAndMergeToolForThisProfileOrFollowGlobalSettings"),
+    icon: Monitor,
+    group: "profile",
+  },
+  {
+    id: "repositories",
+    keywords: t("settings.membershipShareMoveFolderPathRulesProfileRepository"),
+    title: t("settings.repositories"),
+    description: t("settings.manageTheLocalRepositoryFoldersListedInThisProfile"),
+    icon: FolderGit2,
+    group: "profile",
+  },
+  {
+    id: "credentials",
+    keywords: t("settings.sShgpgSigningKeyPassphraseFingerprintAgentGenerate"),
+    title: t("settings.credentialsSigning"),
+    description: t("settings.sshKeysAndCommitSigningForTheActiveProfile"),
+    icon: KeyRound,
+    group: "profile",
+  },
+  {
+    id: "git",
+    keywords: t("settings.profileAuthorEmailNameSigningSyncGitconfigScope"),
+    title: t("settings.gitConfiguration"),
+    description: t("settings.manageThisProfileSGitIdentityGlobalSynchronization"),
+    icon: GitBranch,
+    group: "profile",
+  },
+  {
+    id: "integrations",
+    keywords: t("settings.providerAccountGitHubGitLabBitbucketAzureTokenProfileOffline"),
+    title: t("settings.integrations"),
+    description: t("settings.connectTheServicesWhereYourTeamWorks"),
+    icon: Plug,
+    group: "profile",
+  },
+  {
+    id: "repository-sync",
+    title: t("settings.sync"),
+    description: t("settings.manageRemotesBackgroundFetchAndPullBehaviorForThisRepository"),
+    icon: GitBranch,
+    group: "repository",
+    keywords: t("settings.fetchBackgroundIntervalPruneTagsAutomaticRemotesOrigin"),
+  },
+  {
+    id: "repository-git",
+    keywords: t("settings.repositoryCommitLocalFolderCheckoutAuthorEmailName"),
+    title: t("settings.commit"),
+    description: t("settings.configureCommitIdentityAndSigningForTheSelectedRepository"),
+    icon: GitBranch,
+    group: "repository",
+  },
+  {
+    id: "debug",
+    keywords: t("settings.debugComponentsGalleryDesignSystemControlsButtonsInputs"),
+    title: t("settings.components"),
+    description: t("settings.previewTheSharedInterfaceComponentsAndTheirInteractionStates"),
+    icon: PanelsTopLeft,
+    group: "debug",
+  },
+  {
+    id: "debug-states",
+    keywords: t("settings.stateSimulations.keywords"),
+    title: t("settings.stateSimulations.title"),
+    description: t("settings.stateSimulations.sectionDescription"),
+    icon: SlidersHorizontal,
+    group: "debug",
+  },
+  {
+    id: "debug-failures",
+    keywords: t("settings.debugResilienceTestSimulateCrashRuntimeErrorPromise"),
+    title: t("settings.resilienceTesting"),
+    description: t("settings.triggerErrorsAndCrashesToTestDiagnosticsAndRecovery"),
+    icon: FlaskConical,
+    group: "debug",
+  },
+  {
+    id: "debug-reset",
+    keywords: t("settings.debugResetDeleteClearAllDataRestartOnboardingFactorySettings"),
+    title: t("settings.resetAppData"),
+    description: t("settings.startFreshWithEda"),
+    icon: Trash2,
+    group: "debug",
+  },
+];
