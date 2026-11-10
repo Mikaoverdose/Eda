@@ -5,6 +5,7 @@ import { readRegularFile } from "../../filesystem/read-regular-file";
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { RepositoryTrustStore } from "../../persistence/repository-trust-store";
+import type { RepositoryVolumeIdentity } from "./repository-volume";
 
 const missing = (error: unknown) => {
   const code = (error as NodeJS.ErrnoException).code;
@@ -27,7 +28,7 @@ async function pointer(path: string, prefix = "") {
   return target;
 }
 
-async function metadata(root: string, bare: boolean) {
+async function metadata(root: string, bare: boolean, volumes: RepositoryVolumeIdentity) {
   const marker = bare ? root : join(root, ".git");
   const entry = await lstat(marker);
   if (!entry.isDirectory() && (!entry.isFile() || bare)) throw refused();
@@ -41,7 +42,8 @@ async function metadata(root: string, bare: boolean) {
     [root, gitDir, commonDir].map(async (path) => {
       const info = await stat(path, { bigint: true });
       if (!info.isDirectory()) throw refused();
-      return [path, String(info.dev), String(info.ino), String(info.birthtimeNs)];
+      const device = await volumes.identify(path, info.dev);
+      return [path, device, String(info.ino), String(info.birthtimeNs)];
     }),
   );
   return { root, gitDir, commonDir, fingerprint: JSON.stringify(ids) };
@@ -52,6 +54,7 @@ export class RepositoryTrust {
     private readonly store: RepositoryTrustStore,
     private readonly confirm: (path: string, source?: string) => Promise<boolean>,
     readonly neutralDirectory: string,
+    private readonly volumes: RepositoryVolumeIdentity,
   ) {}
 
   async findRoot(path: string) {
@@ -79,10 +82,12 @@ export class RepositoryTrust {
   }
 
   async authorize(root: string, bare = false) {
-    const record = await metadata(await realpath(root), bare);
+    const record = await metadata(await realpath(root), bare, this.volumes);
     if (this.store.matches(record.root, record.fingerprint)) return;
     if (!(await this.confirm(record.root))) throw refused();
-    if ((await metadata(await realpath(root), bare)).fingerprint !== record.fingerprint)
+    if (
+      (await metadata(await realpath(root), bare, this.volumes)).fingerprint !== record.fingerprint
+    )
       throw refused();
     this.store.remember(record.root, record.fingerprint);
   }
@@ -92,13 +97,13 @@ export class RepositoryTrust {
   }
 
   async rememberCreated(path: string) {
-    const record = await metadata(await realpath(path), false);
+    const record = await metadata(await realpath(path), false, this.volumes);
     this.store.remember(record.root, record.fingerprint);
   }
 
   async checked(root: string) {
     try {
-      const record = await metadata(await realpath(root), false);
+      const record = await metadata(await realpath(root), false, this.volumes);
       if (!this.store.matches(record.root, record.fingerprint)) throw refused();
       return record;
     } catch (error) {

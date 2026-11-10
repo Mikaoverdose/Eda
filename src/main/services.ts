@@ -32,6 +32,7 @@ import { ExternalMergeTool } from "./git/external-merge-tool";
 import { GitService } from "./git/git-service";
 import { GpgKeyService } from "./git/security/gpg-keys";
 import { RepositoryTrust } from "./git/security/repository-trust";
+import { RepositoryVolumeIdentity } from "./git/security/repository-volume";
 import { SshAgent } from "./git/security/ssh-agent";
 import { SshHostTrustRunner } from "./git/security/ssh-host-trust";
 import { IdentityManager } from "./identity/identity-manager";
@@ -165,6 +166,7 @@ export async function createServices(): Promise<Services> {
         return result.response === 1;
       },
       neutralDirectory,
+      new RepositoryVolumeIdentity(runner),
     );
 
     const git = new GitService(transportRunner, engine, transportEnvironment, operations, trust);
