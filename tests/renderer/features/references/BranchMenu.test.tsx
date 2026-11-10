@@ -45,7 +45,17 @@ it("keeps keyboard checkout within rendered branches and finds omitted branches 
       identityId: "profile",
       phase: "ready",
       writing: false,
-      status: null,
+      status: {
+        branch: {
+          head: "main",
+          upstream: "origin/main",
+          ahead: 1,
+          behind: 0,
+          detached: false,
+          unborn: false,
+        },
+        changes: [],
+      },
       refresh: vi.fn(async () => {}),
     });
 
@@ -63,6 +73,9 @@ it("keeps keyboard checkout within rendered branches and finds omitted branches 
     const open = async () =>
       act(async () => container.querySelector<HTMLButtonElement>("button")!.click());
     await open();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Tracking origin/main",
+    );
     let input = document.querySelector<HTMLInputElement>("input")!;
     expect(document.querySelectorAll("li.group\\/branch")).toHaveLength(200);
 
@@ -77,6 +90,13 @@ it("keeps keyboard checkout within rendered branches and finds omitted branches 
     expect(checkoutBranch).toHaveBeenLastCalledWith({ repositoryId: "repo", name: "branch-199" });
 
     await open();
+    await act(async () => useRepositoryStore.setState({ status: null }));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "No upstream configured",
+    );
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+      "Tracking origin/main",
+    );
     input = document.querySelector<HTMLInputElement>("input")!;
 
     await act(async () => {

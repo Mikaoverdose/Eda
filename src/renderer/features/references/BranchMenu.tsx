@@ -34,6 +34,7 @@ export function BranchMenu({ head }: { head: string }) {
   const dispatch = repositoryCommandDispatcher(commandContext);
   const commandUnavailable = repositoryCommandReason(commandContext);
   const refresh = useRepositoryStore((state) => state.refresh);
+  const upstream = useRepositoryStore((state) => state.status?.branch.upstream);
   const [open, setOpen] = useState(false);
   const [tracking, setTracking] = useState(false);
   const [branches, setBranches] = useState<BranchSummary[]>([]);
@@ -233,6 +234,14 @@ export function BranchMenu({ head }: { head: string }) {
           <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
 
           <div className="shrink-0 border-t border-border-subtle p-1.5">
+            <p
+              className="truncate px-2 py-1 text-xs text-text-tertiary"
+              title={upstream ?? undefined}
+            >
+              {upstream
+                ? t("repositoryOverview.tracking", { upstream })
+                : t("repositoryOverview.noUpstreamConfigured")}
+            </p>
             <Button
               size="sm"
               variant="ghost"

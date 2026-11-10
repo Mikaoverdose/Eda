@@ -157,12 +157,19 @@ try {
 
   const overview = page.getByLabel("Repository overview", { exact: true });
 
-  assert.match(await overview.innerText(), /Tracking origin\/main/);
+  assert.doesNotMatch(await overview.innerText(), /Tracking origin\/main/);
 
   assert.equal(
     await overview.getByTitle("Commits ahead of the locally known upstream").innerText(),
     "1",
   );
+
+  await overview.getByRole("button", { name: "On branch main. Switch or create a branch" }).click();
+  await page
+    .getByRole("dialog", { name: "Branches", exact: true })
+    .getByText("Tracking origin/main")
+    .waitFor();
+  await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Staged file.txt, status M", exact: true }).waitFor();
   await page.getByRole("button", { name: "Unstaged main.txt, status M", exact: true }).waitFor();

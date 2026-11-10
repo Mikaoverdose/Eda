@@ -3,7 +3,7 @@ import type { RepositorySummary } from "@shared/repository/repository";
 import { ArrowDown, ArrowUp, CircleAlert, GitBranch } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Skeleton } from "../../components/ui/feedback/Skeleton";
-import { RefreshButton, TextButton } from "../../components/ui/index";
+import { cx, RefreshButton, TextButton } from "../../components/ui/index";
 import { categorizeChanges } from "../../repository/working-changes";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { BranchMenu } from "../references/BranchMenu";
@@ -77,13 +77,12 @@ export function RepositoryOverview({
             <Skeleton className="w-32" />
           ) : branch?.upstream ? (
             <>
-              <span title={branch.upstream} className="max-w-48 truncate">
-                {t("repositoryOverview.tracking", { upstream: branch.upstream })}
-              </span>
-
               <span
                 title={t("repositoryOverview.commitsAheadOfTheLocallyKnownUpstream")}
-                className="flex shrink-0 items-center gap-1"
+                className={cx(
+                  "flex shrink-0 items-center gap-1",
+                  branch.ahead > 0 && "text-git-added",
+                )}
               >
                 <ArrowUp size={12} />
                 {branch.ahead}
@@ -91,7 +90,10 @@ export function RepositoryOverview({
 
               <span
                 title={t("repositoryOverview.commitsBehindTheLocallyKnownUpstream")}
-                className="flex shrink-0 items-center gap-1"
+                className={cx(
+                  "flex shrink-0 items-center gap-1",
+                  branch.behind > 0 && "text-git-modified",
+                )}
               >
                 <ArrowDown size={12} />
                 {branch.behind}
