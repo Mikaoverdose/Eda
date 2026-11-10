@@ -16,7 +16,7 @@ vi.mock("electron", () => ({
   dialog: { showMessageBox: recovery.showMessageBox, showErrorBox: recovery.showErrorBox },
   session: { defaultSession: { clearStorageData: recovery.clearStorageData } },
 }));
-vi.mock("@main/application/reset-data", () => ({ clearStartupData: recovery.clearStartupData }));
+vi.mock("@main/persistence/reset-data", () => ({ clearStartupData: recovery.clearStartupData }));
 beforeEach(() => {
   for (const mock of Object.values(recovery)) mock.mockReset();
   recovery.showMessageBox.mockResolvedValue({ response: 0 });

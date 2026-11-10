@@ -1,6 +1,6 @@
 import { readdirSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { Database } from "../persistence/types";
+import type { Database } from "./types";
 
 export function clearDatabase(db: Database): void {
   const path = db.raw.location();

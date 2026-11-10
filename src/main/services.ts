@@ -1,3 +1,6 @@
+import { RepositoryTrustStore } from "./persistence/repository-trust-store";
+import { RepositoryMemberships } from "./persistence/repository-memberships";
+import { ProfileRepository } from "./persistence/profile-repository";
 import { errorText } from "@shared/error-codes";
 import { PACKAGE_MANAGER_NAMES, type InstallationInfo } from "@shared/application";
 import { GitError } from "@shared/errors";
@@ -12,7 +15,7 @@ import { createVelopackUpdater, type VelopackUpdater } from "./application/velop
 import { detectInstallation } from "./application/installation";
 import { HomebrewUpdater } from "./application/homebrew-updater";
 import { checkReleaseFeed } from "./application/release-feed";
-import { clearDatabase } from "./application/reset-data";
+import { clearDatabase } from "./persistence/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
 import { UpdateService } from "./application/update-service";
 import { AvatarCache } from "./avatars/avatar-cache";
@@ -144,7 +147,7 @@ export async function createServices(): Promise<Services> {
     await mkdir(neutralDirectory, { recursive: true, mode: 0o700 });
 
     const trust = new RepositoryTrust(
-      db,
+      new RepositoryTrustStore(db),
       async (path, source) => {
         const result = await dialog.showMessageBox({
           type: "warning",
@@ -168,7 +171,12 @@ export async function createServices(): Promise<Services> {
 
     const identities = new IdentityRepository(db, preferences);
     const identity = new IdentityManager(identities, git, preferences);
-    const repositories = new RepositoryManager(db, git, identity, identities);
+    const repositories = new RepositoryManager(
+      new RepositoryMemberships(db),
+      git,
+      identity,
+      identities,
+    );
     const secrets = await KeychainSecretStore.create(vaultPathFor(app.getPath("userData")));
     const ssh = new SshService(transportRunner, undefined, transportEnvironment, sshAgent);
     const credentials = new CredentialService(identities, secrets, ssh);
@@ -206,7 +214,13 @@ export async function createServices(): Promise<Services> {
 
     const sessionStore = new ProfileSessionRepository(db);
     const sessions = new ProfileSessions(identity, sessionStore);
-    const profiles = new ProfileService(db, identities, identity, sessionStore, secrets);
+    const profiles = new ProfileService(
+      new ProfileRepository(db, identities, sessionStore),
+      identities,
+      identity,
+      sessionStore,
+      secrets,
+    );
     const workflows = new WorkflowService(git, repositories, writer, identity, journal, recovery);
 
     const rebase = new RebaseService(

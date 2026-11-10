@@ -1,3 +1,4 @@
+import { RepositoryMemberships } from "@main/persistence/repository-memberships";
 import { errorFixture } from "../../../helpers/error";
 import { GitError } from "@shared/errors";
 import { FetchHistoryRepository } from "@main/persistence/fetch-history-repository";
@@ -71,7 +72,12 @@ async function setup(
   identities.setActiveId(profile.id);
 
   const identity = new IdentityManager(identities, source.git);
-  const repositories = new RepositoryManager(db, source.git, identity, identities);
+  const repositories = new RepositoryManager(
+    new RepositoryMemberships(db),
+    source.git,
+    identity,
+    identities,
+  );
   const operations = new OperationManager(new OperationRepository(db));
   const writer = new RepositoryWriter(source.git, repositories, identity, identities, operations);
 

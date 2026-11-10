@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { applyMigrations } from "@main/persistence/migrate";
 import initialSql from "@main/persistence/migrations/20261030212245_initial_schema/migration.sql?raw";
 import { openDatabase } from "@main/persistence/database";
-import { clearDatabase } from "@main/application/reset-data";
+import { clearDatabase } from "@main/persistence/reset-data";
 import { expect, it } from "vitest";
 
 it("wipes every user table but preserves migrations and a usable fresh database", async () => {
@@ -78,7 +78,7 @@ it("removes generated pre-upgrade backups while preserving unrelated files", asy
 
 it("recovers from an unusable database without opening it and preserves repository and SSH key files", async () => {
   const { mkdir, readFile } = await import("node:fs/promises");
-  const { clearStartupData } = await import("@main/application/reset-data");
+  const { clearStartupData } = await import("@main/persistence/reset-data");
   const dir = await mkdtemp(join(tmpdir(), "eda-startup-reset-"));
   try {
     const managed = [

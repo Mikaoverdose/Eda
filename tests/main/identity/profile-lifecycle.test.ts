@@ -1,3 +1,4 @@
+import { ProfileRepository } from "@main/persistence/profile-repository";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
@@ -82,7 +83,13 @@ async function setup() {
     },
   };
 
-  const service = new ProfileService(db, identities, manager, store, secrets);
+  const service = new ProfileService(
+    new ProfileRepository(db, identities, store),
+    identities,
+    manager,
+    store,
+    secrets,
+  );
 
   await manager.setActive(work.id);
 

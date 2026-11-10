@@ -3,8 +3,6 @@ import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
 import type { InitRepositoryOptions, RepositorySummary } from "@shared/repository/repository";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { lstat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -13,13 +11,13 @@ import { assertValidRefName } from "../../git/validation";
 import type { IdentityManager } from "../../identity/identity-manager";
 import { findIdentityForPath } from "../../identity/path-rules";
 import type { IdentityRepository } from "../../persistence/identity-repository";
-import { repositories, type RepositoryRow } from "../../persistence/schema";
-import type { Database } from "../../persistence/types";
+import type { RepositoryRow } from "../../persistence/schema";
+import type { RepositoryMemberships } from "../../persistence/repository-memberships";
 import { initFiles } from "./init-files";
 
 export class RepositoryManager {
   constructor(
-    private readonly db: Database,
+    private readonly memberships: RepositoryMemberships,
     private readonly git: GitService,
     private readonly identity: IdentityManager,
     private readonly identities: IdentityRepository,
@@ -35,12 +33,7 @@ export class RepositoryManager {
 
     if (!active) return [];
 
-    const rows = this.db
-      .select()
-      .from(repositories)
-      .where(eq(repositories.identityId, active.id))
-      .orderBy(desc(repositories.favourite), sql`${repositories.name} COLLATE NOCASE`)
-      .all();
+    const rows = this.memberships.list(active.id);
 
     return Promise.all(
       rows.map(async (row) => ({
@@ -196,11 +189,7 @@ export class RepositoryManager {
       }
 
       const root = await this.git.resolveRepositoryRoot(path);
-      const owned = this.db
-        .select()
-        .from(repositories)
-        .where(eq(repositories.identityId, captured.identityId))
-        .all();
+      const owned = this.memberships.list(captured.identityId);
       const samePath = (left: string, right: string) =>
         process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right;
 
@@ -219,11 +208,7 @@ export class RepositoryManager {
         name: row.name === basename(row.path) ? basename(root) : row.name,
       };
 
-      this.db
-        .update(repositories)
-        .set({ path: updated.path, name: updated.name })
-        .where(eq(repositories.id, id))
-        .run();
+      this.memberships.relocate(id, updated.path, updated.name);
 
       return { ...toSummary(updated), available: true };
     });
@@ -232,21 +217,12 @@ export class RepositoryManager {
   remove(id: string): void {
     const repository = this.resolveActiveRepository(id);
 
-    this.db
-      .delete(repositories)
-      .where(
-        and(eq(repositories.id, repository.id), eq(repositories.identityId, repository.identityId)),
-      )
-      .run();
+    this.memberships.remove(repository.id, repository.identityId);
   }
 
   resolveActiveRepository(id: string): { id: string; identityId: string; path: string } {
     const active = this.requireActiveIdentity(t("operations.accessRepository"));
-    const row = this.db
-      .select({ id: repositories.id, identityId: repositories.identityId, path: repositories.path })
-      .from(repositories)
-      .where(and(eq(repositories.id, id), eq(repositories.identityId, active.id)))
-      .get();
+    const row = this.memberships.find(id, active.id);
 
     if (!row) {
       throw new GitError({
@@ -263,40 +239,7 @@ export class RepositoryManager {
   }
 
   private async register(root: string, identity: Identity): Promise<RepositorySummary> {
-    const existing = this.db
-      .select()
-      .from(repositories)
-      .where(and(eq(repositories.identityId, identity.id), eq(repositories.path, root)))
-      .get();
-
-    const now = new Date().toISOString();
-
-    if (existing) {
-      this.db
-        .update(repositories)
-        .set({ lastOpenedAt: now })
-        .where(eq(repositories.id, existing.id))
-        .run();
-    } else {
-      this.db
-        .insert(repositories)
-        .values({
-          id: randomUUID(),
-          identityId: identity.id,
-          name: basename(root),
-          path: root,
-          favourite: 0,
-          lastOpenedAt: now,
-          createdAt: now,
-        })
-        .run();
-    }
-
-    const row = this.db
-      .select()
-      .from(repositories)
-      .where(and(eq(repositories.identityId, identity.id), eq(repositories.path, root)))
-      .get()!;
+    const row = this.memberships.register(root, identity.id);
 
     return { ...toSummary(row), available: true };
   }
@@ -315,11 +258,7 @@ export class RepositoryManager {
         ),
       });
 
-    this.db
-      .update(repositories)
-      .set({ name: trimmed, favourite: favourite ? 1 : 0 })
-      .where(eq(repositories.id, id))
-      .run();
+    this.memberships.updateMetadata(id, trimmed, favourite);
   }
 
   private requireActiveIdentity(operation: string): Identity {

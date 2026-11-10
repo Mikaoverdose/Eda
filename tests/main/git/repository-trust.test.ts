@@ -1,3 +1,4 @@
+import { RepositoryTrustStore } from "@main/persistence/repository-trust-store";
 import { expect, it, vi } from "vitest";
 import { access, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -16,7 +17,7 @@ it("blocks repository-selected programs before approval, including on background
     await repo.writeFile("run.sample", "contents");
     await repo.run(["config", "filter.fixture.clean", "echo executed > marker; cat"]);
     const confirm = vi.fn(async () => false);
-    const trust = new RepositoryTrust(db, confirm, repo.home);
+    const trust = new RepositoryTrust(new RepositoryTrustStore(db), confirm, repo.home);
     const runner = new NodeProcessRunner();
     const git = new GitService(
       runner,

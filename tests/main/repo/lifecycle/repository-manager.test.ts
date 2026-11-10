@@ -1,3 +1,4 @@
+import { RepositoryMemberships } from "@main/persistence/repository-memberships";
 import { rm, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { normalize, join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -25,7 +26,12 @@ const setup = async () => {
   const db = openInMemoryDatabase();
   const identities = new IdentityRepository(db);
   const identity = new IdentityManager(identities, repo.git);
-  const repositories = new RepositoryManager(db, repo.git, identity, identities);
+  const repositories = new RepositoryManager(
+    new RepositoryMemberships(db),
+    repo.git,
+    identity,
+    identities,
+  );
   return { repo, db, identities, identity, repositories };
 };
 

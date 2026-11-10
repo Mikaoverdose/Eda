@@ -2,7 +2,7 @@ import { ERROR_CODE } from "@shared/error-codes";
 import { AppError, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { app, dialog, session } from "electron";
-import { clearStartupData } from "./reset-data";
+import { clearStartupData } from "../persistence/reset-data";
 
 export async function recoverMigrationStartup(error: unknown): Promise<boolean> {
   if (!(error instanceof AppError) || error.code !== ERROR_CODE.MIGRATION_HISTORY_MISMATCH)

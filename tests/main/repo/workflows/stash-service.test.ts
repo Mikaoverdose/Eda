@@ -1,3 +1,4 @@
+import { RepositoryMemberships } from "@main/persistence/repository-memberships";
 import { afterEach, expect, it, vi } from "vitest";
 import { readFile, writeFile, unlink, chmod } from "node:fs/promises";
 import { join } from "node:path";
@@ -105,7 +106,12 @@ async function setup() {
   identities.setActiveId(profile.id);
 
   const identity = new IdentityManager(identities, repo.git);
-  const repositories = new RepositoryManager(db, repo.git, identity, identities);
+  const repositories = new RepositoryManager(
+    new RepositoryMemberships(db),
+    repo.git,
+    identity,
+    identities,
+  );
   const writer = new RepositoryWriter(repo.git, repositories, identity, identities);
   const workflows = new WorkflowService(
     repo.git,

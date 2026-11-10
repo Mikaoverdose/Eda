@@ -1,3 +1,4 @@
+import { RepositoryMemberships } from "@main/persistence/repository-memberships";
 import { afterEach, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -27,7 +28,12 @@ function services() {
 
   const identities = new IdentityRepository(db);
   const identity = new IdentityManager(identities, repo.git);
-  const repositories = new RepositoryManager(db, repo.git, identity, identities);
+  const repositories = new RepositoryManager(
+    new RepositoryMemberships(db),
+    repo.git,
+    identity,
+    identities,
+  );
   const writer = new RepositoryWriter(repo.git, repositories, identity, identities);
   const journal = new WorkflowJournal(db);
   const recovery = new ContentRecoveryRepository(db);

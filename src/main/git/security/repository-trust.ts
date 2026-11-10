@@ -1,12 +1,10 @@
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { eq } from "drizzle-orm";
 import { readRegularFile } from "../../filesystem/read-regular-file";
 import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { Database } from "../../persistence/types";
-import { repositoryTrust } from "../../persistence/schema";
+import type { RepositoryTrustStore } from "../../persistence/repository-trust-store";
 
 const missing = (error: unknown) => {
   const code = (error as NodeJS.ErrnoException).code;
@@ -51,7 +49,7 @@ async function metadata(root: string, bare: boolean) {
 
 export class RepositoryTrust {
   constructor(
-    private readonly db: Database,
+    private readonly store: RepositoryTrustStore,
     private readonly confirm: (path: string, source?: string) => Promise<boolean>,
     readonly neutralDirectory: string,
   ) {}
@@ -80,20 +78,13 @@ export class RepositoryTrust {
     }
   }
 
-  private approved(record: Awaited<ReturnType<typeof metadata>>) {
-    return (
-      this.db.select().from(repositoryTrust).where(eq(repositoryTrust.path, record.root)).get()
-        ?.fingerprint === record.fingerprint
-    );
-  }
-
   async authorize(root: string, bare = false) {
     const record = await metadata(await realpath(root), bare);
-    if (this.approved(record)) return;
+    if (this.store.matches(record.root, record.fingerprint)) return;
     if (!(await this.confirm(record.root))) throw refused();
     if ((await metadata(await realpath(root), bare)).fingerprint !== record.fingerprint)
       throw refused();
-    this.remember(record);
+    this.store.remember(record.root, record.fingerprint);
   }
 
   async approveCreation(path: string, source?: string) {
@@ -101,24 +92,14 @@ export class RepositoryTrust {
   }
 
   async rememberCreated(path: string) {
-    this.remember(await metadata(await realpath(path), false));
-  }
-
-  private remember(record: Awaited<ReturnType<typeof metadata>>) {
-    this.db
-      .insert(repositoryTrust)
-      .values({ path: record.root, fingerprint: record.fingerprint })
-      .onConflictDoUpdate({
-        target: repositoryTrust.path,
-        set: { fingerprint: record.fingerprint },
-      })
-      .run();
+    const record = await metadata(await realpath(path), false);
+    this.store.remember(record.root, record.fingerprint);
   }
 
   async checked(root: string) {
     try {
       const record = await metadata(await realpath(root), false);
-      if (!this.approved(record)) throw refused();
+      if (!this.store.matches(record.root, record.fingerprint)) throw refused();
       return record;
     } catch (error) {
       if (missing(error)) throw refused();

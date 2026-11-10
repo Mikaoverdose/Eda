@@ -1,3 +1,4 @@
+import { RepositoryMemberships } from "@main/persistence/repository-memberships";
 import { afterEach, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -27,7 +28,12 @@ function services() {
 
   const identities = new IdentityRepository(db);
   const identity = new IdentityManager(identities, repo.git);
-  const repositories = new RepositoryManager(db, repo.git, identity, identities);
+  const repositories = new RepositoryManager(
+    new RepositoryMemberships(db),
+    repo.git,
+    identity,
+    identities,
+  );
   const recovery = new ContentRecoveryRepository(db);
   const journal = new WorkflowJournal(db);
   const writer = new RepositoryWriter(
