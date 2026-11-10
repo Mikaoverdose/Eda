@@ -3,15 +3,14 @@ import { ok } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import {
-  MAX_BACKGROUND_IMAGE_LENGTH,
   requireSettingKey,
   validateSetting,
   type SettingScope,
   type SettingsContext,
 } from "@shared/preferences/settings";
 import { isMergeTool } from "@shared/integrations/merge-tool";
-import { BrowserWindow, app, dialog, nativeImage } from "electron";
-import { open } from "node:fs/promises";
+import { BrowserWindow, app, dialog } from "electron";
+import { readBackgroundImage } from "../../application/background-image";
 import type { Services } from "../../services";
 import { broadcast, handle } from "../transport";
 
@@ -133,54 +132,7 @@ export function registerSettingsHandlers(services: Services): void {
 
     if (result.canceled || !result.filePaths[0]) return ok(null);
 
-    const path = result.filePaths[0];
-    const limit = 12 * 1024 * 1024;
-    const file = await open(path, "r");
-    let bytes: Buffer;
-
-    try {
-      const metadata = await file.stat();
-
-      if (!metadata.isFile() || metadata.size > limit)
-        throw invalidRequest(errorText("main.settingsHandlers.chooseAnImageFileSmallerThan12Mb"));
-
-      const buffer = Buffer.alloc(limit + 1);
-      let length = 0;
-
-      while (length < buffer.length) {
-        const { bytesRead } = await file.read(buffer, length, buffer.length - length, null);
-        if (!bytesRead) break;
-        length += bytesRead;
-      }
-
-      if (length > limit)
-        throw invalidRequest(errorText("main.settingsHandlers.chooseAnImageSmallerThan12Mb"));
-
-      bytes = buffer.subarray(0, length);
-    } finally {
-      await file.close();
-    }
-
-    let image = nativeImage.createFromBuffer(bytes);
-
-    if (image.isEmpty())
-      throw invalidRequest(
-        errorText("main.settingsHandlers.thisImageCouldNotBeOpenedChooseApngjpegOrWebPImage"),
-      );
-
-    const size = image.getSize();
-
-    if (Math.max(size.width, size.height) > 1920)
-      image = image.resize(size.width >= size.height ? { width: 1920 } : { height: 1920 });
-
-    const data = "data:image/jpeg;base64," + image.toJPEG(75).toString("base64");
-
-    if (data.length > MAX_BACKGROUND_IMAGE_LENGTH)
-      throw invalidRequest(
-        errorText("main.settingsHandlers.thisImageIsTooDetailedChooseASmallerImage"),
-      );
-
-    return ok(data);
+    return ok(await readBackgroundImage(result.filePaths[0]));
   });
 
   const changed = (key: ReturnType<typeof requireSettingKey>, target: SettingScope) => {

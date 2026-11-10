@@ -630,7 +630,7 @@ describe("IPC registration", () => {
     expect(writer.clearLocalCommitConfig).toHaveBeenCalledWith(repositoryId, "author");
   });
 
-  it("preserves domain errors without emitting successful invalidations", async () => {
+  it("preserves domain errors and refreshes state after a failed mutation", async () => {
     const { writer } = setup();
 
     const failure = new GitError(
@@ -648,7 +648,10 @@ describe("IPC registration", () => {
       error: failure.toData(),
     });
 
-    expect(electron.send).not.toHaveBeenCalled();
+    expect(electron.send).toHaveBeenCalledExactlyOnceWith(
+      IPC_EVENTS.repositoryChanged,
+      repositoryId,
+    );
   });
 
   it("sanitizes unexpected errors at the transport boundary", async () => {
@@ -666,7 +669,10 @@ describe("IPC registration", () => {
 
     expect(JSON.stringify(result)).not.toContain("internal implementation detail");
     expect(JSON.stringify(log.mock.calls)).not.toContain("internal implementation detail");
-    expect(electron.send).not.toHaveBeenCalled();
+    expect(electron.send).toHaveBeenCalledExactlyOnceWith(
+      IPC_EVENTS.repositoryChanged,
+      repositoryId,
+    );
   });
 
   it("keeps caller identity and session generation in the save request", async () => {

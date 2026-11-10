@@ -1,3 +1,4 @@
+import { readCommitTemplate } from "../../git/commit-template";
 import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -7,16 +8,15 @@ import { referenceLink } from "@shared/repository/reference-link";
 import type { InitRepositoryOptions } from "@shared/repository/repository";
 import { MAX_HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
 import { BrowserWindow, dialog, shell } from "electron";
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { repositoryCapabilities } from "../../repo/lifecycle/repository-capabilities";
 import { RepositoryWatcher } from "../../repo/lifecycle/repository-watcher";
 import { readImagePreview } from "../../repo/working-tree/image-preview";
 import type { Services } from "../../services";
 import { showOpenDialog } from "../dialogs";
 import { invalidRequest } from "../request-errors";
-import { broadcast, handle } from "../transport";
+import { broadcast, handle, withRepositoryChange } from "../transport";
 import {
   optionalInteger,
   requireAbsolutePath,
@@ -93,32 +93,7 @@ export function registerRepositoryHandlers(services: Services): void {
   handle(IPC_CHANNELS.repositoryCommitTemplate, async (_event, rawId) => {
     const repository = repositories.resolveActiveRepository(requireId(rawId));
     const configured = await git.readConfig("commit.template", { cwd: repository.path });
-
-    if (!configured) return ok(null);
-
-    const path = configured.startsWith("~/")
-      ? join(homedir(), configured.slice(2))
-      : isAbsolute(configured)
-        ? configured
-        : resolve(repository.path, configured);
-
-    const info = await stat(path);
-
-    if (!info.isFile() || info.size > 100_000)
-      throw invalidRequest(
-        errorText("main.repositoryHandlers.theCommitTemplateMustBeATextFileUnder100Kb"),
-      );
-
-    const bytes = await readFile(path);
-
-    if (bytes.length > 100_000)
-      throw invalidRequest(errorText("main.repositoryHandlers.theCommitTemplateExceeds100Kb"));
-
-    try {
-      return ok(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    } catch {
-      throw invalidRequest(errorText("main.repositoryHandlers.theCommitTemplateMustUseUtf8Text"));
-    }
+    return ok(await readCommitTemplate(repository.path, configured));
   });
 
   handle(
@@ -170,15 +145,17 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryApplyDiscard, async (_e, rawId, token) => {
     const id = requireId(rawId);
-    await services.writer.applyDiscard(id, requireId(token));
-    broadcast(IPC_EVENTS.repositoryChanged, id);
+    await withRepositoryChange(id, async () => services.writer.applyDiscard(id, requireId(token)));
+
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryRestoreContent, async (_e, rawId, snapshot) => {
     const id = requireId(rawId);
-    await services.writer.restoreContent(id, requireId(snapshot));
-    broadcast(IPC_EVENTS.repositoryChanged, id);
+    await withRepositoryChange(id, async () =>
+      services.writer.restoreContent(id, requireId(snapshot)),
+    );
+
     return ok(undefined);
   });
 
@@ -201,21 +178,23 @@ export function registerRepositoryHandlers(services: Services): void {
   handle(IPC_CHANNELS.repositoryAddIgnore, async (_e, id, path, kind) => {
     const repositoryId = requireId(id);
 
-    await services.writer.addIgnore(
-      repositoryId,
-      requireString(path, t("fields.filePath")),
-      ignoreKind(kind),
+    await withRepositoryChange(repositoryId, async () =>
+      services.writer.addIgnore(
+        repositoryId,
+        requireString(path, t("fields.filePath")),
+        ignoreKind(kind),
+      ),
     );
-
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryStopTracking, async (_e, id, path) => {
     const repositoryId = requireId(id);
-    await services.writer.stopTracking(repositoryId, requireString(path, t("fields.filePath")));
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+    await withRepositoryChange(repositoryId, async () =>
+      services.writer.stopTracking(repositoryId, requireString(path, t("fields.filePath"))),
+    );
+
     return ok(undefined);
   });
 
@@ -262,8 +241,8 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryApplyProfile, async (_event, rawId) => {
     const id = requireId(rawId);
-    await services.writer.applyProfile(id);
-    broadcast(IPC_EVENTS.repositoryChanged, id);
+    await withRepositoryChange(id, async () => services.writer.applyProfile(id));
+
     return ok(undefined);
   });
 
@@ -274,8 +253,8 @@ export function registerRepositoryHandlers(services: Services): void {
       );
 
     const id = requireId(rawId);
-    await services.writer.clearLocalCommitConfig(id, group);
-    broadcast(IPC_EVENTS.repositoryChanged, id);
+    await withRepositoryChange(id, async () => services.writer.clearLocalCommitConfig(id, group));
+
     return ok(undefined);
   });
 
@@ -535,8 +514,8 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryApplyPartial, async (_event, rawId, rawToken) => {
     const id = requireId(rawId);
-    await writer.applyPartial(id, requireId(rawToken));
-    broadcast(IPC_EVENTS.repositoryChanged, id);
+    await withRepositoryChange(id, async () => writer.applyPartial(id, requireId(rawToken)));
+
     return ok(undefined);
   });
 
@@ -554,8 +533,10 @@ export function registerRepositoryHandlers(services: Services): void {
       t("main.repositoryHandlers.stageRequest"),
     );
 
-    await writer.stage(repositoryId, optionalPaths(input["paths"]));
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+    await withRepositoryChange(repositoryId, async () =>
+      writer.stage(repositoryId, optionalPaths(input["paths"])),
+    );
+
     return ok(undefined);
   });
 
@@ -565,8 +546,10 @@ export function registerRepositoryHandlers(services: Services): void {
       t("main.repositoryHandlers.unstageRequest"),
     );
 
-    await writer.unstage(repositoryId, optionalPaths(input["paths"]));
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+    await withRepositoryChange(repositoryId, async () =>
+      writer.unstage(repositoryId, optionalPaths(input["paths"])),
+    );
+
     return ok(undefined);
   });
 
@@ -580,12 +563,11 @@ export function registerRepositoryHandlers(services: Services): void {
     const options = { amend: input["amend"] === true, signOff: input["signOff"] === true };
     const stagePaths = optionalPaths(input["stagePaths"]);
 
-    const result =
+    const result = await withRepositoryChange(repositoryId, async () =>
       stagePaths === undefined
         ? await writer.commit(repositoryId, message, options)
-        : await writer.stageAndCommit(repositoryId, stagePaths, message, options);
-
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+        : await writer.stageAndCommit(repositoryId, stagePaths, message, options),
+    );
 
     return ok(result);
   });
@@ -600,18 +582,14 @@ export function registerRepositoryHandlers(services: Services): void {
       t("main.repositoryHandlers.branchRequest"),
     );
 
-    await writer.createBranch(
-      repositoryId,
-      requireString(input["name"], t("fields.branchName"), 255),
-      {
+    await withRepositoryChange(repositoryId, async () =>
+      writer.createBranch(repositoryId, requireString(input["name"], t("fields.branchName"), 255), {
         checkout: input["checkout"] === true,
         ...(input["startPoint"] !== undefined && {
           startPoint: requireString(input["startPoint"], t("fields.startPoint"), 64),
         }),
-      },
+      }),
     );
-
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
   });
@@ -622,12 +600,13 @@ export function registerRepositoryHandlers(services: Services): void {
       t("main.repositoryHandlers.branchRequest"),
     );
 
-    await writer.checkoutBranch(
-      repositoryId,
-      requireString(input["name"], t("fields.branchName"), 255),
+    await withRepositoryChange(repositoryId, async () =>
+      writer.checkoutBranch(
+        repositoryId,
+        requireString(input["name"], t("fields.branchName"), 255),
+      ),
     );
 
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
@@ -637,15 +616,12 @@ export function registerRepositoryHandlers(services: Services): void {
       t("main.repositoryHandlers.branchRequest"),
     );
 
-    await writer.deleteBranch(
-      repositoryId,
-      requireString(input["name"], t("fields.branchName"), 255),
-      {
+    await withRepositoryChange(repositoryId, async () =>
+      writer.deleteBranch(repositoryId, requireString(input["name"], t("fields.branchName"), 255), {
         force: input["force"] === true,
-      },
+      }),
     );
 
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
 
@@ -655,13 +631,13 @@ export function registerRepositoryHandlers(services: Services): void {
       t("main.repositoryHandlers.branchRequest"),
     );
 
-    await writer.renameBranch(
-      repositoryId,
-      requireString(input["from"], t("fields.branchName"), 255),
-      requireString(input["to"], t("fields.branchName"), 255),
+    await withRepositoryChange(repositoryId, async () =>
+      writer.renameBranch(
+        repositoryId,
+        requireString(input["from"], t("fields.branchName"), 255),
+        requireString(input["to"], t("fields.branchName"), 255),
+      ),
     );
-
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
   });
@@ -684,32 +660,36 @@ export function registerRepositoryHandlers(services: Services): void {
   handle(IPC_CHANNELS.repositoryCreateTag, async (_e, raw) => {
     const { input, repositoryId } = repositoryRequest(raw, t("main.repositoryHandlers.tagRequest"));
 
-    await writer.createTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255), {
-      sign: input["sign"] === true,
-      ...(input["message"] !== undefined && {
-        message: requireString(input["message"], t("fields.tagMessage"), 100_000),
+    await withRepositoryChange(repositoryId, async () =>
+      writer.createTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255), {
+        sign: input["sign"] === true,
+        ...(input["message"] !== undefined && {
+          message: requireString(input["message"], t("fields.tagMessage"), 100_000),
+        }),
+        ...(input["target"] !== undefined && {
+          target: requireString(input["target"], t("fields.target"), 64),
+        }),
       }),
-      ...(input["target"] !== undefined && {
-        target: requireString(input["target"], t("fields.target"), 64),
-      }),
-    });
-
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+    );
 
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryDeleteTag, async (_e, raw) => {
     const { input, repositoryId } = repositoryRequest(raw, t("main.repositoryHandlers.tagRequest"));
-    await writer.deleteTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255));
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+    await withRepositoryChange(repositoryId, async () =>
+      writer.deleteTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255)),
+    );
+
     return ok(undefined);
   });
 
   handle(IPC_CHANNELS.repositoryCheckoutTag, async (_e, raw) => {
     const { input, repositoryId } = repositoryRequest(raw, t("main.repositoryHandlers.tagRequest"));
-    await writer.checkoutTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255));
-    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
+    await withRepositoryChange(repositoryId, async () =>
+      writer.checkoutTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255)),
+    );
+
     return ok(undefined);
   });
 }

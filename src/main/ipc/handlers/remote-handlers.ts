@@ -133,8 +133,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
         throw invalidRequest(errorText("main.remoteHandlers.chooseARemoteConfigurationAction"));
     }
 
-    await remotes.change(id, change);
-    broadcast(IPC_EVENTS.repositoryChanged, id);
+    await withRepositoryChange(id, async () => remotes.change(id, change));
 
     return ok(undefined);
   });
@@ -142,13 +141,13 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
   handle(IPC_CHANNELS.remotesTrack, async (_event, rawId, branch, upstream) => {
     const id = requireId(rawId);
 
-    await remotes.track(
-      id,
-      requireString(branch, t("fields.branch")),
-      upstream === null ? null : requireString(upstream, t("fields.upstream")),
+    await withRepositoryChange(id, async () =>
+      remotes.track(
+        id,
+        requireString(branch, t("fields.branch")),
+        upstream === null ? null : requireString(upstream, t("fields.upstream")),
+      ),
     );
-
-    broadcast(IPC_EVENTS.repositoryChanged, id);
 
     return ok(undefined);
   });
