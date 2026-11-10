@@ -150,7 +150,7 @@ try {
     assert.equal(opened.ok, true);
 
     await view(false);
-    await page.getByRole("button", { name: "Open a repository", exact: true }).first().click();
+    await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
     await page
       .getByRole("dialog", { name: "Open a repository" })
       .getByRole("button", { name: new RegExp(`^${name} `) })

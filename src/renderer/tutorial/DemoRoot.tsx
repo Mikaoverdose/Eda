@@ -129,7 +129,7 @@ export function DemoRoot() {
             onOpenCommands={noop}
             platform={demo.api.app.platform}
             settingsOpen={false}
-            tabs={<RepositoryTabs onBrowse={() => useAppStore.getState().selectRepository(null)} />}
+            tabs={<RepositoryTabs />}
           />
           <WorkspaceFrame profileId={demoIdentity.id}>
             <Workspace />

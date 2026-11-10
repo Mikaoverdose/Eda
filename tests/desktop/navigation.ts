@@ -166,7 +166,7 @@ try {
     "section",
   );
   await expectEntry(
-    () => page.getByRole("button", { name: "Reopen closed repository", exact: true }).click(),
+    () => page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+Shift+t`),
     "section",
   );
 

@@ -10,9 +10,8 @@ import {
   cx,
 } from "../../components/ui/index";
 import { useRef } from "react";
-import { RotateCcw } from "lucide-react";
 
-export function RepositoryTabs({ onBrowse }: { onBrowse: () => void }) {
+export function RepositoryTabs() {
   const repositories = useAppStore((s) => s.repositories);
   const activeIdentity = useAppStore((s) => s.activeIdentity);
   const selectedId = useAppStore((s) => s.selectedRepositoryId);
@@ -20,8 +19,6 @@ export function RepositoryTabs({ onBrowse }: { onBrowse: () => void }) {
   const selectRepository = useAppStore((s) => s.selectRepository);
   const closeTab = useAppStore((s) => s.closeTab);
   const moveTab = useAppStore((s) => s.moveTab);
-  const closedTabs = useAppStore((s) => s.closedTabsByIdentity);
-  const reopenTab = useAppStore((s) => s.reopenTab);
   const tabButtons = useRef(new Map<string, HTMLButtonElement>());
   const dragged = useRef<string | null>(null);
 
@@ -153,22 +150,10 @@ export function RepositoryTabs({ onBrowse }: { onBrowse: () => void }) {
         );
       })}
 
-      {(closedTabs[activeIdentity.id] ?? []).some(
-        (tab) => !openIds.includes(tab.id) && repositories.some((r) => r.id === tab.id),
-      ) && (
-        <IconButton
-          size="xs"
-          onClick={reopenTab}
-          aria-label={t("repositoryTabs.reopenClosedRepository")}
-          title={t("repositoryTabs.reopenClosedRepositoryCtrlCmdShiftT")}
-          icon={<RotateCcw size={13} />}
-        />
-      )}
-
       <Button
         size="sm"
         variant="ghost"
-        onClick={onBrowse}
+        onClick={() => selectRepository(null)}
         aria-label={t("repositoryTabs.openARepository")}
         title={t("repositoryTabs.openARepository")}
         className="self-center text-text-tertiary"

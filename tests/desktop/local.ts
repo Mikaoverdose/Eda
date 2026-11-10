@@ -91,10 +91,7 @@ try {
     true,
   );
 
-  await page
-    .getByRole("tablist", { name: "Open repositories" })
-    .getByRole("button", { name: "Open a repository", exact: true })
-    .click();
+  await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
 
   const picker = page.getByRole("dialog", { name: "Open a repository", exact: true });
 

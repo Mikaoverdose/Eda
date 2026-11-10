@@ -223,11 +223,7 @@ export function App() {
           onOpenCommands={() => commands.execute("commands.open")}
           platform={commands.platform}
           settingsOpen={view === "settings"}
-          tabs={
-            view === "repositories" ? (
-              <RepositoryTabs onBrowse={() => commands.execute("repositories.browse")} />
-            ) : undefined
-          }
+          tabs={view === "repositories" ? <RepositoryTabs /> : undefined}
         />
 
         <AppErrorDialog />

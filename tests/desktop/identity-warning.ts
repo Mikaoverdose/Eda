@@ -50,10 +50,7 @@ try {
   await finishOnboarding(page);
   const opened = await page.evaluate((path) => window.eda.repository.open(path), repository);
   assert(opened.ok);
-  await page
-    .getByRole("tablist", { name: "Open repositories" })
-    .getByRole("button", { name: "Open a repository", exact: true })
-    .click();
+  await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
   const picker = page.getByRole("dialog", { name: "Open a repository", exact: true });
   await picker.getByRole("button", { name: /^identity-fixture / }).press("Enter");
   await page.getByRole("heading", { name: "identity-fixture", exact: true }).waitFor();

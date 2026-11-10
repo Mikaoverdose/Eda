@@ -159,6 +159,30 @@ try {
   await palette.waitFor({ state: "hidden" });
   await draft.waitFor();
 
+  await page.getByRole("button", { name: "Open a repository", exact: true }).click();
+  await page.getByRole("heading", { name: "Repositories", exact: true }).waitFor();
+  await expect(page.getByRole("tab", { name: "commands-repo", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("tab", { selected: true })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Open a repository", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Clone repository", exact: true }).click();
+  await page.getByRole("dialog", { name: "Clone repository", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "commands-repo", exact: true }).click();
+  await draft.waitFor();
+  assert.equal(await draft.inputValue(), "Keep this draft");
+
+  await page.keyboard.press(`${modifier}+w`);
+  await page.getByRole("heading", { name: "Repositories", exact: true }).waitFor();
+  await expect(
+    page.getByRole("button", { name: "Reopen closed repository", exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press(`${modifier}+Shift+t`);
+  await expect(page.getByRole("tab", { name: "commands-repo", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await draft.waitFor();
+
   const other = await page.evaluate(async () =>
     window.eda.identity.create({
       name: "Home",
@@ -219,7 +243,7 @@ try {
   await page.screenshot({ path: resolve("screenshots/command-palette.png") });
   await page.keyboard.press("Escape");
   console.log(
-    "Command gate passed: palette/search/help, platform shortcuts, disabled reasons, native editing, modal suppression, refresh/draft retention, focus modes and stale-profile rejection.",
+    "Command gate passed: palette/search/help, platform shortcuts, disabled reasons, native editing, modal suppression, refresh/draft retention, focus modes, repository home/clone access, keyboard reopen and stale-profile rejection.",
   );
 } catch (error) {
   if (app) {
