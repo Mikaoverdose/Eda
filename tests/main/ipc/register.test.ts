@@ -7,12 +7,17 @@ import { IPC_CHANNELS, IPC_EVENTS, type IpcChannel } from "@shared/ipc";
 import type { Identity } from "@shared/identity/identity";
 import type { Services } from "@main/services";
 import { registerIpcHandlers } from "@main/ipc/register";
-import { beginUpdateInstall, registerApplicationContents } from "@main/ipc/transport";
+import {
+  beginUpdateInstall,
+  registerApplicationContents,
+  withRepositoryChange,
+} from "@main/ipc/transport";
 import { UpdateService } from "@main/application/update-service";
 
 it("allows managed update notifications but refuses download and installation over IPC", async () => {
   const mocks = setup();
   const native = vi.fn();
+
   const service = new UpdateService({
     capability: "managed",
     reason: "Managed by Homebrew.",
@@ -28,6 +33,7 @@ it("allows managed update notifications but refuses download and installation ov
       release: { version: "0.0.2", name: "Eda 0.0.2", notes: null, releasedAt: null },
     }),
   });
+
   mocks.updates.check.mockImplementation(() => service.check());
   mocks.updates.download.mockImplementation(() => service.download());
   mocks.updates.install.mockImplementation(() => service.install());
@@ -36,22 +42,26 @@ it("allows managed update notifications but refuses download and installation ov
     ok: true,
     value: { phase: "available", capability: "managed", reason: "Managed by Homebrew." },
   });
+
   for (const channel of [IPC_CHANNELS.updatesDownload, IPC_CHANNELS.updatesInstall])
     expect(await invoke(channel)).toMatchObject({
       ok: false,
       error: { message: expect.stringContaining("Managed by Homebrew.") },
     });
+
   expect(native).not.toHaveBeenCalled();
 });
 
 it("blocks new work during update installation while allowing the draft-save handshake", async () => {
   const mocks = setup();
   const release = beginUpdateInstall();
+
   try {
     expect(await invoke(IPC_CHANNELS.operationsList)).toMatchObject({
       ok: false,
       error: { message: expect.stringContaining("restarting") },
     });
+
     expect(
       await invoke(
         IPC_CHANNELS.sessionsChange,
@@ -59,10 +69,12 @@ it("blocks new work during update installation while allowing the draft-save han
         { kind: "view", view: "changes", repositoryId },
       ),
     ).toMatchObject({ ok: true });
+
     expect(mocks.sessions.change).toHaveBeenCalledOnce();
   } finally {
     release();
   }
+
   expect(await invoke(IPC_CHANNELS.operationsList)).toMatchObject({ ok: true });
 });
 
@@ -76,6 +88,7 @@ it("refuses updater commands from a subframe without entering the native service
 
 it("reports the running installation through the application bridge", async () => {
   setup();
+
   expect(await invoke(IPC_CHANNELS.appInstallation)).toEqual({
     ok: true,
     value: { method: "development" },
@@ -85,14 +98,18 @@ it("reports the running installation through the application bridge", async () =
 it("refreshes the update audience after changing or resetting the pre-release preference", async () => {
   const mocks = setup();
   const scope = { kind: "application" };
+
   expect(
     await invoke(IPC_CHANNELS.settingsSet, "includePrereleaseUpdates", scope, false),
   ).toMatchObject({ ok: true });
+
   expect(mocks.preferences.set).toHaveBeenCalledWith("includePrereleaseUpdates", scope, false);
   expect(mocks.updates.refreshSchedule).toHaveBeenCalledOnce();
+
   expect(await invoke(IPC_CHANNELS.settingsReset, "includePrereleaseUpdates", scope)).toMatchObject(
     { ok: true },
   );
+
   expect(mocks.updates.refreshSchedule).toHaveBeenCalledTimes(2);
 });
 
@@ -154,6 +171,7 @@ const profile: Identity = {
 
 const repositoryId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const mainFrame = { url: rendererUrl() };
+
 const event = {
   sender: {
     id: 42,
@@ -174,6 +192,7 @@ let handlers: Map<IpcChannel, Handler>;
 
 function setup() {
   registerApplicationContents(event.sender);
+
   const mocks = {
     installation: { method: "development" },
     updates: {
@@ -267,6 +286,7 @@ function invoke(channel: IpcChannel, ...args: unknown[]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+
   electron.fromWebContents.mockReturnValue({
     destroy: electron.destroy,
     isDestroyed: () => false,
@@ -277,7 +297,9 @@ beforeEach(() => {
     close: electron.close,
     setOpacity: electron.setOpacity,
   });
+
   handlers = new Map();
+
   electron.handle.mockImplementation((channel: IpcChannel, handler: Handler) => {
     if (handlers.has(channel)) throw new Error(`Duplicate handler: ${channel}`);
     handlers.set(channel, handler);
@@ -289,17 +311,21 @@ afterEach(() => vi.restoreAllMocks());
 describe("IPC registration", () => {
   it("copies text through the native clipboard and rejects invalid requests", async () => {
     setup();
+
     expect(await invoke(IPC_CHANNELS.appCopyText, "ABCD-EFGH")).toEqual({
       ok: true,
       value: undefined,
     });
+
     expect(electron.writeText).toHaveBeenCalledExactlyOnceWith("ABCD-EFGH");
     for (const value of [null, 42, "bad\0value", "x".repeat(1_048_577)])
       expect(await invoke(IPC_CHANNELS.appCopyText, value)).toMatchObject({ ok: false });
     expect(electron.writeText).toHaveBeenCalledOnce();
   });
+
   it("loads the fixed public maintainer profile without requiring a connected account", async () => {
     const { github, avatars, identity } = setup();
+
     expect(await invoke(IPC_CHANNELS.githubMaintainerProfile)).toEqual({
       ok: true,
       value: {
@@ -311,68 +337,86 @@ describe("IPC registration", () => {
         avatarDataUrl: "data:image/png;base64,AQID",
       },
     });
+
     expect(github.maintainerProfile).toHaveBeenCalledExactlyOnceWith();
     expect(github.profile).not.toHaveBeenCalled();
+
     expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith(
       "7",
       "https://avatars.githubusercontent.com/u/7?v=4",
     );
+
     expect(identity.getActive).not.toHaveBeenCalled();
   });
+
   it("loads the connected GitHub profile and cached avatar for the active owner, and opens its verified profile link", async () => {
     const { github, avatars } = setup();
     expect(await invoke(IPC_CHANNELS.githubProfile, repositoryId)).toMatchObject({ ok: false });
     expect(github.profile).not.toHaveBeenCalled();
+
     expect(await invoke(IPC_CHANNELS.githubProfile, profile.id)).toMatchObject({
       ok: true,
       value: { id: "7", login: "work-user", avatarDataUrl: "data:image/png;base64,AQID" },
     });
+
     expect(github.profile).toHaveBeenCalledWith(profile.id);
+
     expect(avatars.getGitHub).toHaveBeenCalledExactlyOnceWith(
       "7",
       "https://avatars.githubusercontent.com/u/7?v=4",
     );
+
     await invoke(IPC_CHANNELS.githubOpenProfile, profile.id);
     expect(github.profileUrl).toHaveBeenCalledWith(profile.id);
     expect(electron.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/work-user");
   });
+
   it("captures GitHub profile ownership, rejects stale profiles and opens only the fixed verification page", async () => {
     const { github } = setup();
     expect(await invoke(IPC_CHANNELS.githubBegin, repositoryId)).toMatchObject({ ok: false });
     expect(github.begin).not.toHaveBeenCalled();
     await invoke(IPC_CHANNELS.githubBegin, profile.id);
     expect(github.begin).toHaveBeenCalledWith(profile.id);
+
     expect(await invoke(IPC_CHANNELS.githubPoll, profile.id, "invalid")).toMatchObject({
       ok: false,
     });
+
     expect(github.poll).not.toHaveBeenCalled();
     await invoke(IPC_CHANNELS.githubPoll, profile.id, repositoryId);
     expect(github.poll).toHaveBeenCalledWith(profile.id, repositoryId);
     await invoke(IPC_CHANNELS.githubOpenVerification, profile.id, repositoryId);
     expect(github.verifyPending).toHaveBeenCalledWith(profile.id, repositoryId);
     expect(electron.writeText).toHaveBeenCalledExactlyOnceWith("ABCD-EFGH");
+
     expect(electron.writeText.mock.invocationCallOrder[0]).toBeLessThan(
       electron.openExternal.mock.invocationCallOrder[0]!,
     );
+
     expect(electron.openExternal).toHaveBeenCalledExactlyOnceWith(
       "https://github.com/login/device",
     );
+
     github.verifyPending.mockImplementationOnce(() => {
       throw new GitError(
         errorFixture({ kind: "invalid-input", operation: "sign-in", message: "expired" }),
       );
     });
+
     expect(
       await invoke(IPC_CHANNELS.githubOpenVerification, profile.id, repositoryId),
     ).toMatchObject({ ok: false });
+
     expect(electron.openExternal).toHaveBeenCalledOnce();
     expect(electron.writeText).toHaveBeenCalledOnce();
   });
+
   it("accepts SSH trust decisions only from the main frame with a valid request and boolean", async () => {
     const { sshHostTrust } = setup();
     expect(await invoke(IPC_CHANNELS.sshPendingHostTrust)).toEqual({ ok: true, value: null });
     expect(sshHostTrust.current).toHaveBeenCalledWith(event.sender.id);
     const handler = handlers.get(IPC_CHANNELS.sshRespondHostTrust)!;
+
     expect(
       await handler(
         { ...event, senderFrame: {} } as Electron.IpcMainInvokeEvent,
@@ -380,18 +424,24 @@ describe("IPC registration", () => {
         true,
       ),
     ).toMatchObject({ ok: false });
+
     expect(await invoke(IPC_CHANNELS.sshRespondHostTrust, repositoryId, "yes")).toMatchObject({
       ok: false,
     });
+
     expect(await invoke(IPC_CHANNELS.sshRespondHostTrust, "invalid", true)).toMatchObject({
       ok: false,
     });
+
     expect(sshHostTrust.respond).not.toHaveBeenCalled();
+
     expect(await invoke(IPC_CHANNELS.sshRespondHostTrust, repositoryId, true)).toMatchObject({
       ok: true,
     });
+
     expect(sshHostTrust.respond).toHaveBeenCalledWith(event.sender.id, repositoryId, true);
     sshHostTrust.respond.mockReturnValue(false);
+
     expect(await invoke(IPC_CHANNELS.sshRespondHostTrust, repositoryId, true)).toMatchObject({
       ok: false,
     });
@@ -399,16 +449,21 @@ describe("IPC registration", () => {
 
   it("validates explicit global apply and forwards the captured profile to the coordinator", async () => {
     const { identity } = setup();
+
     expect(await invoke(IPC_CHANNELS.identityReapplyGlobal, "invalid")).toMatchObject({
       ok: false,
     });
+
     expect(identity.reapplyGlobal).not.toHaveBeenCalled();
+
     expect(await invoke(IPC_CHANNELS.identityReapplyGlobal, profile.id)).toEqual({
       ok: true,
       value: undefined,
     });
+
     expect(identity.reapplyGlobal).toHaveBeenCalledWith(profile.id);
   });
+
   it("resets only after confirmation, clears browser data, and reloads the existing renderer", async () => {
     const mocks = setup();
     electron.showMessageBox.mockResolvedValueOnce({ response: 0 });
@@ -417,10 +472,12 @@ describe("IPC registration", () => {
     expect(electron.reload).not.toHaveBeenCalled();
 
     electron.showMessageBox.mockResolvedValueOnce({ response: 1 });
+
     expect(await invoke(IPC_CHANNELS.appDebug, "reset-data")).toEqual({
       ok: true,
       value: undefined,
     });
+
     expect(mocks.resetData).toHaveBeenCalledOnce();
     expect(electron.clearStorageData).toHaveBeenCalledOnce();
     expect(electron.clearCache).toHaveBeenCalledOnce();
@@ -431,12 +488,14 @@ describe("IPC registration", () => {
   it("blocks stale requests during reset and releases the bridge after a failed reset", async () => {
     const mocks = setup();
     let fail!: (error: Error) => void;
+
     mocks.resetData.mockImplementationOnce(
       () =>
         new Promise<void>((_resolve, reject) => {
           fail = reject;
         }),
     );
+
     electron.showMessageBox.mockResolvedValueOnce({ response: 1 });
     const reset = invoke(IPC_CHANNELS.appDebug, "reset-data");
     await vi.waitFor(() => expect(mocks.resetData).toHaveBeenCalledOnce());
@@ -460,6 +519,7 @@ describe("IPC registration", () => {
     expect(
       await handler({ ...event, senderFrame: {} } as Electron.IpcMainInvokeEvent, "renderer-crash"),
     ).toMatchObject({ ok: false });
+
     expect(electron.showMessageBox).not.toHaveBeenCalled();
 
     electron.showMessageBox.mockResolvedValueOnce({ response: 0 });
@@ -481,6 +541,7 @@ describe("IPC registration", () => {
         message: "Eda debug simulation: unexpected IPC error.",
       },
     });
+
     expect(JSON.stringify(log.mock.calls)).not.toContain("debug simulation");
   });
 
@@ -519,10 +580,12 @@ describe("IPC registration", () => {
     expect(
       await invoke(IPC_CHANNELS.identityCreate, profile, { syncGlobalGitConfig: "false" }),
     ).toMatchObject({ ok: false, error: { kind: "invalid-input" } });
+
     expect(await invoke(IPC_CHANNELS.repositoryStage, { repositoryId: "invalid" })).toMatchObject({
       ok: false,
       error: { kind: "invalid-input" },
     });
+
     expect(writer.stage).not.toHaveBeenCalled();
 
     for (const [id, group] of [
@@ -540,19 +603,24 @@ describe("IPC registration", () => {
     expect(
       await invoke(IPC_CHANNELS.repositoryStage, { repositoryId, paths: ["readme.md"] }),
     ).toEqual({ ok: true, value: undefined });
+
     expect(writer.stage).toHaveBeenCalledWith(repositoryId, ["readme.md"]);
+
     expect(electron.send).toHaveBeenCalledExactlyOnceWith(
       IPC_EVENTS.repositoryChanged,
       repositoryId,
     );
+
     expect(
       await invoke(IPC_CHANNELS.repositoryClearLocalCommitConfig, repositoryId, "author"),
     ).toEqual({ ok: true, value: undefined });
+
     expect(writer.clearLocalCommitConfig).toHaveBeenCalledWith(repositoryId, "author");
   });
 
   it("preserves domain errors without emitting successful invalidations", async () => {
     const { writer } = setup();
+
     const failure = new GitError(
       errorFixture({
         kind: "lock-contention",
@@ -562,10 +630,12 @@ describe("IPC registration", () => {
     );
 
     writer.stage.mockRejectedValueOnce(failure);
+
     expect(await invoke(IPC_CHANNELS.repositoryStage, { repositoryId })).toEqual({
       ok: false,
       error: failure.toData(),
     });
+
     expect(electron.send).not.toHaveBeenCalled();
   });
 
@@ -581,6 +651,7 @@ describe("IPC registration", () => {
       ok: false,
       error: { kind: "unknown", operation: IPC_CHANNELS.repositoryStage },
     });
+
     expect(JSON.stringify(result)).not.toContain("internal implementation detail");
     expect(JSON.stringify(log.mock.calls)).not.toContain("internal implementation detail");
     expect(electron.send).not.toHaveBeenCalled();
@@ -595,10 +666,13 @@ describe("IPC registration", () => {
       ok: true,
       value: undefined,
     });
+
     expect(sessions.change).toHaveBeenCalledWith(42, context, change);
+
     expect(
       await invoke(IPC_CHANNELS.sessionsChange, { ...context, generation: undefined }, change),
     ).toMatchObject({ ok: false, error: { kind: "invalid-input" } });
+
     expect(sessions.change).toHaveBeenCalledTimes(1);
   });
 
@@ -608,12 +682,14 @@ describe("IPC registration", () => {
     expect(
       await invoke(IPC_CHANNELS.credentialsUnlockActiveKey, {}, "secret", repositoryId),
     ).toMatchObject({ ok: false, error: { kind: "invalid-input" } });
+
     expect(identity.serialize).not.toHaveBeenCalled();
 
     identity.serialize.mockImplementationOnce(async (work) => {
       identity.getActive.mockReturnValue({ ...profile, id: repositoryId });
       return work();
     });
+
     await invoke(IPC_CHANNELS.credentialsUnlockActiveKey, { remember: true }, "secret", profile.id);
     expect(credentials.unlockActiveKey).toHaveBeenCalledWith({ remember: true }, "secret", profile);
   });
@@ -629,11 +705,13 @@ describe("IPC registration", () => {
         "nord",
       ),
     ).toMatchObject({ ok: false, error: { kind: "invalid-input" } });
+
     expect(preferences.set).not.toHaveBeenCalled();
 
     await invoke(IPC_CHANNELS.settingsSet, "uiZoom", { kind: "application" }, 125);
     expect(preferences.set).toHaveBeenCalledWith("uiZoom", { kind: "application" }, 125);
     expect(electron.setZoomFactor).toHaveBeenCalledWith(1.25);
+
     expect(electron.send).toHaveBeenCalledWith(IPC_EVENTS.settingChanged, {
       key: "uiZoom",
       scope: { kind: "application" },
@@ -642,6 +720,7 @@ describe("IPC registration", () => {
 
   it("requires the window close nonce before draining writes and destroying the window", async () => {
     const { sessions, identity } = setup();
+
     const window = Object.assign(new EventEmitter(), {
       webContents: {
         id: 42,
@@ -668,11 +747,14 @@ describe("IPC registration", () => {
       ok: false,
       error: { kind: "invalid-input" },
     });
+
     expect(electron.destroy).not.toHaveBeenCalled();
+
     expect(await invoke(IPC_CHANNELS.sessionsReadyToClose, nonce)).toEqual({
       ok: true,
       value: undefined,
     });
+
     expect(identity.serialize).toHaveBeenCalledOnce();
     expect(electron.destroy).toHaveBeenCalledOnce();
 
@@ -684,6 +766,7 @@ describe("IPC registration", () => {
 it("rejects foreign main documents and child frames before any ordinary IPC side effect", async () => {
   setup();
   const handler = handlers.get(IPC_CHANNELS.appCopyText)!;
+
   for (const url of [
     "https://attacker.invalid/",
     "file:///tmp/index.html",
@@ -692,22 +775,26 @@ it("rejects foreign main documents and child frames before any ordinary IPC side
     const foreign = { url };
     const sender = { mainFrame: foreign } as Electron.WebContents;
     registerApplicationContents(sender);
+
     expect(
       await handler({ senderFrame: foreign, sender } as Electron.IpcMainInvokeEvent, "private"),
     ).toMatchObject({ ok: false });
   }
+
   expect(
     await handler(
       { ...event, senderFrame: { url: rendererUrl() } } as Electron.IpcMainInvokeEvent,
       "private",
     ),
   ).toMatchObject({ ok: false });
+
   expect(electron.writeText).not.toHaveBeenCalled();
 });
 
 it("requires native approval of executable settings even from the main document", async () => {
   const mocks = setup();
   electron.showMessageBox.mockResolvedValueOnce({ response: 0 });
+
   expect(
     await invoke(
       IPC_CHANNELS.settingsSet,
@@ -716,6 +803,7 @@ it("requires native approval of executable settings even from the main document"
       "/tmp/program",
     ),
   ).toMatchObject({ ok: false });
+
   expect(mocks.preferences.set).not.toHaveBeenCalled();
 });
 
@@ -727,9 +815,11 @@ it("guards GitLab authorization and cancellation with active profile ownership",
   expect(gitlab.begin).toHaveBeenCalledWith(profile.id);
   await invoke(IPC_CHANNELS.gitlabOpenAuthorization, profile.id, repositoryId);
   expect(gitlab.authorizationUrl).toHaveBeenCalledWith(profile.id, repositoryId);
+
   expect(electron.openExternal).toHaveBeenCalledWith(
     "https://gitlab.com/oauth/authorize?client_id=eda",
   );
+
   await invoke(IPC_CHANNELS.gitlabCancel, profile.id, repositoryId);
   expect(gitlab.cancel).toHaveBeenCalledWith(profile.id, repositoryId);
 });
@@ -738,10 +828,12 @@ it("loads GitLab provider avatars for the active profile without exposing remote
   const { gitlab, avatars } = setup();
   expect(await invoke(IPC_CHANNELS.gitlabProfile, repositoryId)).toMatchObject({ ok: false });
   expect(gitlab.profile).not.toHaveBeenCalled();
+
   expect(await invoke(IPC_CHANNELS.gitlabProfile, profile.id)).toEqual({
     ok: true,
     value: { id: "7", avatarDataUrl: "data:image/png;base64,AQID" },
   });
+
   expect(avatars.getGitLab).toHaveBeenCalledExactlyOnceWith(
     "7",
     "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
@@ -751,21 +843,27 @@ it("loads GitLab provider avatars for the active profile without exposing remote
 it("guards self-hosted GitLab credentials and browser actions with active profile ownership", async () => {
   const { gitlabSelfHosted } = setup();
   const baseUrl = "https://git.company.test";
+
   expect(
     await invoke(IPC_CHANNELS.gitlabSelfHostedConnect, repositoryId, baseUrl, "private-token"),
   ).toMatchObject({ ok: false });
+
   expect(gitlabSelfHosted.connect).not.toHaveBeenCalled();
+
   expect(
     await invoke(IPC_CHANNELS.gitlabSelfHostedConnect, profile.id, baseUrl, "private-token"),
   ).toMatchObject({ ok: true });
+
   expect(gitlabSelfHosted.connect).toHaveBeenCalledWith(
     profile.id,
     baseUrl,
     "private-token",
     false,
   );
+
   await invoke(IPC_CHANNELS.gitlabSelfHostedConnect, profile.id, baseUrl, "private-token", true);
   expect(gitlabSelfHosted.connect).toHaveBeenCalledWith(profile.id, baseUrl, "private-token", true);
+
   expect(
     await invoke(
       IPC_CHANNELS.gitlabSelfHostedConnect,
@@ -775,22 +873,51 @@ it("guards self-hosted GitLab credentials and browser actions with active profil
       "true",
     ),
   ).toMatchObject({ ok: false });
+
   for (const form of ["legacy", "granular", "older"]) {
     await invoke(IPC_CHANNELS.gitlabSelfHostedOpenTokenSettings, profile.id, baseUrl, form);
     expect(gitlabSelfHosted.tokenSettingsUrl).toHaveBeenCalledWith(baseUrl, form);
   }
+
   expect(
     await invoke(IPC_CHANNELS.gitlabSelfHostedOpenTokenSettings, profile.id, baseUrl, "false"),
   ).toMatchObject({ ok: false });
+
   await invoke(IPC_CHANNELS.gitlabSelfHostedRepositories, profile.id, baseUrl, 2);
   expect(gitlabSelfHosted.repositories).toHaveBeenCalledWith(profile.id, baseUrl, 2);
+
   expect(
     await invoke(IPC_CHANNELS.gitlabSelfHostedRepositories, profile.id, baseUrl, -1),
   ).toMatchObject({ ok: false });
+
   expect(await invoke(IPC_CHANNELS.gitlabSelfHostedCancel, repositoryId)).toMatchObject({
     ok: false,
   });
+
   expect(gitlabSelfHosted.cancel).not.toHaveBeenCalled();
   await invoke(IPC_CHANNELS.gitlabSelfHostedCancel, profile.id);
   expect(gitlabSelfHosted.cancel).toHaveBeenCalledWith(profile.id);
 });
+
+it.each([false, true])(
+  "refreshes the owning repository after mutation completion (failure: %s)",
+  async (fails) => {
+    setup();
+    electron.send.mockClear();
+    const failure = new Error("operation partially completed");
+
+    const running = withRepositoryChange(repositoryId, async () => {
+      expect(electron.send).not.toHaveBeenCalled();
+      if (fails) throw failure;
+      return "completed";
+    });
+
+    if (fails) await expect(running).rejects.toBe(failure);
+    else await expect(running).resolves.toBe("completed");
+
+    expect(electron.send).toHaveBeenCalledExactlyOnceWith(
+      IPC_EVENTS.repositoryChanged,
+      repositoryId,
+    );
+  },
+);

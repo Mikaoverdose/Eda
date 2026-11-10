@@ -5,22 +5,14 @@ import { t } from "@shared/i18n";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type { Services } from "../../services";
 import { handle } from "../transport";
-import { captureProfile } from "../profile-context";
+import { captureProfile, profileOperation } from "../profile-context";
 import { optionalInteger, requireId, requireString } from "../validate";
-import { invalidRequest, missingIdentity } from "../request-errors";
+import { invalidRequest } from "../request-errors";
 
 export function registerGitLabSelfHostedHandlers(services: Services): void {
-  const { identity, identities, gitlabSelfHosted: gitlab } = services;
+  const { identity, gitlabSelfHosted: gitlab } = services;
 
-  const work = async <T>(profile: unknown, action: (id: string) => Promise<T> | T) => {
-    const captured = captureProfile(identity, requireId(profile));
-
-    return identity.serialize(async () => {
-      if (!identities.findById(captured.id)) throw missingIdentity(t("operations.gitLabSignIn"));
-
-      return ok(await action(captured.id));
-    });
-  };
+  const work = profileOperation(services, "operations.gitLabSignIn");
 
   const instance = (value: unknown) => requireString(value, t("fields.gitLabInstanceUrl"), 2048);
 

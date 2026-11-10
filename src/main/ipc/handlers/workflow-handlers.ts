@@ -4,7 +4,7 @@ import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { Services } from "../../services";
 import { invalidRequest } from "../request-errors";
-import { broadcast, handle } from "../transport";
+import { broadcast, handle, withRepositoryChange } from "../transport";
 import { requireId, requireString } from "../validate";
 
 export function registerWorkflowHandlers({
@@ -23,12 +23,10 @@ export function registerWorkflowHandlers({
 
     const id = requireId(rawId);
 
-    try {
+    return withRepositoryChange(id, async () => {
       await historyReversal.resumeBranchCheckout(id, requireId(recordId), phase);
       return ok(undefined);
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.historyDismissUnstarted, async (_event, rawId, recordId) => {
@@ -42,12 +40,10 @@ export function registerWorkflowHandlers({
 
     const id = requireId(rawId);
 
-    try {
+    return withRepositoryChange(id, async () => {
       await historyReversal.resumeConfiguration(id, requireId(recordId), direction);
       return ok(undefined);
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.historyResumeIndex, async (_event, rawId, recordId, direction) => {
@@ -56,11 +52,9 @@ export function registerWorkflowHandlers({
 
     const id = requireId(rawId);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(await historyReversal.resumeIndex(id, requireId(recordId), direction));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.historyResumeReset, async (_event, rawId, recordId, publishedCommits) => {
@@ -75,11 +69,9 @@ export function registerWorkflowHandlers({
 
     const id = requireId(rawId);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(await historyReversal.resumeReset(id, requireId(recordId), publishedCommits));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.historyReconcile, async (_event, rawId, recordId, state) => {
@@ -112,12 +104,10 @@ export function registerWorkflowHandlers({
 
       const id = requireId(rawId);
 
-      try {
+      return withRepositoryChange(id, async () => {
         await historyReversal.execute(id, requireId(recordId), direction, publishedCommits);
         return ok(undefined);
-      } finally {
-        broadcast(IPC_EVENTS.repositoryChanged, id);
-      }
+      });
     },
   );
 
@@ -145,7 +135,7 @@ export function registerWorkflowHandlers({
   handle(IPC_CHANNELS.historyRecoveryRestore, async (_event, rawId, token, name) => {
     const id = requireId(rawId);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(
         await historyRecovery.restore(
           id,
@@ -153,14 +143,13 @@ export function registerWorkflowHandlers({
           requireString(name, t("fields.branchName")),
         ),
       );
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.resetPrepare, async (_event, rawId, target, mode) => {
     if (mode !== "soft" && mode !== "mixed" && mode !== "hard")
       throw invalidRequest(errorText("main.workflowHandlers.chooseAResetMode"));
+
     return ok(
       await reset.prepare(requireId(rawId), requireString(target, t("fields.resetTarget")), mode),
     );
@@ -168,11 +157,10 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.resetExecute, async (_event, rawId, rawToken) => {
     const id = requireId(rawId);
-    try {
+
+    return withRepositoryChange(id, async () => {
       return ok(await reset.execute(id, requireId(rawToken)));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.replayPrepare, async (_event, rawId, kind, action, commits, mainline) => {
@@ -196,11 +184,10 @@ export function registerWorkflowHandlers({
 
   handle(IPC_CHANNELS.replayExecute, async (_event, rawId, rawToken) => {
     const id = requireId(rawId);
-    try {
+
+    return withRepositoryChange(id, async () => {
       return ok(await replay.execute(id, requireId(rawToken)));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.rebasePrepare, async (_event, rawId, action, onto, interactive) => {
@@ -230,28 +217,25 @@ export function registerWorkflowHandlers({
     const id = requireId(rawId);
     const token = requireId(rawToken);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(await rebase.execute(id, token, plan, message));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.workflowFinishStash, async (_event, rawId, rawToken) => {
     const id = requireId(rawId);
     const token = requireString(rawToken, t("fields.workflowToken"));
 
-    try {
+    return withRepositoryChange(id, async () => {
       await workflows.finishStash(id, token);
       return ok(undefined);
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.workflowPrepareStart, async (_event, id, source, mode) => {
     if (mode !== "ff" && mode !== "no-ff" && mode !== "ff-only" && mode !== "squash")
       throw invalidRequest(errorText("main.workflowHandlers.chooseASupportedMergePolicy"));
+
     return ok(
       await workflows.prepareStart(
         requireId(id),
@@ -265,11 +249,9 @@ export function registerWorkflowHandlers({
     const id = requireId(rawId);
     const token = requireId(rawToken);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(await workflows.startMerge(id, token));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.workflowPrepareAbort, async (_event, id) =>
@@ -280,12 +262,10 @@ export function registerWorkflowHandlers({
     const id = requireId(rawId);
     const token = requireId(rawToken);
 
-    try {
+    return withRepositoryChange(id, async () => {
       await workflows.abortMerge(id, token);
       return ok(undefined);
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.workflowPrepareMerge, async (_event, id) =>
@@ -299,10 +279,8 @@ export function registerWorkflowHandlers({
     if (typeof message !== "string" || !message.trim() || message.length > 1024 * 1024)
       throw invalidRequest(errorText("main.workflowHandlers.enterAMergeMessageWithinThe1MiBLimit"));
 
-    try {
+    return withRepositoryChange(repositoryId, async () => {
       return ok(await workflows.continueMerge(repositoryId, id, message));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
-    }
+    });
   });
 }

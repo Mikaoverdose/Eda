@@ -12,7 +12,7 @@ import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import { isPullStrategy } from "@shared/workflows/pull";
 import type { Services } from "../../services";
 import { invalidRequest } from "../request-errors";
-import { broadcast, handle } from "../transport";
+import { broadcast, handle, withRepositoryChange } from "../transport";
 import { requireAbsolutePath, requireId, requireRecord, requireString } from "../validate";
 
 function boolean(value: unknown): boolean {
@@ -24,6 +24,7 @@ function boolean(value: unknown): boolean {
 function credentials(value: unknown): TransportCredentials | undefined {
   if (value === undefined) return undefined;
   const input = requireRecord(value, t("main.remoteHandlers.hTtpsCredentials"));
+
   return {
     username: requireString(input["username"], t("fields.username"), 256),
     password: requireString(input["password"], t("fields.token"), 4096),
@@ -45,12 +46,10 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
   handle(IPC_CHANNELS.backgroundFetchRetry, async (_event, rawId, remote) => {
     const id = requireId(rawId);
 
-    try {
+    return withRepositoryChange(id, async () => {
       await backgroundFetch.retry(id, requireString(remote, t("fields.remote")));
       return ok(undefined);
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.pullPreference, async (_event, id) => ok(pull.preference(requireId(id))));
@@ -72,24 +71,20 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
 
     const auth = credentials(value["credentials"]);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(
         await pull.prepare({ repositoryId: id, strategy, ...(auth ? { credentials: auth } : {}) }),
       );
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.pullExecute, async (_event, rawId, rawToken) => {
     const id = requireId(rawId);
     const token = requireId(rawToken);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(await pull.execute(id, token));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.remotesInspect, async (_event, id) =>
@@ -98,6 +93,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
 
   handle(IPC_CHANNELS.remotesListTags, async (_event, raw) => {
     const input = requireRecord(raw, t("main.remoteService.inspectRemoteTags"));
+
     return ok(
       await remotes.listTags({
         repositoryId: requireId(input["repositoryId"]),
@@ -151,6 +147,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
       requireString(branch, t("fields.branch")),
       upstream === null ? null : requireString(upstream, t("fields.upstream")),
     );
+
     broadcast(IPC_EVENTS.repositoryChanged, id);
 
     return ok(undefined);
@@ -161,7 +158,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
     const id = requireId(input["repositoryId"]);
     const auth = credentials(input["credentials"]);
 
-    try {
+    return withRepositoryChange(id, async () => {
       return ok(
         await remotes.fetch({
           repositoryId: id,
@@ -172,9 +169,7 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
           ...(auth ? { credentials: auth } : {}),
         }),
       );
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.remotesPreparePush, async (_event, raw) => {
@@ -207,16 +202,16 @@ export function registerRemoteHandlers({ remotes, pull, backgroundFetch }: Servi
 
   handle(IPC_CHANNELS.remotesPush, async (_event, rawId, token, auth) => {
     const id = requireId(rawId);
-    try {
+
+    return withRepositoryChange(id, async () => {
       return ok(await remotes.push(id, requireId(token), credentials(auth)));
-    } finally {
-      broadcast(IPC_EVENTS.repositoryChanged, id);
-    }
+    });
   });
 
   handle(IPC_CHANNELS.remotesClone, async (_event, raw) => {
     const input = requireRecord(raw, t("main.remoteHandlers.clone"));
     const auth = credentials(input["credentials"]);
+
     const result = await remotes.clone({
       profileId: requireId(input["profileId"]),
       url: requireString(input["url"], "URL"),

@@ -5,12 +5,11 @@ import { IPC_CHANNELS } from "@shared/ipc";
 import type { Services } from "../../services";
 import { GITHUB_VERIFICATION_URL } from "../../providers/github-auth";
 import { handle } from "../transport";
-import { captureProfile } from "../profile-context";
+import { captureProfile, profileOperation } from "../profile-context";
 import { optionalInteger, requireId } from "../validate";
-import { missingIdentity } from "../request-errors";
 
 export function registerGitHubHandlers(services: Services): void {
-  const { identity, identities, github } = services;
+  const { identity, github } = services;
 
   handle(IPC_CHANNELS.githubMaintainerProfile, async () => {
     const details = await github.maintainerProfile();
@@ -23,21 +22,17 @@ export function registerGitHubHandlers(services: Services): void {
     return ok({ ...profile, avatarDataUrl: avatar.dataUrl });
   });
 
-  const work = async <T>(rawProfile: unknown, action: (id: string) => Promise<T> | T) => {
-    const captured = captureProfile(identity, requireId(rawProfile));
-    return identity.serialize(async () => {
-      if (!identities.findById(captured.id))
-        throw missingIdentity(t("main.githubHandlers.gitHubSignIn"));
-      return ok(await action(captured.id));
-    });
-  };
+  const work = profileOperation(services, "main.githubHandlers.gitHubSignIn");
+
   handle(IPC_CHANNELS.githubRepositories, async (_event, profile, rawPage) => {
     const page = optionalInteger(rawPage, t("fields.repositoryPage"), 1, 10000) ?? 1;
     return work(profile, (id) => github.repositories(id, page));
   });
+
   handle(IPC_CHANNELS.githubStatus, async (_event, profile) =>
     work(profile, (id) => github.status(id)),
   );
+
   handle(IPC_CHANNELS.githubProfile, async (_event, profile) =>
     work(profile, async (id) => {
       const details = await github.profile(id);
@@ -47,29 +42,36 @@ export function registerGitHubHandlers(services: Services): void {
       return { ...profile, avatarDataUrl: avatar.dataUrl };
     }),
   );
+
   handle(IPC_CHANNELS.githubOpenProfile, async (_event, profile) =>
     work(profile, async (id) => {
       await shell.openExternal(github.profileUrl(id));
     }),
   );
+
   handle(IPC_CHANNELS.githubBegin, async (_event, profile) =>
     work(profile, (id) => github.begin(id)),
   );
+
   handle(IPC_CHANNELS.githubPoll, async (_event, profile, rawId) => {
     const id = requireId(rawId);
     return work(profile, (owner) => github.poll(owner, id));
   });
+
   handle(IPC_CHANNELS.githubCancel, async (_event, profile, rawId) => {
     const id = requireId(rawId);
     const captured = captureProfile(identity, requireId(profile));
     github.cancel(captured.id, id);
     return ok(undefined);
   });
+
   handle(IPC_CHANNELS.githubDisconnect, async (_event, profile) =>
     work(profile, (id) => github.disconnect(id)),
   );
+
   handle(IPC_CHANNELS.githubOpenVerification, async (_event, profile, rawId) => {
     const id = requireId(rawId);
+
     return work(profile, async (owner) => {
       const userCode = github.verifyPending(owner, id);
       clipboard.writeText(userCode);

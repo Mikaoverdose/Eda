@@ -1,7 +1,13 @@
 import { errorText } from "@shared/error-codes";
 import { AppError, GitError, err, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { IPC_CHANNELS, type IpcChannel, type IpcEvent, type IpcEventArgs } from "@shared/ipc";
+import {
+  IPC_CHANNELS,
+  IPC_EVENTS,
+  type IpcChannel,
+  type IpcEvent,
+  type IpcEventArgs,
+} from "@shared/ipc";
 import { BrowserWindow, ipcMain } from "electron";
 
 import { isRendererDocument } from "../application/renderer-url";
@@ -23,7 +29,9 @@ export function beginUpdateInstall(): () => void {
       operation: t("operations.installUpdate"),
       message: errorText("main.transport.waitForOtherRequestsToFinishThenInstallTheUpdateAgain"),
     });
+
   installingUpdate = true;
+
   return () => {
     installingUpdate = false;
   };
@@ -36,7 +44,9 @@ export async function exclusivelyReset(work: () => Promise<void>): Promise<void>
       operation: t("operations.resetAppData"),
       message: errorText("main.transport.waitForOtherRequestsToFinishThenResetEdaAgain"),
     });
+
   resetting = true;
+
   try {
     await work();
   } finally {
@@ -49,6 +59,7 @@ type Handler = (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => Promi
 export function handle(channel: IpcChannel, handler: Handler): void {
   ipcMain.handle(channel, async (event, ...args) => {
     const frame = event.senderFrame;
+
     if (
       !applicationContents.has(event.sender) ||
       !frame ||
@@ -60,8 +71,10 @@ export function handle(channel: IpcChannel, handler: Handler): void {
         operation: channel,
         message: errorText("main.transport.untrustedFrame"),
       });
+
     const savingForUpdate =
       channel === IPC_CHANNELS.sessionsChange || channel === IPC_CHANNELS.sessionsReadyToClose;
+
     if (resetting || (installingUpdate && !savingForUpdate))
       return err({
         kind: "invalid-input",
@@ -70,12 +83,15 @@ export function handle(channel: IpcChannel, handler: Handler): void {
           ? errorText("main.transport.edaIsRestartingToInstallAnUpdatePleaseWait")
           : errorText("main.transport.edaIsResettingPleaseWait"),
       });
+
     activeRequests++;
+
     try {
       return await handler(event, ...args);
     } catch (error) {
       if (error instanceof GitError) return err(error);
       console.error(`IPC handler ${channel} failed unexpectedly.`);
+
       if (error instanceof AppError)
         return err({
           kind: "unknown",
@@ -99,5 +115,16 @@ export function handle(channel: IpcChannel, handler: Handler): void {
 export function broadcast<C extends IpcEvent>(channel: C, ...args: NoInfer<IpcEventArgs[C]>): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(channel, ...args);
+  }
+}
+
+export async function withRepositoryChange<T>(
+  repositoryId: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await work();
+  } finally {
+    broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
   }
 }
