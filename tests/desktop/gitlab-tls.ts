@@ -74,10 +74,20 @@ try {
     bootstrap,
     `
 const { safeStorage } = require("electron");
+
 safeStorage.isEncryptionAvailable = () => true;
+safeStorage.isAsyncEncryptionAvailable = async () => true;
 safeStorage.getSelectedStorageBackend = () => "gnome_libsecret";
+
 safeStorage.encryptString = (value) => Buffer.from(value);
+safeStorage.encryptStringAsync = async (value) => Buffer.from(value);
+
 safeStorage.decryptString = (value) => value.toString();
+safeStorage.decryptStringAsync = async (value) => ({
+  result: value.toString(),
+  shouldReEncrypt: false,
+});
+
 import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
 `,
   );

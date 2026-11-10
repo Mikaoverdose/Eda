@@ -9,8 +9,14 @@ import { secretKeys } from "@main/secrets/secret-store";
 vi.mock("electron", () => ({
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => true),
+    isAsyncEncryptionAvailable: vi.fn(async () => true),
     encryptString: vi.fn((value: string) => Buffer.from(value)),
+    encryptStringAsync: vi.fn(async (value: string) => Buffer.from(value)),
     decryptString: vi.fn((value: Buffer) => value.toString()),
+    decryptStringAsync: vi.fn(async (value: Buffer) => ({
+      result: value.toString(),
+      shouldReEncrypt: false,
+    })),
     getSelectedStorageBackend: vi.fn(),
   },
 }));
@@ -18,6 +24,67 @@ vi.mock("electron", () => ({
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+});
+
+it("uses only the async macOS keychain path for startup and credential access", async () => {
+  vi.stubGlobal("process", { platform: "darwin" });
+
+  const root = await mkdtemp(join(tmpdir(), "eda-vault-macos-"));
+
+  try {
+    const path = join(root, "vault");
+    const key = secretKeys.sshPassphrase("work");
+
+    await writeFile(
+      path,
+      JSON.stringify({ [key]: Buffer.from("saved secret").toString("base64") }),
+    );
+
+    const vault = await KeychainSecretStore.create(path);
+
+    expect(vault.available).toBe(true);
+    expect(await vault.get(key)).toBe("saved secret");
+
+    await vault.set(key, "updated secret");
+
+    expect(await vault.get(key)).toBe("updated secret");
+    expect(safeStorage.isAsyncEncryptionAvailable).toHaveBeenCalledOnce();
+    expect(safeStorage.isEncryptionAvailable).not.toHaveBeenCalled();
+    expect(safeStorage.encryptString).not.toHaveBeenCalled();
+    expect(safeStorage.decryptString).not.toHaveBeenCalled();
+
+    const saved = await readFile(path, "utf8");
+
+    vi.mocked(safeStorage.decryptStringAsync).mockRejectedValueOnce(new Error("Locked"));
+
+    expect(await vault.get(key)).toBeUndefined();
+    expect(await readFile(path, "utf8")).toBe(saved);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("preserves the vault without trying the legacy path when macOS keychain access is rejected", async () => {
+  vi.stubGlobal("process", { platform: "darwin" });
+  vi.mocked(safeStorage.isAsyncEncryptionAvailable).mockRejectedValueOnce(new Error("Denied"));
+
+  const root = await mkdtemp(join(tmpdir(), "eda-vault-macos-denied-"));
+
+  try {
+    const path = join(root, "vault");
+    const original = JSON.stringify({ credential: "saved ciphertext" });
+
+    await writeFile(path, original);
+
+    const vault = await KeychainSecretStore.create(path);
+
+    expect(vault.available).toBe(false);
+    expect(await readFile(path, "utf8")).toBe(original);
+    expect(safeStorage.isEncryptionAvailable).not.toHaveBeenCalled();
+    expect(safeStorage.encryptStringAsync).not.toHaveBeenCalled();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 it.each(["win32", "darwin"] as const)(
@@ -156,24 +223,37 @@ it("preserves an unreadable vault when OAuth migration fails", async () => {
   }
 });
 
-it("defers pending vault migrations while storage is locked and runs them when it becomes available", async () => {
-  vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue("gnome_libsecret");
-  const root = await mkdtemp(join(tmpdir(), "eda-vault-locked-"));
-  try {
-    const path = join(root, "vault");
-    const legacy = secretKeys.provider("work", "github", "github.com", "7") + ":old";
-    const original = JSON.stringify({ [legacy]: Buffer.from("legacy token").toString("base64") });
-    await writeFile(path, original);
-    vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
-    expect((await KeychainSecretStore.create(path)).available).toBe(false);
-    expect(await readFile(path, "utf8")).toBe(original);
-    const unlocked = await KeychainSecretStore.create(path);
-    expect(unlocked.available).toBe(true);
-    expect(await unlocked.get(legacy)).toBeUndefined();
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
-      __eda_migrations: JSON.stringify(["20261108000000_github_oauth"]),
-    });
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
+it.each(["darwin", "linux", "win32"])(
+  "defers pending vault migrations on %s while storage is locked and runs them when it becomes available",
+  async (platform) => {
+    vi.stubGlobal("process", { platform });
+    vi.mocked(safeStorage.getSelectedStorageBackend).mockReturnValue("gnome_libsecret");
+
+    const root = await mkdtemp(join(tmpdir(), "eda-vault-locked-"));
+
+    try {
+      const path = join(root, "vault");
+      const legacy = secretKeys.provider("work", "github", "github.com", "7") + ":old";
+      const original = JSON.stringify({ [legacy]: Buffer.from("legacy token").toString("base64") });
+
+      await writeFile(path, original);
+
+      if (platform === "darwin")
+        vi.mocked(safeStorage.isAsyncEncryptionAvailable).mockResolvedValueOnce(false);
+      else vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
+
+      expect((await KeychainSecretStore.create(path)).available).toBe(false);
+      expect(await readFile(path, "utf8")).toBe(original);
+
+      const unlocked = await KeychainSecretStore.create(path);
+
+      expect(unlocked.available).toBe(true);
+      expect(await unlocked.get(legacy)).toBeUndefined();
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        __eda_migrations: JSON.stringify(["20261108000000_github_oauth"]),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

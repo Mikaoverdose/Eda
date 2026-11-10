@@ -162,6 +162,7 @@ syncBuiltinESMExports();
 
 app.commandLine.appendSwitch("remote-debugging-port", ${JSON.stringify(String(port))});
 safeStorage.isEncryptionAvailable = () => false;
+safeStorage.isAsyncEncryptionAvailable = async () => false;
 
 app.whenReady().then(() => {
   session.defaultSession.protocol.handle("https", (request) => {

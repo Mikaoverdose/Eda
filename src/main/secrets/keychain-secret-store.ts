@@ -21,26 +21,31 @@ export class KeychainSecretStore implements SecretStore {
   ) {}
 
   static async create(vaultPath: string): Promise<KeychainSecretStore | UnavailableSecretStore> {
-    if (!safeStorage.isEncryptionAvailable()) {
-      return new UnavailableSecretStore(
-        t("main.secrets.keychainSecretStore.noOsKeychainIsAvailableSoEdaCannot"),
-      );
-    }
-
-    const backend =
-      process.platform === "linux" ? safeStorage.getSelectedStorageBackend() : process.platform;
-
-    if (!isSecureStorageBackend(process.platform, backend)) {
-      return new UnavailableSecretStore(
-        t("main.secrets.keychainSecretStore.linuxSafeStorageIsUsingBasicTextInstead"),
-      );
-    }
+    const store = new KeychainSecretStore(vaultPath, true);
 
     try {
-      const probe = safeStorage.encryptString("probe");
-      if (safeStorage.decryptString(probe) !== "probe") {
+      const available =
+        process.platform === "darwin"
+          ? await safeStorage.isAsyncEncryptionAvailable()
+          : safeStorage.isEncryptionAvailable();
+
+      if (!available)
+        return new UnavailableSecretStore(
+          t("main.secrets.keychainSecretStore.noOsKeychainIsAvailableSoEdaCannot"),
+        );
+
+      const backend =
+        process.platform === "linux" ? safeStorage.getSelectedStorageBackend() : process.platform;
+
+      if (!isSecureStorageBackend(process.platform, backend))
+        return new UnavailableSecretStore(
+          t("main.secrets.keychainSecretStore.linuxSafeStorageIsUsingBasicTextInstead"),
+        );
+
+      const probe = await store.encrypt("probe");
+
+      if ((await store.decrypt(probe)) !== "probe")
         throw new AppError(ERROR_CODE.ENCRYPTION_VERIFICATION_FAILED);
-      }
     } catch (error) {
       return new UnavailableSecretStore(
         t("main.secrets.keychainSecretStore.theSystemKeychainDidNotRespond", {
@@ -49,8 +54,8 @@ export class KeychainSecretStore implements SecretStore {
       );
     }
 
-    const store = new KeychainSecretStore(vaultPath, true);
     await store.migrate();
+
     return store;
   }
 
@@ -63,7 +68,7 @@ export class KeychainSecretStore implements SecretStore {
     if (encoded === undefined) return undefined;
 
     try {
-      return safeStorage.decryptString(Buffer.from(encoded, "base64"));
+      return await this.decrypt(Buffer.from(encoded, "base64"));
     } catch {
       return undefined;
     }
@@ -72,7 +77,8 @@ export class KeychainSecretStore implements SecretStore {
   async set(key: string, value: string): Promise<void> {
     return this.mutate(async () => {
       const vault = await this.read();
-      vault[key] = safeStorage.encryptString(value).toString("base64");
+      vault[key] = (await this.encrypt(value)).toString("base64");
+
       await this.write(vault);
     });
   }
@@ -112,6 +118,18 @@ export class KeychainSecretStore implements SecretStore {
 
   async clear(): Promise<void> {
     await this.mutate(() => rm(this.vaultPath, { force: true }));
+  }
+
+  private async encrypt(value: string): Promise<Buffer> {
+    if (process.platform === "darwin") return safeStorage.encryptStringAsync(value);
+
+    return safeStorage.encryptString(value);
+  }
+
+  private async decrypt(value: Buffer): Promise<string> {
+    if (process.platform === "darwin") return (await safeStorage.decryptStringAsync(value)).result;
+
+    return safeStorage.decryptString(value);
   }
 
   private mutate(work: () => Promise<void>): Promise<void> {
