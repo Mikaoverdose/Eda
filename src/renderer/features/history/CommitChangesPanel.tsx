@@ -1,10 +1,11 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
-import type { CommitInspection, FileDiff } from "@shared/repository/repository-read";
+import type { CommitInspection } from "@shared/repository/repository-read";
 import { useEffect, useState } from "react";
 import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";
+import { FileStatusIcon, fileStatusTone } from "../../components/ui/display/FileStatusIcon";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
 import { LoadingContent } from "../../components/ui/feedback/Skeleton";
 import {
@@ -16,24 +17,6 @@ import {
 } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { CommitDetails } from "../diff/CommitDetails";
-
-const statusLabels: Record<FileDiff["status"], string> = {
-  added: "A",
-  deleted: "D",
-  modified: "M",
-  renamed: "R",
-  copied: "C",
-  "type-changed": "T",
-};
-
-const statusTones: Record<FileDiff["status"], string> = {
-  added: "text-git-added",
-  deleted: "text-git-deleted",
-  modified: "text-git-modified",
-  renamed: "text-git-renamed",
-  copied: "text-git-added",
-  "type-changed": "text-git-modified",
-};
 
 export function CommitChangesPanel() {
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
@@ -205,9 +188,9 @@ export function CommitChangesPanel() {
               >
                 <span
                   aria-label={stateLabel(file.status)}
-                  className={`mono shrink-0 ${statusTones[file.status]}`}
+                  className={`mono flex w-3.5 shrink-0 items-center justify-center ${fileStatusTone(file.status)}`}
                 >
-                  {statusLabels[file.status]}
+                  <FileStatusIcon status={file.status} />
                 </span>
 
                 <span className="min-w-0 flex-1 truncate">

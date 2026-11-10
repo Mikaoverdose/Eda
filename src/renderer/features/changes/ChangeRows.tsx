@@ -1,5 +1,6 @@
 import { t } from "@shared/i18n";
 import { ButtonBase } from "../../components/ui/actions/ButtonBase";
+import { FileStatusIcon, fileStatusTone } from "../../components/ui/display/FileStatusIcon";
 import { CHANGE_AREA_LABELS } from "./change-list-model";
 import type { RepositoryChange } from "@shared/repository/repository-read";
 import type { ChangeArea } from "../../stores/repository-store";
@@ -12,13 +13,6 @@ import {
   MinusIcon,
   PlusIcon,
 } from "../../components/ui/index";
-
-const tones: Record<ChangeArea, string> = {
-  conflicted: "text-git-conflict",
-  staged: "text-git-added",
-  unstaged: "text-git-modified",
-  untracked: "text-git-untracked",
-};
 
 export interface ContextMenuPosition {
   x: number;
@@ -116,6 +110,8 @@ export function ChangeRow({
     .slice(0, Math.max(0, change.path.length - name.length))
     .replace(/\/$/, "");
   const stageable = area !== "conflicted";
+  const status =
+    area === "staged" ? change.index : change.worktree !== "." ? change.worktree : change.index;
 
   return (
     <div
@@ -160,12 +156,11 @@ export function ChangeRow({
             : "",
         })}
       >
-        <span className={`mono w-3 shrink-0 text-center text-xs font-semibold ${tones[area]}`}>
-          {area === "staged"
-            ? change.index
-            : change.worktree !== "."
-              ? change.worktree
-              : change.index}
+        <span
+          aria-hidden="true"
+          className={`mono flex w-3.5 shrink-0 items-center justify-center text-xs font-semibold ${area === "conflicted" ? "text-git-conflict" : fileStatusTone(status)}`}
+        >
+          <FileStatusIcon status={status} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs text-text-primary">{name}</span>
