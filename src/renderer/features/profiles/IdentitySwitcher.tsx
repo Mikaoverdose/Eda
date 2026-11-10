@@ -8,7 +8,7 @@ import {
   PlusIcon,
   cx,
   MenuItem,
-  PopoverSurface,
+  AnchoredPopover,
   ProfileButton,
 } from "../../components/ui/index";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
@@ -25,7 +25,7 @@ export function IdentitySwitcher({
   const switching = useAppStore((s) => s.switchingIdentityId);
   const setActive = useAppStore((s) => s.setActiveIdentity);
   const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
 
   if (!active)
     return (
@@ -44,8 +44,9 @@ export function IdentitySwitcher({
   };
 
   return (
-    <div data-tour="profile" ref={root} className="relative">
+    <div data-tour="profile" className="relative">
       <ProfileButton
+        ref={trigger}
         profileName={active.name}
         onClick={() => setOpen((v) => !v)}
         disabled={switching !== null}
@@ -61,11 +62,12 @@ export function IdentitySwitcher({
       </ProfileButton>
 
       {open && (
-        <PopoverSurface
+        <AnchoredPopover
           role="menu"
           onClose={() => setOpen(false)}
-          interactionRef={root}
-          className="absolute right-0 mt-2 w-[18rem]"
+          anchorRef={trigger}
+          placement="bottom-end"
+          className="w-[18rem]"
         >
           <div className="border-b border-border-subtle px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
@@ -96,6 +98,7 @@ export function IdentitySwitcher({
               <PlusIcon size={14} />
               {t("identitySwitcher.newProfile")}
             </MenuItem>
+
             <MenuItem
               onClick={() => {
                 setOpen(false);
@@ -106,7 +109,7 @@ export function IdentitySwitcher({
               {t("identitySwitcher.manageProfiles")}
             </MenuItem>
           </div>
-        </PopoverSurface>
+        </AnchoredPopover>
       )}
     </div>
   );
@@ -128,6 +131,7 @@ function IdentityOption({
       className={cx("gap-2.5 py-2 text-sm", isActive ? "bg-accent-muted" : "hover:bg-bg-raised")}
     >
       <ProfileAvatar name={identity.name} hue={identity.hue} email={identity.gitEmail} small />
+
       <span className="min-w-0 flex-1">
         <span
           className={cx(
@@ -137,8 +141,10 @@ function IdentityOption({
         >
           {identity.name}
         </span>
+
         <span className="mono block truncate text-xs text-text-tertiary">{identity.gitEmail}</span>
       </span>
+
       {isActive && (
         <span aria-hidden="true" className="shrink-0 text-accent-text">
           <CheckIcon size={14} />

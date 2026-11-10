@@ -1,5 +1,5 @@
-import { AppError, errorAction, errorMessage, GitError, type Result } from "@shared/errors";
 import { errorText } from "@shared/error-codes";
+import { AppError, errorAction, errorMessage, GitError, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
 import {
   preferredRemote,
@@ -12,16 +12,10 @@ import {
   repositoryCommandDispatcher,
   repositoryCommandReason,
 } from "../../commands/repository-commands";
-import {
-  ActionIndicator,
-  Button,
-  NoticeBanner,
-  Field,
-  Input,
-  Radio,
-} from "../../components/ui/index";
+import { ActionIndicator, Button, NoticeBanner, Radio } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { RemoteSelect } from "../sync/RemoteSelect";
+import { Select } from "../../components/ui/forms/FormControls";
+import { CredentialFields } from "../sync/TransportFields";
 
 export function TagDeletePanel({
   repositoryId,
@@ -58,24 +52,30 @@ export function TagDeletePanel({
   const running = useRef(false);
   useRepositoryStore((state) => state.writing);
   const unavailable = repositoryCommandReason(context);
+
   const assertContext = () => {
     const reason = repositoryCommandReason(context);
     if (reason) throw new AppError(errorText("errors.operationBlocked", { reason }));
   };
+
   const requireResult = <T,>(result: Result<T>): T => {
     if (!result.ok) {
       if (result.error.kind === "auth-failed") setNeedsAuth(true);
       throw new GitError(result.error);
     }
+
     return result.value;
   };
+
   const credentials = auth.username || auth.password ? auth : undefined;
+
   const run = async (work: () => Promise<void>) => {
     if (running.current) return;
     running.current = true;
     setBusy(true);
     onBusyChange(true);
     setError(null);
+
     try {
       assertContext();
       await work();
@@ -87,8 +87,10 @@ export function TagDeletePanel({
       onBusyChange(false);
     }
   };
+
   useEffect(() => {
     let cancelled = false;
+
     void Promise.all([
       window.eda.remotes.inspect(repositoryId),
       window.eda.repository.listTags(repositoryId),
@@ -101,32 +103,38 @@ export function TagDeletePanel({
         setLocal(exists);
         if (!exists) setScope("remote");
         setRemotes(state.remotes);
+
         setRemote(
           state.remotes.some((item) => item.name === initialRemote)
             ? initialRemote!
             : (preferredRemote(state)?.name ?? ""),
         );
+
         setLoaded(true);
       })
       .catch((failure: unknown) => {
         if (!cancelled) setError(errorMessage(failure));
       });
+
     return () => {
       cancelled = true;
     };
   }, [repositoryId, name, initialRemote]);
+
   const inspectRemoteTag = async () => {
     const revision = ++lookupRevision.current;
     setPresentRemotely(null);
     setLookupError(null);
     setCheckingRemote(!!remote);
     if (!remote) return;
+
     try {
       const result = await window.eda.remotes.listTags({
         repositoryId,
         remote,
         ...(credentials ? { credentials } : {}),
       });
+
       if (revision !== lookupRevision.current) return;
       const tags = requireResult(result);
       const present = tags.some((tag) => tag.name === name);
@@ -140,14 +148,18 @@ export function TagDeletePanel({
       if (revision === lookupRevision.current) setCheckingRemote(false);
     }
   };
+
   useEffect(() => {
     void inspectRemoteTag();
+
     return () => {
       lookupRevision.current++;
     };
   }, [repositoryId, remote]);
+
   const includesLocal = scope !== "remote";
   const includesRemote = scope !== "local";
+
   const choices = (
     [
       ["local", t("referenceMenu.localOnly"), local],
@@ -159,19 +171,26 @@ export function TagDeletePanel({
       ],
     ] as const
   ).filter(([, , available]) => available);
+
   const loading = (!loaded || checkingRemote) && !error && !lookupError;
+
   const close = () => {
     if (!running.current) onClose();
   };
+
   return (
     <div className="space-y-3 p-2 text-xs">
       {loaded && remotes.length === 0 && (
         <p>{t("directPush.noRemoteIsConfiguredAddOneInSettingsRepoThenRetry")}</p>
       )}
+
       {remotes.length > 1 && (
         <label className="block space-y-1">
           {t("remotesDialog.remote")}
-          <RemoteSelect
+
+          <Select
+            compact
+            className="w-full"
             aria-label={t("remotesDialog.remote")}
             value={remote}
             disabled={busy || remoteDeleted}
@@ -186,13 +205,15 @@ export function TagDeletePanel({
             {remotes.map((item) => (
               <option key={item.name}>{item.name}</option>
             ))}
-          </RemoteSelect>
+          </Select>
         </label>
       )}
+
       {(choices.length > 0 || loading) && (
         <fieldset className="space-y-2" disabled={busy || !loaded}>
           <legend className="flex min-h-4 items-center gap-2 font-medium">
             {t("referenceMenu.deleteTagFrom")}
+
             {loading && (
               <span
                 role="status"
@@ -203,6 +224,7 @@ export function TagDeletePanel({
               </span>
             )}
           </legend>
+
           {choices.map(([value, label]) => (
             <label key={value} className="flex items-center gap-2">
               <Radio
@@ -211,11 +233,13 @@ export function TagDeletePanel({
                 checked={scope === value}
                 onChange={() => setScope(value)}
               />
+
               {label}
             </label>
           ))}
         </fieldset>
       )}
+
       {local && <p>{t("referenceMenu.local", { name })}</p>}
       {presentRemotely && !remoteDeleted && (
         <p className="break-all">{t("referenceMenu.remote", { name: remote, branch: name })}</p>
@@ -226,6 +250,7 @@ export function TagDeletePanel({
       {loaded && !local && presentRemotely === false && (
         <p role="status">{t("referenceMenu.tagNoLongerExists")}</p>
       )}
+
       {remoteDeleted && (
         <p role="status">
           {t("referenceMenu.remoteTagDeleted", {
@@ -235,35 +260,22 @@ export function TagDeletePanel({
           })}
         </p>
       )}
+
       {needsAuth && !remoteDeleted && (
-        <>
-          <Field label={t("referenceMenu.hTtpsUsername")}>
-            {(field) => (
-              <Input
-                {...field}
-                autoComplete="off"
-                value={auth.username}
-                onChange={(event) => setAuth({ ...auth, username: event.target.value })}
-              />
-            )}
-          </Field>
-          <Field label={t("referenceMenu.accessToken")}>
-            {(field) => (
-              <Input
-                {...field}
-                type="password"
-                autoComplete="off"
-                value={auth.password}
-                onChange={(event) => setAuth({ ...auth, password: event.target.value })}
-              />
-            )}
-          </Field>
-        </>
+        <CredentialFields
+          value={auth}
+          onChange={setAuth}
+          disabled={busy}
+          shortLabels
+          usernameLabel={t("referenceMenu.hTtpsUsername")}
+        />
       )}
+
       <div className="flex gap-2">
         <Button size="sm" autoFocus disabled={busy} onClick={close}>
           {t("common.cancel")}
         </Button>
+
         {choices.some(([value]) => value === scope) && (
           <Button
             size="sm"
@@ -295,25 +307,32 @@ export function TagDeletePanel({
                         ...(credentials ? { credentials } : {}),
                       }),
                     );
+
                     assertContext();
+
                     requireResult(
                       await window.eda.remotes.push(repositoryId, preview.token, credentials),
                     );
+
                     setRemoteDeleted(true);
                     setPresentRemotely(false);
                     if (includesLocal) setScope("local");
                     onChanged?.();
                   }
+
                   if (includesLocal) {
                     assertContext();
+
                     requireResult(
                       await repositoryCommandDispatcher(context)("deleteTag", {
                         repositoryId,
                         name,
                       }),
                     );
+
                     onChanged?.();
                   }
+
                   onClose();
                 } finally {
                   if (!repositoryCommandReason(context))
@@ -332,7 +351,9 @@ export function TagDeletePanel({
           </Button>
         )}
       </div>
+
       {unavailable && <p>{unavailable}</p>}
+
       {lookupError && (
         <NoticeBanner
           tone="error"
@@ -350,6 +371,7 @@ export function TagDeletePanel({
           {lookupError}
         </NoticeBanner>
       )}
+
       {error && (
         <NoticeBanner tone="error" className="p-2">
           {error}

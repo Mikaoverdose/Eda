@@ -1,8 +1,9 @@
+import { ReferenceRow } from "./ReferenceRow";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { BranchSummary, TagSummary } from "@shared/repository/repository-write";
 import { GitBranch, Globe, PanelLeftClose, PanelLeftOpen, Tag } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLayoutTransition } from "../../components/layout/hooks/useLayoutTransition";
 import { Skeleton, SkeletonRows } from "../../components/ui/feedback/Skeleton";
 import {
@@ -18,10 +19,17 @@ import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { useSessionStore } from "../../stores/session-store";
 import { useTagReferences } from "./hooks/useTagReferences";
-import { ManageReferencesDialog } from "./ManageReferencesDialog";
-import { ReferenceMenu, type ReferenceTarget } from "./ReferenceMenu";
+import type { ReferenceTarget } from "./ReferenceMenu";
 
 const defaults = { hidden: false, locals: true, remotes: true, tags: true };
+
+const ReferenceMenu = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.ReferenceMenu })),
+);
+
+const ManageReferencesDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.ManageReferencesDialog })),
+);
 
 export function ReferenceSidebar({
   repositoryId,
@@ -41,9 +49,11 @@ export function ReferenceSidebar({
   const profileId = useAppStore((state) => state.activeIdentity?.id);
   const status = useRepositoryStore((state) => state.status);
   const selection = useRepositoryStore((state) => state.selection);
+
   const saved = useSessionStore(
     (state) => state.snapshot?.session.views[repositoryId]?.references ?? defaults,
   );
+
   const [branches, setBranches] = useState<BranchSummary[]>([]);
   const [localTags, setTags] = useState<TagSummary[]>([]);
   const [query, setQuery] = useState("");
@@ -60,6 +70,7 @@ export function ReferenceSidebar({
 
     setLoading(true);
     setError(null);
+
     void Promise.all([
       window.eda.repository.listBranches(repositoryId),
       window.eda.repository.listTags(repositoryId),
@@ -77,6 +88,7 @@ export function ReferenceSidebar({
           const branch = branchResult.value.find(
             (item) => `refs/${item.remote ? "remotes" : "heads"}/${item.name}` === filter.pinnedRef,
           );
+
           const tag = tagResult.value.find((item) => `refs/tags/${item.name}` === filter.pinnedRef);
           const oid = branch?.oid ?? tag?.oid;
 
@@ -84,6 +96,7 @@ export function ReferenceSidebar({
             session.setView(repositoryId, {
               graphFilter: { ...filter, pinnedOid: oid, pinnedRef: oid ? filter.pinnedRef : null },
             });
+
             void useRepositoryStore.getState().refresh();
           }
         }
@@ -112,6 +125,7 @@ export function ReferenceSidebar({
     if (key === "hidden") transition(update);
     else update();
   };
+
   const collapsed = !forceExpanded && (saved.hidden || compact);
   const sidebarWidth = forceExpanded ? "w-full" : collapsed ? "w-9" : "w-[200px]";
   const contentWidth = forceExpanded ? "w-full" : "w-[200px]";
@@ -179,30 +193,12 @@ export function ReferenceSidebar({
           data-reference-toggle="expand"
           icon={<PanelLeftOpen size={16} />}
         />
-        {[
-          {
-            key: "locals" as const,
-            label: t("referenceSidebar.localBranches"),
-            icon: GitBranch,
-            count: branches.filter((branch) => !branch.remote).length,
-          },
-          {
-            key: "remotes" as const,
-            label: t("referenceSidebar.remoteBranches"),
-            icon: Globe,
-            count: branches.filter((branch) => branch.remote).length,
-          },
-          {
-            key: "tags" as const,
-            label: t("referenceSidebar.tags"),
-            icon: Tag,
-            count: tags.length,
-          },
-        ].map(({ key, label, icon: Icon, count }) => (
+
+        {groups.map(({ key, label, icon: Icon, items }) => (
           <ListItemButton
             key={key}
-            title={`${label}: ${count}`}
-            aria-label={`${label}: ${count}`}
+            title={`${label}: ${items.length}`}
+            aria-label={`${label}: ${items.length}`}
             className="mt-3 flex-col gap-0 p-1 text-text-tertiary"
             onClick={() =>
               compact
@@ -215,10 +211,11 @@ export function ReferenceSidebar({
             }
           >
             <Icon size={15} aria-hidden="true" />
-            <span className="text-xs">{count}</span>
+            <span className="text-xs">{items.length}</span>
           </ListItemButton>
         ))}
       </div>
+
       <div
         className={cx("reference-sidebar-content flex h-full min-h-0 flex-col", contentWidth)}
         inert={collapsed}
@@ -228,6 +225,7 @@ export function ReferenceSidebar({
           <h2 className="text-xs font-semibold text-text-secondary">
             {t("referenceSidebar.repository")}
           </h2>
+
           <IconButton
             ref={collapseButton}
             size="xs"
@@ -238,21 +236,28 @@ export function ReferenceSidebar({
             icon={<PanelLeftClose size={14} />}
           />
         </header>
+
         {actions && (
-          <ReferenceMenu
-            key={`${profileId}:${repositoryId}:${actions.kind}:${actions.ref.name}`}
-            repositoryId={repositoryId}
-            target={actions}
-            onClose={() => setActions(null)}
-            onChanged={() => setRevision((value) => value + 1)}
-          />
+          <Suspense fallback={null}>
+            <ReferenceMenu
+              key={`${profileId}:${repositoryId}:${actions.kind}:${actions.ref.name}`}
+              repositoryId={repositoryId}
+              target={actions}
+              onClose={() => setActions(null)}
+              onChanged={() => setRevision((value) => value + 1)}
+            />
+          </Suspense>
         )}
+
         {manageOpen && (
-          <ManageReferencesDialog
-            repositoryId={repositoryId}
-            onClose={() => setManageOpen(false)}
-          />
+          <Suspense fallback={null}>
+            <ManageReferencesDialog
+              repositoryId={repositoryId}
+              onClose={() => setManageOpen(false)}
+            />
+          </Suspense>
         )}
+
         <SearchField
           className="mx-3 mb-3 bg-bg-base"
           aria-label={t("referenceSidebar.filterBranchesAndTags")}
@@ -260,6 +265,7 @@ export function ReferenceSidebar({
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t("referenceSidebar.findABranch")}
         />
+
         <div className="min-h-0 flex-1 overflow-y-auto pb-3">
           {error && (
             <ErrorDialog>
@@ -269,6 +275,7 @@ export function ReferenceSidebar({
               </TextButton>
             </ErrorDialog>
           )}
+
           {groups.map((group) => {
             const items = group.items.filter((item) =>
               item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase().trim()),
@@ -287,6 +294,7 @@ export function ReferenceSidebar({
                   <>
                     <group.icon size={13} className="shrink-0" aria-hidden="true" />
                     <span className="truncate">{group.label}</span>
+
                     <span className="mono ml-auto flex h-4 w-6 shrink-0 items-center justify-center text-text-tertiary">
                       {loading && branches.length === 0 ? (
                         <Skeleton className="w-5" />
@@ -309,132 +317,21 @@ export function ReferenceSidebar({
                     </div>
                   ) : (
                     <>
-                      {items.slice(0, 200).map((item) => {
-                        const tag = "isHead" in item ? null : item;
-                        const tagTarget = tag
-                          ? {
-                              kind: "tag" as const,
-                              ref: tag,
-                              local: tag.local,
-                              remoteNames: tag.remotes.map((remote) => remote.name),
-                              ...(!tag.local && tag.remotes[0]
-                                ? { remoteName: tag.remotes[0].name, remoteOid: tag.remotes[0].oid }
-                                : {}),
-                            }
-                          : null;
-                        const tagStatus = tag
-                          ? [
-                              tag.local ? t("referenceSidebar.localTagIndicator") : "",
-                              tag.remotes.length
-                                ? t("referenceSidebar.remoteTagIndicator", {
-                                    remotes: tag.remotes.map((remote) => remote.name).join(", "),
-                                  })
-                                : "",
-                              tag.unknownRemotes.length
-                                ? t("referenceSidebar.remoteTagUnavailable", {
-                                    remotes: tag.unknownRemotes.join(", "),
-                                  })
-                                : "",
-                            ]
-                              .filter(Boolean)
-                              .join("\n")
-                          : "";
-                        const head = "isHead" in item && item.isHead === true;
-                        const selected = selection?.kind === "commit" && selection.oid === item.oid;
-                        const displayName =
-                          tag && !tag.local && tag.remotes[0]
-                            ? `${tag.remotes[0].name}/${item.name}`
-                            : item.name;
+                      {items.slice(0, 200).map((item) => (
+                        <ReferenceRow
+                          key={item.name}
+                          item={item}
+                          selected={selection?.kind === "commit" && selection.oid === item.oid}
+                          onActions={setActions}
+                        />
+                      ))}
 
-                        return (
-                          <ListItemButton
-                            key={item.name}
-                            title={[
-                              t("referenceSidebar.inspect", {
-                                name: item.name,
-                                value2: head ? t("referenceSidebar.currentBranch") : "",
-                                oid: item.oid.slice(0, 8),
-                              }),
-                              tagStatus,
-                            ]
-                              .filter(Boolean)
-                              .join("\n")}
-                            aria-label={t("referenceSidebar.inspectReference", {
-                              value1:
-                                group.key === "tags"
-                                  ? t("referenceSidebar.tag")
-                                  : t("referenceSidebar.branch"),
-                              name: item.name,
-                            })}
-                            aria-pressed={selected}
-                            onClick={(event) => {
-                              if (tagTarget && !tagTarget.local) {
-                                const bounds = event.currentTarget.getBoundingClientRect();
-                                setActions({ ...tagTarget, x: bounds.right, y: bounds.top });
-                              } else void useRepositoryStore.getState().jumpToCommit(item.oid);
-                            }}
-                            onMouseEnter={() =>
-                              useRepositoryStore.setState({ hoveredRefOid: item.oid })
-                            }
-                            onMouseLeave={() =>
-                              useRepositoryStore.setState({ hoveredRefOid: null })
-                            }
-                            onFocus={() => useRepositoryStore.setState({ hoveredRefOid: item.oid })}
-                            onBlur={() => useRepositoryStore.setState({ hoveredRefOid: null })}
-                            onContextMenu={(event) => {
-                              event.preventDefault();
-                              setActions(
-                                "isHead" in item
-                                  ? {
-                                      kind: "branch",
-                                      ref: item,
-                                      x: event.clientX,
-                                      y: event.clientY,
-                                    }
-                                  : { ...tagTarget!, x: event.clientX, y: event.clientY },
-                              );
-                            }}
-                            onKeyDown={(event) => {
-                              if (
-                                event.key === "ContextMenu" ||
-                                (event.shiftKey && event.key === "F10")
-                              ) {
-                                event.preventDefault();
-                                const bounds = event.currentTarget.getBoundingClientRect();
-                                setActions(
-                                  "isHead" in item
-                                    ? { kind: "branch", ref: item, x: bounds.right, y: bounds.top }
-                                    : { ...tagTarget!, x: bounds.right, y: bounds.top },
-                                );
-                              }
-                            }}
-                            selected={selected}
-                            className="py-1.5 pl-[51px] text-xs"
-                          >
-                            <span
-                              className={cx(
-                                "min-w-0 flex-1 truncate",
-                                head && "font-medium text-accent-text",
-                              )}
-                            >
-                              {displayName}
-                            </span>
-                            {tag?.localOnly && (
-                              <span
-                                className="shrink-0 rounded-sm bg-bg-raised px-1.5 py-0.5 text-xs leading-none text-text-secondary"
-                                title={tagStatus}
-                              >
-                                {t("referenceSidebar.localLocation")}
-                              </span>
-                            )}
-                          </ListItemButton>
-                        );
-                      })}
                       {!loading && items.length === 0 && (
                         <p className="py-1 pl-[51px] pr-2 text-xs text-text-tertiary">
                           {query ? t("referenceSidebar.noMatches") : t("referenceSidebar.noneYet")}
                         </p>
                       )}
+
                       {items.length > 200 && (
                         <p className="px-3 py-2 text-xs text-text-tertiary">
                           {t("referenceSidebar.showing200OfFilterToFindAReference", {
@@ -449,6 +346,7 @@ export function ReferenceSidebar({
             );
           })}
         </div>
+
         <p className="border-t border-border-subtle px-3 py-3 text-xs leading-relaxed text-text-tertiary">
           <TextButton tone="accent" onClick={() => setManageOpen(true)}>
             {t("referenceSidebar.manageLocalReferences")}

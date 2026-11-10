@@ -3,7 +3,7 @@ import { errorMessage, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { BranchSummary } from "@shared/repository/repository-write";
 import { Circle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
@@ -19,11 +19,14 @@ import {
   IconButton,
   Input,
   ListItemButton,
-  PopoverSurface,
+  AnchoredPopover,
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { RemotesDialog } from "../sync/RemotesDialog";
+
+const RemotesDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.RemotesDialog })),
+);
 
 export function BranchMenu({ head }: { head: string }) {
   const repositoryId = useAppStore((state) => state.selectedRepositoryId);
@@ -38,13 +41,15 @@ export function BranchMenu({ head }: { head: string }) {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+
   const writeUnavailable = useRepositoryStore(
     (state) => state.status?.capabilities?.write === false,
   );
 
   useEffect(() => {
     if (!open || !repositoryId) return;
+
     void window.eda.repository.listBranches(repositoryId).then((result) => {
       if (result.ok) setBranches(result.value);
       else setError(errorMessage(result.error));
@@ -56,6 +61,7 @@ export function BranchMenu({ head }: { head: string }) {
       setError(
         commandUnavailable ?? t("branchMenu.thisRepositoryIsReadOnlyCheckPermissionsThenRefresh"),
       );
+
       return false;
     }
 
@@ -86,6 +92,7 @@ export function BranchMenu({ head }: { head: string }) {
   const needle = query.trim().toLowerCase();
   const matches = needle ? local.filter((b) => b.name.toLowerCase().includes(needle)) : local;
   const renderedMatches = matches.slice(0, 200);
+
   const { index, setHighlight, onKeyDown } = useListNavigation(
     renderedMatches.length,
     (position) => {
@@ -110,8 +117,9 @@ export function BranchMenu({ head }: { head: string }) {
   if (!repositoryId) return null;
 
   return (
-    <div ref={root} className="relative">
+    <div className="relative">
       <ButtonBase
+        ref={trigger}
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -124,19 +132,23 @@ export function BranchMenu({ head }: { head: string }) {
       </ButtonBase>
 
       {tracking && (
-        <RemotesDialog
-          repositoryId={repositoryId}
-          initialTab="tracking"
-          onClose={() => setTracking(false)}
-        />
+        <Suspense fallback={null}>
+          <RemotesDialog
+            repositoryId={repositoryId}
+            initialTab="tracking"
+            onClose={() => setTracking(false)}
+          />
+        </Suspense>
       )}
+
       {open && (
-        <PopoverSurface
+        <AnchoredPopover
           role="dialog"
           aria-label={t("branchMenu.branches")}
           onClose={() => setOpen(false)}
-          interactionRef={root}
-          className="absolute left-0 top-full mt-1 flex max-h-[24rem] w-64 flex-col"
+          anchorRef={trigger}
+          placement="bottom-start"
+          className="flex max-h-[min(24rem,calc(100dvh-16px))] w-64 flex-col"
         >
           <div className="shrink-0 border-b border-border-subtle p-1.5">
             <Input
@@ -182,6 +194,7 @@ export function BranchMenu({ head }: { head: string }) {
                   </span>
                   <span className="min-w-0 truncate">{branch.name}</span>
                 </ListItemButton>
+
                 {!branch.isHead && (
                   <IconButton
                     size="xs"
@@ -202,11 +215,13 @@ export function BranchMenu({ head }: { head: string }) {
                 )}
               </li>
             ))}
+
             {matches.length > 200 && (
               <li className="px-2 py-2 text-xs text-text-tertiary">
                 {t("branchMenu.showing200OfSearchToFindABranch", { length: matches.length })}
               </li>
             )}
+
             {matches.length === 0 && (
               <li className="px-2 py-3 text-center text-xs text-text-tertiary">
                 {t("branchMenu.noBranchMatches")}
@@ -269,7 +284,7 @@ export function BranchMenu({ head }: { head: string }) {
               </Button>
             )}
           </div>
-        </PopoverSurface>
+        </AnchoredPopover>
       )}
     </div>
   );

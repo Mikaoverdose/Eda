@@ -12,7 +12,7 @@ import {
   Tag,
   Undo2,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
@@ -24,7 +24,7 @@ import {
   ErrorDialog,
   Input,
   MenuItem,
-  PopoverSurface,
+  ContextPopover,
   Textarea,
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
@@ -54,13 +54,16 @@ export function CommitMenu({
   const dispatch = repositoryCommandDispatcher(commandContext);
   const commandUnavailable = repositoryCommandReason(commandContext);
   const refresh = useRepositoryStore((state) => state.refresh);
+
   const [mode, setMode] = useState<
     "menu" | "tag" | "branch" | "merge" | "cherry-pick" | "revert" | "reset"
   >(initialMode);
+
   const [name, setName] = useState("");
   const [sign, setSign] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!repositoryId) return null;
@@ -82,11 +85,14 @@ export function CommitMenu({
     return <MergeStartDialog repositoryId={repositoryId} source={target.oid} onClose={onClose} />;
 
   const run = async (work: () => Promise<Result<unknown>>) => {
+    if (submitting.current) return;
+
     if (commandUnavailable) {
       setError(commandUnavailable);
       return;
     }
 
+    submitting.current = true;
     setBusy(true);
     setError(null);
 
@@ -101,22 +107,44 @@ export function CommitMenu({
       await refresh();
       onClose();
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
 
+  const canCreate =
+    !busy && !commandUnavailable && !!name.trim() && !(mode === "tag" && sign && !message.trim());
+
+  const createReference = () => {
+    if (!canCreate) return;
+
+    void run(() =>
+      mode === "tag"
+        ? dispatch("createTag", {
+            repositoryId,
+            name: name.trim(),
+            target: target.oid,
+            ...(message.trim() ? { message } : {}),
+            sign,
+          })
+        : dispatch("createBranch", {
+            repositoryId,
+            name: name.trim(),
+            startPoint: target.oid,
+            checkout: true,
+          }),
+    );
+  };
+
   return (
-    <PopoverSurface
+    <ContextPopover
       role={mode === "menu" ? "menu" : "dialog"}
       onClose={onClose}
       aria-label={
         mode === "menu" ? t("commitMenu.commitActions") : t("commitMenu.create", { mode: mode })
       }
-      style={{
-        left: Math.min(target.x, window.innerWidth - 240),
-        top: Math.min(target.y, window.innerHeight - 200),
-      }}
-      className="fixed w-56 p-1"
+      position={target}
+      className="w-56"
     >
       <p className="mono truncate px-2 py-1 text-xs text-text-tertiary">
         {target.oid.slice(0, 10)}
@@ -134,26 +162,32 @@ export function CommitMenu({
             <Copy size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.copyCommitSha")}
           </MenuItem>
+
           <MenuItem onClick={() => setMode("branch")}>
             <GitBranch size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.createBranchHere")}
           </MenuItem>
+
           <MenuItem disabled={!!commandUnavailable} onClick={() => setMode("merge")}>
             <GitMerge size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.mergeIntoCurrentBranch")}
           </MenuItem>
+
           <MenuItem disabled={!!commandUnavailable} onClick={() => setMode("reset")}>
             <RotateCcw size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.resetCurrentBranchHere")}
           </MenuItem>
+
           <MenuItem disabled={!!commandUnavailable} onClick={() => setMode("cherry-pick")}>
             <Cherry size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.cherryPick")}
           </MenuItem>
+
           <MenuItem disabled={!!commandUnavailable} onClick={() => setMode("revert")}>
             <Undo2 size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.revert")}
           </MenuItem>
+
           <MenuItem
             onClick={async () => {
               const result = await window.eda.repository.referenceUrl(
@@ -174,10 +208,12 @@ export function CommitMenu({
             <Link size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.copyCommitBrowserUrl")}
           </MenuItem>
+
           <MenuItem onClick={() => setMode("tag")}>
             <Tag size={13} className="shrink-0" aria-hidden="true" />
             {t("commitMenu.createTagHere")}
           </MenuItem>
+
           <MenuItem
             disabled={busy || !!commandUnavailable}
             onClick={() =>
@@ -198,25 +234,10 @@ export function CommitMenu({
             value={name}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key !== "Enter" || name.trim().length === 0) return;
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
 
               event.preventDefault();
-              void run(() =>
-                mode === "tag"
-                  ? dispatch("createTag", {
-                      repositoryId,
-                      name: name.trim(),
-                      target: target.oid,
-                      ...(message.trim() ? { message } : {}),
-                      sign,
-                    })
-                  : dispatch("createBranch", {
-                      repositoryId,
-                      name: name.trim(),
-                      startPoint: target.oid,
-                      checkout: true,
-                    }),
-              );
+              createReference();
             }}
             placeholder={
               mode === "tag"
@@ -225,6 +246,7 @@ export function CommitMenu({
             }
             aria-label={mode === "tag" ? t("commitMenu.tagName") : t("commitMenu.branchName")}
           />
+
           {mode === "tag" && (
             <Textarea
               aria-label={t("commitMenu.annotatedTagMessage")}
@@ -235,6 +257,7 @@ export function CommitMenu({
               onChange={(event) => setMessage(event.target.value)}
             />
           )}
+
           {mode === "tag" && (
             <Checkbox
               className="flex gap-2 p-2 text-xs"
@@ -244,30 +267,8 @@ export function CommitMenu({
               {t("commitMenu.signWithThisProfileSsshgpgKey")}
             </Checkbox>
           )}
-          <Button
-            size="sm"
-            variant="primary"
-            block
-            disabled={busy || !name.trim() || (mode === "tag" && sign && !message.trim())}
-            onClick={() =>
-              void run(() =>
-                mode === "tag"
-                  ? dispatch("createTag", {
-                      repositoryId,
-                      name: name.trim(),
-                      target: target.oid,
-                      ...(message.trim() ? { message } : {}),
-                      sign,
-                    })
-                  : dispatch("createBranch", {
-                      repositoryId,
-                      name: name.trim(),
-                      startPoint: target.oid,
-                      checkout: true,
-                    }),
-              )
-            }
-          >
+
+          <Button size="sm" variant="primary" block disabled={!canCreate} onClick={createReference}>
             {t("commitMenu.create", { mode: mode })}
           </Button>
         </div>
@@ -275,6 +276,6 @@ export function CommitMenu({
 
       {commandUnavailable && <p className="text-xs text-text-tertiary">{commandUnavailable}</p>}
       {error && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
-    </PopoverSurface>
+    </ContextPopover>
   );
 }

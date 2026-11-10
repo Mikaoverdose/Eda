@@ -1,8 +1,8 @@
 import { ERROR_CODE, errorText } from "@shared/error-codes";
-import { referenceLink } from "@shared/repository/reference-link";
 import type { Result } from "@shared/errors";
 import { AppError, errorAction, errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
+import { referenceLink } from "@shared/repository/reference-link";
 import type {
   BranchSummary,
   TagSummary,
@@ -19,8 +19,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import {
   captureRepositoryCommand,
   repositoryCommandDispatcher,
@@ -30,21 +29,21 @@ import {
   Button,
   Checkbox,
   CodeBlock,
+  ContextPopover,
   ErrorDialog,
   Field,
   Input,
   MenuItem,
-  PopoverSurface,
   Radio,
 } from "../../components/ui/index";
-import { ModalSurfaceContext } from "../../components/ui/overlays/ModalSurface";
 import { branchDeleteTargets } from "../../repository/branch-delete-targets";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { copyText } from "../../utils/clipboard";
 import { RemotesDialog } from "../sync/RemotesDialog";
-import { TagDeletePanel } from "./TagDeletePanel";
+import { CredentialFields } from "../sync/TransportFields";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { RebaseDialog } from "../workflows/RebaseDialog";
+import { TagDeletePanel } from "./TagDeletePanel";
 
 export type ReferenceTarget = (
   | { kind: "branch"; ref: BranchSummary }
@@ -82,14 +81,15 @@ export function ReferenceMenu({
   onClose: () => void;
   onChanged?: (() => void) | undefined;
 }) {
-  const modalSurface = useContext(ModalSurfaceContext)?.current;
   const [context] = useState(() => captureRepositoryCommand(repositoryId));
   const dispatch = repositoryCommandDispatcher(context);
   useRepositoryStore((state) => state.writing);
   const unavailable = repositoryCommandReason(context);
+
   const [mode, setMode] = useState<
     "menu" | "rename" | "create" | "delete" | "verify" | "merge" | "rebase" | "push"
   >("menu");
+
   const [name, setName] = useState(target.ref.name);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -97,20 +97,25 @@ export function ReferenceMenu({
   const tagRunning = useRef(false);
   const [verification, setVerification] = useState<TagVerification | null>(null);
   const [targets, setTargets] = useState<ReturnType<typeof branchDeleteTargets> | null>(null);
+
   const [scope, setScope] = useState<DeleteScope>(
     target.kind === "branch" && target.ref.remote ? "remote" : "local",
   );
+
   const [force, setForce] = useState(false);
   const [remoteDeleted, setRemoteDeleted] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [auth, setAuth] = useState({ username: "", password: "" });
   const review = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (mode === "delete" || mode === "verify") review.current?.focus();
   }, [mode]);
+
   const blocked = target.kind === "branch" && !!target.ref.worktreePath && !target.ref.isHead;
   const includesLocal = scope !== "remote";
   const includesRemote = scope !== "local";
+
   const branchChoices = targets
     ? (
         [
@@ -124,20 +129,25 @@ export function ReferenceMenu({
         ] as const
       ).filter(([, , available]) => available)
     : [];
+
   const close = () => {
     if (!running.current && !tagRunning.current) onClose();
   };
+
   const assertContext = () => {
     const reason = repositoryCommandReason(context);
     if (reason) throw new AppError(errorText("errors.operationBlocked", { reason }));
   };
+
   const requireResult = <T,>(result: Result<T>): T => {
     if (!result.ok) {
       setNeedsAuth(result.error.kind === "auth-failed");
       throw new GitError(result.error);
     }
+
     return result.value;
   };
+
   const run = async (
     work: () => Promise<void>,
     options: { dismiss?: boolean; write?: boolean } = {},
@@ -146,6 +156,7 @@ export function ReferenceMenu({
     running.current = true;
     setBusy(true);
     setError(null);
+
     try {
       if (options.write !== false) assertContext();
       await work();
@@ -164,22 +175,27 @@ export function ReferenceMenu({
       setBusy(false);
     }
   };
+
   const refresh = async () => {
     if (!repositoryCommandReason(context)) await useRepositoryStore.getState().refresh();
   };
+
   const deleteRef = () =>
     run(async () => {
       if (!targets) throw new AppError(ERROR_CODE.BRANCH_TARGETS_NOT_READY);
+
       if (includesLocal && (!targets.local || targets.localBlocked))
         throw new AppError(
           errorText("errors.operationBlocked", {
             reason: targets.localBlocked ?? t("referenceMenu.noMatchingLocalBranchExists"),
           }),
         );
+
       try {
         if (includesRemote && !remoteDeleted) {
           if (!targets.remote) throw new AppError(ERROR_CODE.TRACKED_BRANCH_MISSING);
           const credentials = needsAuth ? auth : undefined;
+
           const preview = requireResult(
             await window.eda.remotes.preparePush({
               repositoryId,
@@ -191,13 +207,16 @@ export function ReferenceMenu({
               ...(credentials ? { credentials } : {}),
             }),
           );
+
           assertContext();
           requireResult(await window.eda.remotes.push(repositoryId, preview.token, credentials));
           setRemoteDeleted(true);
           if (includesLocal) setScope("local");
         }
+
         if (includesLocal && targets.local) {
           assertContext();
+
           requireResult(
             await dispatch("deleteBranch", {
               repositoryId,
@@ -221,10 +240,12 @@ export function ReferenceMenu({
         onClose={onClose}
       />
     );
+
   if (mode === "merge")
     return (
       <MergeStartDialog repositoryId={repositoryId} source={target.ref.oid} onClose={onClose} />
     );
+
   if (mode === "rebase")
     return (
       <RebaseDialog
@@ -235,12 +256,8 @@ export function ReferenceMenu({
       />
     );
 
-  const top = Math.max(8, Math.min(target.y, window.innerHeight - 460));
-  const left = Math.max(8, Math.min(target.x, window.innerWidth - 320));
-  const bounds = modalSurface?.getBoundingClientRect();
-
-  return createPortal(
-    <PopoverSurface
+  return (
+    <ContextPopover
       role={mode === "menu" ? "menu" : "dialog"}
       aria-label={
         mode === "menu"
@@ -248,13 +265,8 @@ export function ReferenceMenu({
           : t(actionTitleKeys[mode][target.kind])
       }
       onClose={close}
-      style={{
-        position: modalSurface ? "absolute" : "fixed",
-        left: left - (bounds?.left ?? 0) + (modalSurface?.scrollLeft ?? 0),
-        top: top - (bounds?.top ?? 0) + (modalSurface?.scrollTop ?? 0),
-        maxHeight: `calc(100vh - ${top + 8}px)`,
-      }}
-      className="fixed w-[312px] overflow-y-auto p-1"
+      position={target}
+      className="w-[312px]"
     >
       <p
         className="truncate px-2 py-1 text-xs font-semibold text-text-tertiary"
@@ -262,6 +274,7 @@ export function ReferenceMenu({
       >
         {target.ref.name}
       </p>
+
       {mode === "menu" && (
         <>
           <MenuItem
@@ -279,16 +292,19 @@ export function ReferenceMenu({
                     name: target.ref.name,
                   }),
                 );
+
                 await refresh();
               })
             }
           >
             <GitBranch size={13} />
+
             {t("referenceMenu.checkOut", {
               kind: target.kind,
               value2: target.kind === "tag" ? t("referenceMenu.detachedHead") : "",
             })}
           </MenuItem>
+
           {target.kind === "branch" && (
             <>
               <MenuItem
@@ -298,6 +314,7 @@ export function ReferenceMenu({
                 <GitPullRequestArrow size={13} />
                 {t("referenceMenu.rebaseCurrentBranchOntoThis")}
               </MenuItem>
+
               <MenuItem
                 disabled={!!unavailable || target.ref.isHead}
                 onClick={() => setMode("merge")}
@@ -305,6 +322,7 @@ export function ReferenceMenu({
                 <GitMerge size={13} />
                 {t("referenceMenu.mergeIntoCurrentBranch")}
               </MenuItem>
+
               <MenuItem
                 disabled={!!unavailable || blocked}
                 onClick={() => {
@@ -313,6 +331,7 @@ export function ReferenceMenu({
                       ? target.ref.name.split("/").slice(1).join("/")
                       : target.ref.name,
                   );
+
                   setMode(target.ref.remote ? "create" : "rename");
                 }}
               >
@@ -323,10 +342,12 @@ export function ReferenceMenu({
               </MenuItem>
             </>
           )}
+
           <MenuItem onClick={() => void run(() => copyText(target.ref.name), { write: false })}>
             <Copy size={13} />
             {t("referenceMenu.copyName")}
           </MenuItem>
+
           <MenuItem
             onClick={() =>
               void run(
@@ -341,6 +362,7 @@ export function ReferenceMenu({
             <Copy size={13} />
             {t("referenceMenu.copySha")}
           </MenuItem>
+
           <MenuItem
             onClick={() =>
               void run(
@@ -364,6 +386,7 @@ export function ReferenceMenu({
                             target.ref.name,
                           ),
                         );
+
                   if (!url) throw new AppError(ERROR_CODE.REMOTE_BROWSER_URL_UNAVAILABLE);
                   await copyText(url);
                 },
@@ -374,6 +397,7 @@ export function ReferenceMenu({
             <Link size={13} />
             {t("referenceMenu.copyBrowserUrl")}
           </MenuItem>
+
           {target.kind === "tag" && (
             <>
               <MenuItem
@@ -383,10 +407,12 @@ export function ReferenceMenu({
                 <Upload size={13} />
                 {t("referenceMenu.pushTag")}
               </MenuItem>
+
               <MenuItem
                 disabled={busy || !!unavailable || target.local === false}
                 onClick={() => {
                   setMode("verify");
+
                   void run(
                     async () => {
                       setVerification(
@@ -405,11 +431,13 @@ export function ReferenceMenu({
                 <ShieldCheck size={13} />
                 {t("referenceMenu.verifyTagSignature")}
               </MenuItem>
+
               {target.remoteName && target.local !== false && (
                 <p className="px-2 py-1 text-xs text-text-tertiary">
                   {t("referenceMenu.localTagActions")}
                 </p>
               )}
+
               {target.local === false && (
                 <p className="px-2 py-1 text-xs text-text-tertiary">
                   {t("referenceMenu.fetchTagFirst")}
@@ -417,11 +445,13 @@ export function ReferenceMenu({
               )}
             </>
           )}
+
           <MenuItem
             disabled={busy || !!unavailable}
             className="text-git-deleted"
             onClick={() => {
               setMode("delete");
+
               if (target.kind === "branch")
                 void run(
                   async () => {
@@ -437,6 +467,7 @@ export function ReferenceMenu({
             }}
           >
             <Trash2 size={13} />
+
             {t(
               target.kind === "branch"
                 ? "referenceMenu.deleteBranchAction"
@@ -445,12 +476,14 @@ export function ReferenceMenu({
           </MenuItem>
         </>
       )}
+
       {(mode === "rename" || mode === "create") && (
         <form
           className="space-y-3 p-2"
           onSubmit={(event) => {
             event.preventDefault();
             if (!name.trim() || busy) return;
+
             void run(async () => {
               requireResult(
                 mode === "create"
@@ -466,6 +499,7 @@ export function ReferenceMenu({
                       to: name.trim(),
                     }),
               );
+
               await refresh();
             });
           }}
@@ -486,6 +520,7 @@ export function ReferenceMenu({
               />
             )}
           </Field>
+
           <Button
             type="submit"
             size="sm"
@@ -500,6 +535,7 @@ export function ReferenceMenu({
           </Button>
         </form>
       )}
+
       {mode === "delete" && target.kind === "tag" && (
         <TagDeletePanel
           repositoryId={repositoryId}
@@ -515,11 +551,13 @@ export function ReferenceMenu({
           }}
         />
       )}
+
       {mode === "delete" && target.kind === "branch" && (
         <div ref={review} tabIndex={-1} className="space-y-3 p-2 text-xs">
           {target.kind === "branch" && (
             <>
               {busy && !targets && <p role="status">{t("referenceMenu.loadingBranchTargets")}</p>}
+
               {targets && (
                 <>
                   {branchChoices.length > 0 && (
@@ -527,6 +565,7 @@ export function ReferenceMenu({
                       <legend className="mb-2 font-medium">
                         {t("referenceMenu.deleteBranchFrom")}
                       </legend>
+
                       {branchChoices.map(([value, label]) => (
                         <label key={value} className="flex items-center gap-2">
                           <Radio
@@ -535,16 +574,19 @@ export function ReferenceMenu({
                             checked={scope === value}
                             onChange={() => setScope(value)}
                           />
+
                           {label}
                         </label>
                       ))}
                     </fieldset>
                   )}
+
                   {targets.local && (
                     <p className="break-all">
                       {t("referenceMenu.local", { name: targets.local.name })}
                     </p>
                   )}
+
                   {targets.remote && !remoteDeleted && (
                     <p className="break-all">
                       {t("referenceMenu.remote", {
@@ -553,13 +595,16 @@ export function ReferenceMenu({
                       })}
                     </p>
                   )}
+
                   {!targets.remote && <p>{t("referenceMenu.noTrackedRemoteBranchIsConfigured")}</p>}
                   {targets.localBlocked && <p>{targets.localBlocked}</p>}
+
                   {includesRemote && (
                     <p>
                       {t("referenceMenu.thisRemovesTheBranchFromTheRemoteRepositoryForEveryone")}
                     </p>
                   )}
+
                   {includesLocal && !targets.localBlocked && (
                     <Checkbox
                       checked={force}
@@ -573,6 +618,7 @@ export function ReferenceMenu({
               )}
             </>
           )}
+
           {remoteDeleted && (
             <p role="status">
               {t("referenceMenu.remoteBranchDeleted", {
@@ -582,35 +628,22 @@ export function ReferenceMenu({
               })}
             </p>
           )}
+
           {needsAuth && includesRemote && !remoteDeleted && (
-            <>
-              <Field label={t("referenceMenu.hTtpsUsername")}>
-                {(field) => (
-                  <Input
-                    {...field}
-                    autoComplete="off"
-                    value={auth.username}
-                    onChange={(event) => setAuth({ ...auth, username: event.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label={t("referenceMenu.accessToken")}>
-                {(field) => (
-                  <Input
-                    {...field}
-                    type="password"
-                    autoComplete="off"
-                    value={auth.password}
-                    onChange={(event) => setAuth({ ...auth, password: event.target.value })}
-                  />
-                )}
-              </Field>
-            </>
+            <CredentialFields
+              value={auth}
+              onChange={setAuth}
+              disabled={busy}
+              shortLabels
+              usernameLabel={t("referenceMenu.hTtpsUsername")}
+            />
           )}
+
           <div className="flex gap-2">
             <Button size="sm" autoFocus disabled={busy} onClick={close}>
               {t("common.cancel")}
             </Button>
+
             {branchChoices.some(([value]) => value === scope) && (
               <Button
                 size="sm"
@@ -641,12 +674,14 @@ export function ReferenceMenu({
           </div>
         </div>
       )}
+
       {mode === "verify" && (
         <div ref={review} tabIndex={-1} className="space-y-2 p-2 text-xs">
           <Button size="sm" autoFocus disabled={busy} onClick={close}>
             {t("common.close")}
           </Button>
           {busy && <p role="status">{t("referenceMenu.verifyingTagSignature")}</p>}
+
           {target.kind === "tag" && (
             <p>
               {target.ref.annotated
@@ -654,11 +689,13 @@ export function ReferenceMenu({
                 : t("referenceMenu.lightweightTag")}
             </p>
           )}
+
           {target.kind === "tag" && target.ref.message && (
             <CodeBlock label={t("referenceMenu.tagMessage")} wrap>
               {target.ref.message}
             </CodeBlock>
           )}
+
           {verification && (
             <>
               <p role="status">
@@ -668,6 +705,7 @@ export function ReferenceMenu({
                     ? t("referenceMenu.unsignedTag")
                     : t("referenceMenu.signatureNotVerified")}
               </p>
+
               <CodeBlock label={t("referenceMenu.signatureVerificationOutput")} wrap>
                 {verification.diagnostics}
               </CodeBlock>
@@ -675,9 +713,9 @@ export function ReferenceMenu({
           )}
         </div>
       )}
+
       {unavailable && <p className="px-2 py-1 text-xs text-text-tertiary">{unavailable}</p>}
       {error && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
-    </PopoverSurface>,
-    modalSurface ?? document.body,
+    </ContextPopover>
   );
 }

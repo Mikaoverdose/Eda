@@ -12,6 +12,7 @@ import { useSessionStore } from "@renderer/stores/session-store";
 
 let root: Root;
 let container: HTMLDivElement;
+
 const local: BranchSummary = {
   name: "feature/topic",
   oid: "a".repeat(40),
@@ -19,12 +20,14 @@ const local: BranchSummary = {
   remote: false,
   upstream: "upstream/review/topic",
 };
+
 const remote: BranchSummary = {
   name: "upstream/review/topic",
   oid: local.oid,
   isHead: false,
   remote: true,
 };
+
 const remotes = [
   {
     name: "upstream",
@@ -32,6 +35,7 @@ const remotes = [
     pushUrls: ["https://example.com/repo"],
   },
 ];
+
 const copyText = vi.fn();
 const referenceUrl = vi.fn();
 const inspect = vi.fn();
@@ -44,13 +48,17 @@ const push = vi.fn();
 const renameBranch = vi.fn();
 const close = vi.fn();
 const refresh = vi.fn();
+
 const button = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (item) => item.textContent === label,
   )!;
+
 const click = (label: string) => act(async () => button(label).click());
+
 const selectScope = (scope: string) =>
   act(async () => document.querySelector<HTMLInputElement>(`input[value="${scope}"]`)!.click());
+
 const render = (ref = local) =>
   act(async () =>
     root.render(
@@ -64,12 +72,15 @@ const render = (ref = local) =>
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
   useAppStore.setState({
     activeIdentity: { id: "profile" } as never,
     selectedRepositoryId: "repo",
     switchingIdentityId: null,
   });
+
   refresh.mockReset().mockResolvedValue(undefined);
+
   useRepositoryStore.setState({
     repositoryId: "repo",
     identityId: "profile",
@@ -79,6 +90,7 @@ beforeEach(() => {
     refresh,
     selection: null,
   });
+
   useSessionStore.setState({
     transitioning: false,
     snapshot: {
@@ -88,6 +100,7 @@ beforeEach(() => {
       recovery: null,
     },
   });
+
   inspect.mockReset().mockResolvedValue(ok({ branches: [local, remote], remotes }));
   deleteTag.mockReset().mockResolvedValue(ok(undefined));
   listTags.mockReset().mockResolvedValue(ok([{ name: "v1", oid: local.oid }]));
@@ -98,9 +111,11 @@ beforeEach(() => {
   renameBranch.mockReset().mockResolvedValue(ok(undefined));
   close.mockReset();
   copyText.mockReset().mockResolvedValue(ok(undefined));
+
   referenceUrl
     .mockReset()
     .mockResolvedValue(ok("https://github.com/example/repo/tree/feature/topic"));
+
   vi.stubGlobal("eda", {
     app: { copyText },
     operations: { list: vi.fn().mockResolvedValue(ok([])) },
@@ -115,10 +130,12 @@ beforeEach(() => {
     },
     remotes: { inspect, preparePush, push, listTags: remoteTags },
   });
+
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
 });
+
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
@@ -127,29 +144,39 @@ afterEach(async () => {
 
 it("opens the shared history menu surface on right-click and keyboard context-menu requests", async () => {
   await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
+
   const row = container.querySelector<HTMLButtonElement>(
     '[aria-label="Inspect branch feature/topic"]',
   )!;
+
   await act(async () =>
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 70 })),
   );
+
+  await act(() => vi.dynamicImportSettled());
+
   expect(
     document
       .querySelector('[role="menu"][aria-label="Branch actions"]')
       ?.classList.contains("ui-popover-in"),
   ).toBe(true);
+
   expect(document.querySelectorAll('[role="menuitem"]').length).toBeGreaterThan(4);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+
   await act(async () =>
     document.activeElement!.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }),
     ),
   );
+
   expect(document.querySelector('[role="menu"]')).toBeNull();
+
   await act(async () =>
     row.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "F10", shiftKey: true })),
   );
+
   expect(document.querySelector('[role="menu"][aria-label="Branch actions"]')).not.toBeNull();
 });
 
@@ -159,9 +186,11 @@ it.each(["local", "remote", "both"])(
     await render();
     await click("Delete branch...");
     await selectScope(scope);
+
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
       "upstream/review/topic",
     );
+
     await click(
       scope === "both"
         ? "Delete local and remote"
@@ -169,9 +198,11 @@ it.each(["local", "remote", "both"])(
           ? "Delete locally"
           : "Delete remotely",
     );
+
     if (scope !== "remote")
       expect(deleteBranch).toHaveBeenCalledWith({ repositoryId: "repo", name: "feature/topic" });
     else expect(deleteBranch).not.toHaveBeenCalled();
+
     if (scope !== "local") {
       expect(preparePush).toHaveBeenCalledWith({
         repositoryId: "repo",
@@ -181,8 +212,10 @@ it.each(["local", "remote", "both"])(
         mode: "delete",
         setUpstream: false,
       });
+
       expect(push).toHaveBeenCalledWith("repo", "delete-preview", undefined);
     } else expect(push).not.toHaveBeenCalled();
+
     expect(close).toHaveBeenCalledOnce();
   },
 );
@@ -215,6 +248,7 @@ it("retains the local branch if remote deletion fails", async () => {
   push.mockResolvedValue(
     err(errorFixture({ kind: "network-failed", operation: "push", message: "Remote unavailable" })),
   );
+
   await render();
   await click("Delete branch...");
   await selectScope("both");
@@ -234,22 +268,27 @@ it("reports partial completion and retries only the remaining local deletion, wi
       }),
     ),
   );
+
   await render();
   await click("Delete branch...");
   await selectScope("both");
   await click("Delete local and remote");
   expect(document.querySelector('[role="status"]')?.textContent).toContain("Remote branch deleted");
   expect(close).not.toHaveBeenCalled();
+
   await act(async () =>
     document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(),
   );
+
   await click("Delete locally");
   expect(push).toHaveBeenCalledOnce();
+
   expect(deleteBranch).toHaveBeenLastCalledWith({
     repositoryId: "repo",
     name: local.name,
     force: true,
   });
+
   expect(close).toHaveBeenCalledOnce();
 });
 
@@ -258,6 +297,7 @@ it("stops before push when the profile changes during remote preview", async () 
     useAppStore.setState({ selectedRepositoryId: "other" });
     return ok({ token: "delete-preview" });
   });
+
   await render();
   await click("Delete branch...");
   await selectScope("both");
@@ -279,11 +319,13 @@ it("does not offer remote deletion for an untracked local branch", async () => {
 it("cancels branch deletion with Escape without changing any references", async () => {
   await render();
   await click("Delete branch...");
+
   await act(async () =>
     document.activeElement!.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     ),
   );
+
   expect(close).toHaveBeenCalledOnce();
   expect(push).not.toHaveBeenCalled();
   expect(deleteBranch).not.toHaveBeenCalled();
@@ -299,6 +341,7 @@ it("retains tag checkout, verification, and local deletion in the context menu",
       />,
     ),
   );
+
   expect(button("Check out tag (detached HEAD)")).toBeDefined();
   expect(button("Verify tag signature...")).toBeDefined();
   expect(button("Verify tag signature...")?.querySelector("svg")).not.toBeNull();
@@ -316,20 +359,25 @@ it("retries HTTPS remote deletion with supplied credentials without deleting loc
       errorFixture({ kind: "auth-failed", operation: "delete", message: "Authentication failed" }),
     ),
   );
+
   await render(remote);
   await click("Delete branch...");
   await click("Delete remotely");
   expect(push).not.toHaveBeenCalled();
+
   await act(async () => {
     const fields = [...document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])')];
+
     for (const [index, field] of fields.entries()) {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
         field,
         index === 0 ? "user" : "token",
       );
+
       field.dispatchEvent(new Event("input", { bubbles: true }));
     }
   });
+
   await click("Delete remotely");
   const credentials = { username: "user", password: "token" };
   expect(preparePush).toHaveBeenLastCalledWith(expect.objectContaining({ credentials }));
@@ -354,9 +402,11 @@ it("shows a dismissible dialog instead of raw clipboard diagnostics in the menu"
   await render();
   await click("Copy name");
   expect(close).not.toHaveBeenCalled();
+
   expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toBe(
     "Clipboard copy failed",
   );
+
   expect(document.body.textContent).not.toContain("Write permission denied");
   await click("Dismiss");
   expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -382,6 +432,7 @@ it.each(["local", "remote", "both"])(
     await click("Delete tag...");
     expect(document.querySelector<HTMLInputElement>('input[value="remote"]')?.disabled).toBe(false);
     await selectScope(scope);
+
     await click(
       scope === "both"
         ? "Delete local and remote"
@@ -389,6 +440,7 @@ it.each(["local", "remote", "both"])(
           ? "Delete locally"
           : "Delete remotely",
     );
+
     if (scope !== "local") {
       expect(preparePush).toHaveBeenCalledWith({
         repositoryId: "repo",
@@ -399,11 +451,14 @@ it.each(["local", "remote", "both"])(
         mode: "delete",
         setUpstream: false,
       });
+
       expect(push).toHaveBeenCalledOnce();
     } else expect(push).not.toHaveBeenCalled();
+
     if (scope !== "remote")
       expect(deleteTag).toHaveBeenCalledWith({ repositoryId: "repo", name: "v1" });
     else expect(deleteTag).not.toHaveBeenCalled();
+
     expect(close).toHaveBeenCalledOnce();
   },
 );
@@ -412,20 +467,25 @@ it("preserves the local tag after remote failure and retries only local deletion
   push.mockResolvedValueOnce(
     err(errorFixture({ kind: "network-failed", message: "Remote unavailable" })),
   );
+
   await renderTag();
   await click("Delete tag...");
   await selectScope("both");
   await click("Delete local and remote");
   expect(deleteTag).not.toHaveBeenCalled();
   expect(close).not.toHaveBeenCalled();
+
   deleteTag.mockResolvedValueOnce(
     err(errorFixture({ kind: "unknown", message: "Local tag is locked" })),
   );
+
   await click("Delete local and remote");
   expect(document.querySelector('[role="status"]')?.textContent).toContain("Remote tag deleted");
+
   expect(
     document.querySelector<HTMLInputElement>('input[value="local"]')?.closest("fieldset")?.disabled,
   ).toBe(false);
+
   await click("Delete locally");
   expect(document.querySelector('input[value="remote"]')).toBeNull();
   expect(document.querySelector('input[value="both"]')).toBeNull();
@@ -451,15 +511,18 @@ it("keeps the local tag when the remote ref is absent and offers authentication 
   preparePush.mockResolvedValueOnce(
     err(errorFixture({ kind: "invalid-input", message: "That remote ref no longer exists" })),
   );
+
   await renderTag();
   await click("Delete tag...");
   await selectScope("both");
   await click("Delete local and remote");
   expect(deleteTag).not.toHaveBeenCalled();
   expect(document.querySelector('input[type="password"]')).toBeNull();
+
   preparePush.mockResolvedValueOnce(
     err(errorFixture({ kind: "auth-failed", message: "Authentication failed" })),
   );
+
   await click("Delete local and remote");
   expect(document.querySelector('input[type="password"]')).not.toBeNull();
   expect(deleteTag).not.toHaveBeenCalled();
@@ -470,6 +533,7 @@ it("does not delete either tag if the profile changes during preview", async () 
     useAppStore.setState({ selectedRepositoryId: "other" });
     return ok({ token: "delete-preview" });
   });
+
   await renderTag();
   await click("Delete tag...");
   await selectScope("both");
@@ -482,10 +546,13 @@ it("preselects the tag in the push review without configuring branch upstream tr
   await renderTag({ remoteName: "upstream" });
   await click("Push tag...");
   expect(document.querySelector('[aria-label="Local tag"]')?.textContent).toContain("v1");
+
   expect(document.querySelector<HTMLInputElement>('[aria-label="Destination tag"]')?.value).toBe(
     "v1",
   );
+
   await click("Review push");
+
   expect(preparePush).toHaveBeenCalledWith(
     expect.objectContaining({
       branch: "v1",
@@ -525,14 +592,19 @@ it("labels local and remote tags directly in one Tags list", async () => {
       { name: "remote-only", oid: "b".repeat(40) },
     ]),
   );
+
   await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
+
   const tagGroups = [...container.querySelectorAll("summary")].filter((summary) =>
     summary.textContent?.includes("Tags"),
   );
+
   expect(tagGroups).toHaveLength(1);
+
   expect(container.textContent).not.toMatch(
     /Local tags|Remote tags|Check remote tags|HTTPS authentication/,
   );
+
   expect(remoteTags).toHaveBeenCalledWith({ repositoryId: "repo", remote: "upstream" });
   const shared = container.querySelector('[aria-label="Inspect tag v1"]')!;
   expect(shared.textContent).toBe("v1");
@@ -553,6 +625,7 @@ it("leaves local tags usable and discloses unavailable remote status in the tool
   remoteTags.mockResolvedValue(
     err(errorFixture({ kind: "auth-failed", message: "Authentication failed" })),
   );
+
   await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
   const row = container.querySelector('[aria-label="Inspect tag v1"]')!;
   expect(row.getAttribute("title")).toContain("Remote status unavailable: upstream");
@@ -567,23 +640,31 @@ it("keeps the deletion popover open when choosing another remote", async () => {
       remotes: [...remotes, { name: "origin", fetchUrls: [], pushUrls: [] }],
     }),
   );
+
   await renderTag();
   await click("Delete tag...");
   const control = document.querySelector<HTMLElement>('[role="combobox"][aria-label="Remote"]')!;
+
   await act(async () =>
     control.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
   );
+
   const option = document.querySelector<HTMLElement>('[data-eda-select-value="origin"]')!;
+
   await act(async () => {
     option.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     option.click();
   });
+
   expect(close).not.toHaveBeenCalled();
+
   expect(document.querySelector('[aria-label="Delete tag"]')?.textContent).toContain(
     "Remote: origin/v1",
   );
+
   await selectScope("remote");
   await click("Delete remotely");
+
   expect(preparePush).toHaveBeenCalledWith(
     expect.objectContaining({ remote: "origin", refKind: "tag" }),
   );
@@ -593,17 +674,21 @@ it("uses branch sections and qualified names without repeated status lines", asy
   vi.mocked(window.eda.repository.listBranches).mockResolvedValue(
     ok([{ ...local, isHead: true }, remote]),
   );
+
   await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
   const localRow = container.querySelector('[aria-label="Inspect branch feature/topic"]')!;
   const remoteRow = container.querySelector('[aria-label="Inspect branch upstream/review/topic"]')!;
   expect(localRow.textContent).toBe("feature/topic");
   expect(remoteRow.textContent).toBe("upstream/review/topic");
+
   expect(localRow.closest("details")?.querySelector("summary")?.textContent).toContain(
     "Local branches",
   );
+
   expect(remoteRow.closest("details")?.querySelector("summary")?.textContent).toContain(
     "Remote branches",
   );
+
   expect(localRow.getAttribute("title")).toContain("Current branch");
   expect(localRow.querySelector("svg")).toBeNull();
   expect(remoteRow.querySelector("svg")).toBeNull();
@@ -619,12 +704,14 @@ it("labels a tag that exists only locally without a remote badge", async () => {
 
 it("does not mark a tag local-only while remote lookup is pending", async () => {
   let finish!: (result: ReturnType<typeof ok<never[]>>) => void;
+
   remoteTags.mockImplementation(
     () =>
       new Promise((resolve) => {
         finish = resolve;
       }),
   );
+
   await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
   expect(container.querySelector('[aria-label="Inspect tag v1"]')?.textContent).toBe("v1");
   await act(async () => finish(ok([])));
@@ -638,11 +725,13 @@ it("does not mark a tag local-only if any configured remote is unavailable", asy
       remotes: [...remotes, { name: "backup", fetchUrls: [], pushUrls: [] }],
     }),
   );
+
   remoteTags.mockImplementation(async ({ remote }: { remote: string }) =>
     remote === "upstream"
       ? ok([])
       : err(errorFixture({ kind: "network-failed", message: "Unavailable" })),
   );
+
   await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
   expect(container.querySelector('[aria-label="Inspect tag v1"]')?.textContent).toBe("v1");
 });
@@ -654,9 +743,11 @@ it("hides remote deletion and omits the remote target for a local-only tag", asy
   expect(document.querySelector<HTMLInputElement>('input[value="local"]')?.disabled).toBe(false);
   expect(document.querySelector('input[value="remote"]')).toBeNull();
   expect(document.querySelector('input[value="both"]')).toBeNull();
+
   expect(document.querySelector('[aria-label="Delete tag"]')?.textContent).not.toContain(
     "Remote: upstream/v1",
   );
+
   await click("Delete locally");
   expect(deleteTag).toHaveBeenCalledOnce();
   expect(preparePush).not.toHaveBeenCalled();
@@ -673,20 +764,24 @@ it("shows only remote deletion for a remote-only tag", async () => {
 
 it("waits for remote presence before enabling remote scopes, without blocking local deletion", async () => {
   let finish!: (result: ReturnType<typeof ok<never[]>>) => void;
+
   remoteTags.mockImplementation(
     () =>
       new Promise((resolve) => {
         finish = resolve;
       }),
   );
+
   await renderTag();
   await click("Delete tag...");
   expect(document.querySelector('input[value="remote"]')).toBeNull();
   expect(document.querySelector('input[value="both"]')).toBeNull();
   expect(button("Delete locally").disabled).toBe(false);
+
   expect(
     document.querySelector('[role="status"][aria-label="Loading tag targets..."]'),
   ).not.toBeNull();
+
   await act(async () => finish(ok([])));
   expect(document.querySelector('[role="status"][aria-label="Loading tag targets..."]')).toBeNull();
   expect(document.querySelector('input[value="remote"]')).toBeNull();
@@ -699,22 +794,28 @@ it("updates deletion scopes when the selected remote does not contain the tag", 
       remotes: [...remotes, { name: "backup", fetchUrls: [], pushUrls: [] }],
     }),
   );
+
   remoteTags.mockImplementation(async ({ remote }: { remote: string }) =>
     ok(remote === "upstream" ? [{ name: "v1", oid: local.oid }] : []),
   );
+
   await renderTag();
   await click("Delete tag...");
   await selectScope("both");
   const control = document.querySelector<HTMLElement>('[role="combobox"][aria-label="Remote"]')!;
+
   await act(async () =>
     control.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
   );
+
   await act(async () =>
     document.querySelector<HTMLElement>('[data-eda-select-value="backup"]')!.click(),
   );
+
   expect(document.querySelector<HTMLInputElement>('input[value="local"]')?.checked).toBe(true);
   expect(document.querySelector('input[value="remote"]')).toBeNull();
   expect(document.querySelector('input[value="both"]')).toBeNull();
+
   expect(document.querySelector('[aria-label="Delete tag"]')?.textContent).not.toContain(
     "Remote: backup/v1",
   );
@@ -728,9 +829,11 @@ it("shows no deletion action when a branch has no deletable target", async () =>
   await click("Delete branch...");
   expect(document.querySelectorAll('input[type="radio"]')).toHaveLength(0);
   expect(button("Delete locally")).toBeUndefined();
+
   expect(document.querySelector('[aria-label="Delete branch"]')?.textContent).toContain(
     "Check out another branch",
   );
+
   await click("Cancel");
   expect(deleteBranch).not.toHaveBeenCalled();
   expect(push).not.toHaveBeenCalled();
@@ -743,12 +846,15 @@ it("shows no deletion action after a tag disappears from both locations", async 
   await click("Delete tag...");
   expect(document.querySelectorAll('input[type="radio"]')).toHaveLength(0);
   expect(button("Delete remotely")).toBeUndefined();
+
   expect(document.querySelector('[aria-label="Delete tag"]')?.textContent).toContain(
     "This tag is no longer available",
   );
+
   expect(document.querySelector('[aria-label="Delete tag"]')?.textContent).not.toContain(
     "This removes the tag",
   );
+
   await click("Cancel");
   expect(deleteTag).not.toHaveBeenCalled();
   expect(push).not.toHaveBeenCalled();
