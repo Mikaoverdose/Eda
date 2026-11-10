@@ -120,7 +120,7 @@ export const SETTINGS_SECTIONS: {
   {
     id: "git",
     keywords: t("settings.profileAuthorEmailNameSigningSyncGitconfigScope"),
-    title: t("settings.gitConfiguration"),
+    title: t("settings.git"),
     description: t("settings.manageThisProfileSGitIdentityGlobalSynchronization"),
     icon: GitBranch,
     group: "profile",

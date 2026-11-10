@@ -249,7 +249,7 @@ try {
   const alphaConfigBeforeApply = await readFile(join(paths.alpha, ".git", "config"), "utf8");
   const betaConfigBeforeApply = await readFile(join(paths.beta, ".git", "config"), "utf8");
 
-  await section("Profile: Git configuration");
+  await section("Profile: Git");
   assert.equal(
     await page.getByRole("button", { name: "Use this profile", exact: true }).count(),
     0,
@@ -568,7 +568,7 @@ try {
   assert.equal((await inspect(home)).theme.value, "eda-dark");
   assert.equal((await inspect(home)).motion.value, true);
 
-  await section("Profile: Git configuration");
+  await section("Profile: Git");
   await page.getByLabel("Sync this profile’s identity to Git").uncheck();
   await expect
     .poll(
