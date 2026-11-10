@@ -182,6 +182,58 @@ it("opens the shared history menu surface on right-click and keyboard context-me
   expect(document.querySelector('[role="menu"][aria-label="Branch actions"]')).not.toBeNull();
 });
 
+it.each([
+  {
+    change: "leaves the current worktree",
+    before: { ...local, isHead: true, worktreePath: "/current/worktree" },
+    after: local,
+    disabled: false,
+  },
+  {
+    change: "becomes the current branch",
+    before: local,
+    after: { ...local, isHead: true, worktreePath: "/current/worktree" },
+    disabled: true,
+  },
+  {
+    change: "is checked out in another worktree",
+    before: local,
+    after: { ...local, worktreePath: "/another/worktree" },
+    disabled: true,
+  },
+])(
+  "updates an open checkout action when its branch $change",
+  async ({ before, after, disabled }) => {
+    vi.mocked(window.eda.repository.listBranches).mockResolvedValue(ok([before, remote]));
+    await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
+
+    let finish!: (result: ReturnType<typeof ok<BranchSummary[]>>) => void;
+
+    vi.mocked(window.eda.repository.listBranches).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+
+    await act(async () => useRepositoryStore.setState({ status: {} as never }));
+
+    const row = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Inspect branch feature/topic"]',
+    )!;
+
+    await act(async () =>
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 50, clientY: 70 })),
+    );
+
+    await act(() => vi.dynamicImportSettled());
+    expect(button("Check out branch").disabled).toBe(!disabled);
+
+    await act(async () => finish(ok([after, remote])));
+    expect(button("Check out branch").disabled).toBe(disabled);
+  },
+);
+
 it.each(["local", "remote", "both"])(
   "deletes the selected %s scope using the tracked destination",
   async (scope) => {

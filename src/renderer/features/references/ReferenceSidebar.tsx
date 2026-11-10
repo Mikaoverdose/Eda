@@ -69,6 +69,17 @@ export function ReferenceSidebar({
   const [revision, setRevision] = useState(0);
   const tags = useTagReferences(repositoryId, profileId, localTags, revision, pending);
 
+  const actionTarget =
+    actions?.kind === "branch"
+      ? {
+          ...actions,
+          ref:
+            branches.find(
+              (branch) => branch.name === actions.ref.name && branch.remote === actions.ref.remote,
+            ) ?? actions.ref,
+        }
+      : actions;
+
   useEffect(() => {
     if (pending) return;
 
@@ -243,12 +254,12 @@ export function ReferenceSidebar({
           />
         </header>
 
-        {actions && (
+        {actionTarget && (
           <Suspense fallback={null}>
             <ReferenceMenu
-              key={`${profileId}:${repositoryId}:${actions.kind}:${actions.ref.name}`}
+              key={`${profileId}:${repositoryId}:${actionTarget.kind}:${actionTarget.ref.name}`}
               repositoryId={repositoryId}
-              target={actions}
+              target={actionTarget}
               onClose={() => setActions(null)}
               onChanged={() => setRevision((value) => value + 1)}
             />
