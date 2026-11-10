@@ -45,7 +45,7 @@ export function normalizeGitLabInstanceUrl(input: string): string | null {
 }
 
 function safePath(path: string): boolean {
-  return /^\/(?:[A-Za-z0-9_.~-]+\/?)*$/.test(path);
+  return path.startsWith("/") && !path.includes("//") && !/[^A-Za-z0-9_.~/-]/.test(path);
 }
 
 export function isGitLabInstanceHttps(remote: string, baseUrl: string): boolean {

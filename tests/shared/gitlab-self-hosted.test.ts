@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import {
   gitLabTokenSettingsUrl,
   isGitLabInstanceHttps,
@@ -11,6 +12,7 @@ describe("GitLab instance URLs", () => {
     [" HTTPS://GitLab.Company.Test/ ", "https://gitlab.company.test"],
     ["https://10.0.0.2", "https://10.0.0.2"],
     ["https://[::1]/gitlab", "https://[::1]/gitlab"],
+    ["https://company.test/team/git-lab_1.2~/", "https://company.test/team/git-lab_1.2~"],
   ])("normalizes %s", (input, expected) =>
     expect(normalizeGitLabInstanceUrl(input)).toBe(expected),
   );
@@ -24,6 +26,10 @@ describe("GitLab instance URLs", () => {
     "https://company.test/%2e%2e",
     "https://company.test\\evil",
     "https://company.test/path with space",
+    "https://company.test//gitlab",
+    "https://company.test/gitlab//",
+    "https://company.test/group//gitlab",
+    "https://company.test/gitlab!",
     "javascript:alert(1)",
     "https://gitlab.com",
     "https://gitlab.com.",
@@ -31,6 +37,33 @@ describe("GitLab instance URLs", () => {
   ])("rejects unsafe or hosted instance %s", (url) =>
     expect(normalizeGitLabInstanceUrl(url)).toBeNull(),
   );
+
+  it("rejects a near-limit malformed path without blocking URL validation", () => {
+    const base = "https://company.test/";
+    const valid = base + "-".repeat(2048 - base.length - 1);
+    const moduleUrl = new URL(
+      "../../src/shared/integrations/gitlab-self-hosted.ts",
+      import.meta.url,
+    );
+    const result = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `const { normalizeGitLabInstanceUrl } = await import(process.argv[1]);
+         const valid = process.argv[2];
+         console.log(JSON.stringify([
+           normalizeGitLabInstanceUrl(valid),
+           normalizeGitLabInstanceUrl(valid + "!"),
+         ]));`,
+        moduleUrl.href,
+        valid,
+      ],
+      { encoding: "utf8", timeout: 5000 },
+    );
+
+    expect(JSON.parse(result)).toEqual([valid, null]);
+  });
 
   it("matches only project remotes on the exact instance origin and base path", () => {
     const base = "https://git.company.test/gitlab";
