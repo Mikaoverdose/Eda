@@ -322,12 +322,11 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
     page.getByRole("region", { name: "GitLab connection", exact: true }),
     card,
   ]) {
-    const size = await row.boundingBox();
-
-    assert.ok(
-      size && size.height <= 200,
-      "Profile cards should stay compact with profile details visible.",
-    );
+    await expect
+      .poll(async () => (await row.boundingBox())?.height ?? Infinity, {
+        message: `${await row.getAttribute("aria-label")} should stay compact with profile details visible.`,
+      })
+      .toBeLessThanOrEqual(200);
   }
 
   await page.setViewportSize({ width: 900, height: 850 });
