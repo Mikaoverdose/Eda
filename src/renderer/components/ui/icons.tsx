@@ -8,6 +8,8 @@ export function IconDefaults({ children }: { children: ReactNode }) {
 }
 
 export {
+  Globe as GlobeIcon,
+  MapPin as MapPinIcon,
   Plus as PlusIcon,
   Minus as MinusIcon,
   GitBranch as BranchIcon,

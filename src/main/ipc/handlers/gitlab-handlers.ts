@@ -16,7 +16,8 @@ export function registerGitLabHandlers(services: Services): void {
       const details = await gitlab.profile(id);
       if (!details) return null;
       const image = await services.avatars.getGitLab(details.id, details.avatarUrl);
-      return { id: details.id, avatarDataUrl: image.dataUrl };
+      const { avatarUrl: _avatarUrl, ...profile } = details;
+      return { ...profile, avatarDataUrl: image.dataUrl };
     }),
   );
 

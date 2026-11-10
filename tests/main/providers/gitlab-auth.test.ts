@@ -45,6 +45,12 @@ const token = {
   token_type: "Bearer",
 };
 
+const profileFields = {
+  name: "Work User",
+  bio: "Building useful things.\nOpen source contributor.",
+  location: "Example City",
+};
+
 function setup() {
   const db = openDatabase(":memory:");
   databases.push(db);
@@ -85,7 +91,7 @@ function setup() {
 
     fetch
       .mockResolvedValueOnce(json(token))
-      .mockResolvedValueOnce(json({ id: 7, username: "work.user" }));
+      .mockResolvedValueOnce(json({ id: 7, username: "work.user", ...profileFields }));
 
     callbacks.at(-1)!.received("private-code");
     await vi.waitFor(() => expect(service.status(profile.id).account?.state).toBe("connected"));
@@ -125,7 +131,7 @@ it("uses PKCE without a client secret, verifies account identity and stores only
 
   ctx.fetch
     .mockResolvedValueOnce(json(token))
-    .mockResolvedValueOnce(json({ id: 7, username: "work.user" }));
+    .mockResolvedValueOnce(json({ id: 7, username: "work.user", ...profileFields }));
 
   callbacks.at(-1)!.received("private-code");
 
@@ -152,6 +158,11 @@ it("uses PKCE without a client secret, verifies account identity and stores only
   expect(JSON.stringify(ctx.accounts.find(ctx.profile.id))).not.toContain(token.refresh_token);
   expect(ctx.service.status(ctx.other.id).account).toBeNull();
   expect(ctx.service.profileUrl(ctx.profile.id)).toBe("https://gitlab.com/work.user");
+  expect(await ctx.service.profile(ctx.profile.id)).toEqual({
+    id: "7",
+    ...profileFields,
+    avatarUrl: null,
+  });
 });
 
 it("persists connections across service restarts, refreshes once for concurrent Git requests, and disconnects", async () => {
@@ -172,7 +183,7 @@ it("persists connections across service restarts, refreshes once for concurrent 
     .mockResolvedValueOnce(
       json({ ...token, access_token: "rotated-access", refresh_token: "rotated-refresh" }),
     )
-    .mockResolvedValueOnce(json({ id: 7, username: "work.user" }));
+    .mockResolvedValueOnce(json({ id: 7, username: "work.user", ...profileFields }));
 
   const creds = await Promise.all(
     [1, 2].map(() =>
@@ -187,6 +198,11 @@ it("persists connections across service restarts, refreshes once for concurrent 
   expect(form.get("refresh_token")).toBe(token.refresh_token);
   expect(form.has("client_secret")).toBe(false);
   expect([...ctx.values.values()].join()).not.toContain(token.refresh_token);
+  expect(await restarted.profile(ctx.profile.id)).toEqual({
+    id: "7",
+    ...profileFields,
+    avatarUrl: null,
+  });
   await restarted.disconnect(ctx.profile.id);
   expect(ctx.accounts.find(ctx.profile.id)).toBeUndefined();
   expect(ctx.values.size).toBe(0);
@@ -286,18 +302,23 @@ it("marks invalid refresh tokens expired while preserving a connection on tempor
   expect(ctx.service.status(ctx.profile.id).account?.state).toBe("expired");
 });
 
-it("loads the signed-in GitLab account’s avatar and rejects profiles from another account", async () => {
+it("loads the signed-in GitLab account’s profile details and rejects profiles from another account", async () => {
   const ctx = setup();
   await ctx.connect();
   ctx.advance(301_000);
   expect(await ctx.service.profile(ctx.other.id)).toBeNull();
 
   ctx.fetch.mockResolvedValueOnce(
-    json({ id: 7, avatar_url: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png" }),
+    json({
+      id: 7,
+      ...profileFields,
+      avatar_url: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
+    }),
   );
 
   expect(await ctx.service.profile(ctx.profile.id)).toEqual({
     id: "7",
+    ...profileFields,
     avatarUrl: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
   });
 
@@ -317,33 +338,53 @@ it("loads the signed-in GitLab account’s avatar and rejects profiles from anot
 
   expect(await ctx.service.profile(ctx.profile.id)).toEqual({
     id: "7",
+    ...profileFields,
     avatarUrl: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
   });
 });
+
+it.each([{}, { name: 42, bio: [], location: {} }])(
+  "keeps the profile usable when optional GitLab fields are missing or malformed: %j",
+  async (fields) => {
+    const ctx = setup();
+    await ctx.connect();
+    ctx.advance(301_000);
+    ctx.fetch.mockResolvedValueOnce(json({ id: 7, ...fields }));
+
+    expect(await ctx.service.profile(ctx.profile.id)).toEqual({
+      id: "7",
+      name: null,
+      bio: null,
+      location: null,
+      avatarUrl: null,
+    });
+  },
+);
 
 it("reuses the sign-in profile across page visits, deduplicates refreshes and keeps cached metadata offline", async () => {
   const ctx = setup();
   await ctx.connect();
   ctx.fetch.mockClear();
-  expect(await ctx.service.profile(ctx.profile.id)).toEqual({ id: "7", avatarUrl: null });
-  expect(await ctx.service.profile(ctx.profile.id)).toEqual({ id: "7", avatarUrl: null });
+  const cached = { id: "7", ...profileFields, avatarUrl: null };
+  expect(await ctx.service.profile(ctx.profile.id)).toEqual(cached);
+  expect(await ctx.service.profile(ctx.profile.id)).toEqual(cached);
   expect(ctx.fetch).not.toHaveBeenCalled();
   ctx.advance(301_000);
   const avatarUrl = "https://secure.gravatar.com/avatar/provider-selected-hash";
-  ctx.fetch.mockResolvedValueOnce(json({ id: 7, avatar_url: avatarUrl }));
+  ctx.fetch.mockResolvedValueOnce(json({ id: 7, ...profileFields, avatar_url: avatarUrl }));
 
   const values = await Promise.all([
     ctx.service.profile(ctx.profile.id),
     ctx.service.profile(ctx.profile.id),
   ]);
 
-  expect(values).toEqual(Array(2).fill({ id: "7", avatarUrl }));
+  expect(values).toEqual(Array(2).fill({ ...cached, avatarUrl }));
   expect(ctx.fetch).toHaveBeenCalledOnce();
   await ctx.service.profile(ctx.profile.id);
   expect(ctx.fetch).toHaveBeenCalledOnce();
   ctx.advance(301_000);
   ctx.fetch.mockRejectedValueOnce(new Error("offline"));
-  expect(await ctx.service.profile(ctx.profile.id)).toEqual({ id: "7", avatarUrl });
+  expect(await ctx.service.profile(ctx.profile.id)).toEqual({ ...cached, avatarUrl });
   expect(ctx.fetch).toHaveBeenCalledTimes(2);
   await ctx.service.profile(ctx.profile.id);
   expect(ctx.fetch).toHaveBeenCalledTimes(2);

@@ -25,8 +25,7 @@ import { secretKeys, type SecretStore } from "../secrets/secret-store";
 import { ProviderProfileCache } from "./provider-profile-cache";
 import { listProviderRepositories } from "./provider-repositories";
 import { GitLabOAuthCallback } from "./gitlab-oauth-callback";
-
-type ProfileDetails = { id: string; avatarUrl: string | null };
+import { gitLabProfileDetails, type GitLabProfileDetails } from "./gitlab-profile";
 
 const TOKEN_URL = "https://gitlab.com/oauth/token";
 const USER_URL = "https://gitlab.com/api/v4/user";
@@ -57,7 +56,7 @@ interface Pending {
 }
 
 export class GitLabAuth {
-  private readonly profiles: ProviderProfileCache<ProfileDetails>;
+  private readonly profiles: ProviderProfileCache<GitLabProfileDetails>;
   private readonly clientId = INTEGRATIONS.gitlab.clientId;
   private readonly authorized = new Map<string, Authorized>();
   private readonly committing = new Map<string, Promise<void>>();
@@ -86,7 +85,7 @@ export class GitLabAuth {
     };
   }
 
-  async profile(profileId: string): Promise<ProfileDetails | null> {
+  async profile(profileId: string): Promise<GitLabProfileDetails | null> {
     const account = this.accounts.find(profileId);
     if (!account || !this.ownsCredential(account) || this.authorized.has(profileId)) return null;
 
@@ -100,10 +99,7 @@ export class GitLabAuth {
       )
         return null;
 
-      return {
-        id: account.accountId,
-        avatarUrl: typeof user["avatar_url"] === "string" ? user["avatar_url"] : null,
-      };
+      return gitLabProfileDetails(account.accountId, user);
     });
 
     return this.accounts.find(profileId)?.credentialRef === account.credentialRef ? details : null;
@@ -240,10 +236,7 @@ export class GitLabAuth {
     const account = this.accounts.find(profileId);
 
     if (account?.accountId === candidate.accountId)
-      this.profiles.set(account.credentialRef, {
-        id: candidate.accountId,
-        avatarUrl: typeof user["avatar_url"] === "string" ? user["avatar_url"] : null,
-      });
+      this.profiles.set(account.credentialRef, gitLabProfileDetails(candidate.accountId, user));
 
     session.result = this.status(profileId);
   }
@@ -423,10 +416,7 @@ export class GitLabAuth {
 
     await this.secrets.set(account.credentialRef, JSON.stringify(refreshed));
 
-    this.profiles.set(account.credentialRef, {
-      id: account.accountId,
-      avatarUrl: typeof user["avatar_url"] === "string" ? user["avatar_url"] : null,
-    });
+    this.profiles.set(account.credentialRef, gitLabProfileDetails(account.accountId, user));
 
     return refreshed;
   }

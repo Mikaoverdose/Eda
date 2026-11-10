@@ -5,13 +5,12 @@ import type {
   GitLabTokenForm,
 } from "@shared/integrations/gitlab-self-hosted";
 import { useEffect, useRef, useState } from "react";
-import { Button, Skeleton } from "../../components/ui/index";
+import { Button } from "../../components/ui/index";
 import { GitLabSelfHostedAccountCard } from "./GitLabSelfHostedAccountCard";
 import { GitLabSelfHostedSetup } from "./GitLabSelfHostedSetup";
 import { ServiceAccountCard } from "./ServiceAccountCard";
-import { ConnectionAccount } from "./ConnectionAccount";
 import { GitLabSelfHostedAccountActions } from "./GitLabSelfHostedAccountActions";
-import { useAppStore } from "../../stores/app-store";
+import { ConnectionActionSkeleton } from "./ConnectionSkeleton";
 
 export function GitLabSelfHostedConnection({
   profileId,
@@ -26,7 +25,6 @@ export function GitLabSelfHostedConnection({
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
   const saving = useRef(false);
-  const hue = useAppStore((value) => value.activeIdentity?.hue ?? 210);
   const singleAccount = status?.accounts.length === 1 ? status.accounts[0] : undefined;
 
   const load = async () => {
@@ -157,30 +155,32 @@ export function GitLabSelfHostedConnection({
     <ServiceAccountCard
       provider="GitLab Self-Hosted"
       compact={compact}
+      pendingLabel={
+        setupBaseUrl !== null || busy || (!status && compact)
+          ? t("settings.gitLabSelfHosted.setupTitle")
+          : undefined
+      }
       bodyOpen={(status?.accounts.length ?? 0) > 1 || setupBaseUrl !== null || !!error}
       summary={
-        !status ? (
-          <Skeleton className="h-4 w-32" />
-        ) : singleAccount ? (
-          <ConnectionAccount
-            login={singleAccount.login}
-            name={singleAccount.baseUrl.replace(/^https:\/\//, "")}
-            avatarName={singleAccount.login}
-            hue={hue}
-            connected={singleAccount.state === "connected"}
-            disabled={busy}
-            profileLabel={t("settings.gitLabSelfHosted.viewProfile", {
-              login: singleAccount.login,
-              instance: singleAccount.baseUrl,
-            })}
-            onOpen={() => void openProfile(singleAccount.baseUrl)}
+        singleAccount ? (
+          <GitLabSelfHostedAccountCard
+            profileId={profileId}
+            account={singleAccount}
+            busy={busy}
+            secureStorage={status?.secureStorage ?? false}
+            showActions={false}
+            onOpen={(value) => void openProfile(value)}
+            onEdit={openSetup}
+            onDisconnect={(value) => void disconnect(value)}
           />
-        ) : status.accounts.length ? (
+        ) : status?.accounts.length ? (
           t("settings.connections.instances", { count: status.accounts.length })
         ) : null
       }
       actions={
         <>
+          {!status && <ConnectionActionSkeleton label={t("settings.gitLabSelfHosted.connect")} />}
+
           {status && setupBaseUrl === null && (
             <Button size="sm" disabled={busy} onClick={() => openSetup()}>
               {t(
@@ -203,18 +203,17 @@ export function GitLabSelfHostedConnection({
       }
     >
       {!status ? (
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-full rounded-md" />
-          <Button size="sm" disabled={busy} onClick={() => void action(load)}>
-            {t("settings.gitLabSelfHosted.retry")}
-          </Button>
+        error && (
+          <div className="space-y-2">
+            <Button size="sm" disabled={busy} onClick={() => void action(load)}>
+              {t("settings.gitLabSelfHosted.retry")}
+            </Button>
 
-          {error && (
             <p role="alert" className="text-xs text-git-deleted">
               {error}
             </p>
-          )}
-        </div>
+          </div>
+        )
       ) : (
         <>
           {(status.accounts.length > 1 || (compact && status.accounts.length > 0)) && (
@@ -222,6 +221,7 @@ export function GitLabSelfHostedConnection({
               {status.accounts.map((account) => (
                 <GitLabSelfHostedAccountCard
                   key={account.baseUrl}
+                  profileId={profileId}
                   account={account}
                   busy={busy}
                   secureStorage={status.secureStorage}

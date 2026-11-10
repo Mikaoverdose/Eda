@@ -18,6 +18,8 @@ import type {
 } from "../persistence/gitlab-self-hosted-account-repository";
 import type { SecretStore } from "../secrets/secret-store";
 import { listProviderRepositories } from "./provider-repositories";
+import { ProviderProfileCache } from "./provider-profile-cache";
+import { gitLabProfileDetails, type GitLabProfileDetails } from "./gitlab-profile";
 
 type Failure =
   | "invalidUrl"
@@ -44,6 +46,7 @@ const fail = (
   });
 
 export class GitLabSelfHostedAuth {
+  private readonly profiles: ProviderProfileCache<GitLabProfileDetails>;
   private readonly pending = new Map<string, { profileId: string; controller: AbortController }>();
   private readonly saving = new Set<Promise<GitLabSelfHostedStatus>>();
 
@@ -52,7 +55,10 @@ export class GitLabSelfHostedAuth {
     private readonly secrets: SecretStore,
     private readonly fetch: typeof globalThis.fetch,
     private readonly insecureFetch?: (baseUrl: string) => typeof globalThis.fetch,
-  ) {}
+    now = Date.now,
+  ) {
+    this.profiles = new ProviderProfileCache(now);
+  }
 
   status(profileId: string): GitLabSelfHostedStatus {
     return {
@@ -68,6 +74,25 @@ export class GitLabSelfHostedAuth {
           ignoreTlsErrors,
         })),
     };
+  }
+
+  async profile(profileId: string, input: string) {
+    const account = this.requireAccount(profileId, this.baseUrl(input));
+    const details = await this.profiles.get(account.credentialRef, async () => {
+      const credentials = await this.credentials(account);
+      const user = await this.request(
+        this.fetchFor(account.baseUrl, account.ignoreTlsErrors),
+        `${account.baseUrl}/api/v4/user`,
+        credentials.password,
+        AbortSignal.timeout(15000),
+      );
+      this.assertCurrent(account);
+      if (String(user["id"]) !== account.accountId) return null;
+      return gitLabProfileDetails(account.accountId, user);
+    });
+
+    this.assertCurrent(account);
+    return details ? { ...details, baseUrl: account.baseUrl } : null;
   }
 
   tokenSettingsUrl(input: string, form: GitLabTokenForm = "legacy"): string {
@@ -133,7 +158,7 @@ export class GitLabSelfHostedAuth {
     ignoreTlsErrors: boolean,
     signal: AbortSignal,
   ): Promise<GitLabSelfHostedStatus> {
-    const { accountId, login } = await this.validateConnection(
+    const { accountId, login, profile } = await this.validateConnection(
       baseUrl,
       token,
       ignoreTlsErrors,
@@ -169,8 +194,12 @@ export class GitLabSelfHostedAuth {
       throw error;
     }
 
-    if (previous && this.ownsCredential(previous))
+    this.profiles.set(account.credentialRef, profile);
+
+    if (previous && this.ownsCredential(previous)) {
       await this.secrets.delete(previous.credentialRef);
+      this.profiles.delete(previous.credentialRef);
+    }
 
     return this.status(profileId);
   }
@@ -203,7 +232,11 @@ export class GitLabSelfHostedAuth {
       throw error;
     }
 
-    return { accountId: String(user["id"]), login: user["username"] };
+    return {
+      accountId: String(user["id"]),
+      login: user["username"],
+      profile: gitLabProfileDetails(String(user["id"]), user),
+    };
   }
 
   cancel(profileId: string): void {
@@ -219,6 +252,7 @@ export class GitLabSelfHostedAuth {
     this.cancelAll();
 
     await Promise.allSettled([...this.saving]);
+    await this.profiles.clear();
   }
 
   async disconnect(profileId: string, input: string): Promise<void> {
@@ -236,6 +270,7 @@ export class GitLabSelfHostedAuth {
 
     if (this.accounts.find(profileId, baseUrl)?.credentialRef === account.credentialRef)
       this.accounts.delete(profileId, baseUrl);
+    this.profiles.delete(account.credentialRef);
   }
 
   async forFetch(profileId: string, url: string): Promise<TransportCredentials | undefined> {

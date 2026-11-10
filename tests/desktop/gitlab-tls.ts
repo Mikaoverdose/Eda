@@ -95,7 +95,18 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
       response.setHeader("Content-Type", "application/json");
 
       response.end(
-        JSON.stringify(request.url?.endsWith("/user") ? { id: 7, username: "work.user" } : []),
+        JSON.stringify(
+          request.url?.endsWith("/user")
+            ? {
+                id: 7,
+                username: "work.user",
+                name: "Self-Hosted User",
+                bio: "Building on our own GitLab.",
+                location: "Example City",
+                avatar_url: null,
+              }
+            : [],
+        ),
       );
     },
   );
@@ -152,7 +163,13 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
 
     ipcMain.handle(channels.gitlabProfile, () => ({
       ok: true,
-      value: { id: "2", avatarDataUrl: null },
+      value: {
+        id: "2",
+        name: "Team User",
+        bio: "Building thoughtful projects.",
+        location: "Example City",
+        avatarDataUrl: null,
+      },
     }));
   }, IPC_CHANNELS);
 
@@ -192,6 +209,10 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
   await expect(github.getByText("Building thoughtful tools.", { exact: true })).toBeVisible();
   await expect(github.getByText("Example", { exact: true })).toBeVisible();
   await expect(github.getByText("Connected", { exact: true })).toHaveCount(0);
+  const gitlab = page.getByRole("region", { name: "GitLab connection", exact: true });
+  await expect(gitlab.getByText("Team User", { exact: true })).toBeVisible();
+  await expect(gitlab.getByText("Building thoughtful projects.", { exact: true })).toBeVisible();
+  await expect(gitlab.getByText("Example City", { exact: true })).toBeVisible();
 
   assertSmoothResize(
     await sampleResize(card, () =>
@@ -215,6 +236,17 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
   await card.getByLabel("Personal access token", { exact: true }).fill(token);
   await card.getByRole("button", { name: "Connect", exact: true }).click();
   await card.getByRole("button", { name: /View work.user/ }).waitFor();
+  await expect(card.getByText("Self-Hosted User", { exact: true })).toBeVisible();
+  await expect(card.getByText("Building on our own GitLab.", { exact: true })).toBeVisible();
+  await expect(card.getByText("Example City", { exact: true })).toBeVisible();
+  await expect(card.getByText(baseUrl, { exact: true })).toBeVisible();
+  const instanceText = card.getByText(baseUrl, { exact: true });
+  const instanceIcon = instanceText.locator("..").locator("svg");
+  const [iconBounds, urlBounds] = await Promise.all([
+    instanceIcon.boundingBox(),
+    instanceText.boundingBox(),
+  ]);
+  assert.ok(iconBounds && urlBounds && iconBounds.x + iconBounds.width < urlBounds.x);
 
   const profileId = await page.evaluate(async () => {
     const result = await window.eda.identity.getActive();

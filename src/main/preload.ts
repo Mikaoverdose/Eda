@@ -10,6 +10,8 @@ const api: EdaApi = {
     install: () => ipcRenderer.invoke(IPC_CHANNELS.updatesInstall),
   },
   gitlabSelfHosted: {
+    profile: (profileId, baseUrl) =>
+      ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedProfile, profileId, baseUrl),
     status: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedStatus, profileId),
     connect: (profileId, baseUrl, token, ignoreTlsErrors) =>
       ipcRenderer.invoke(

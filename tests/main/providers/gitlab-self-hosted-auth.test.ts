@@ -14,6 +14,12 @@ afterEach(() => {
 
 const base = "https://git.company.test/gitlab";
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+const profileFields = {
+  name: "Work User",
+  bio: "Building useful things.",
+  location: "Example City",
+  avatar_url: "https://git.company.test/gitlab/uploads/photo.png",
+};
 
 function setup() {
   const db = openInMemoryDatabase();
@@ -45,7 +51,9 @@ function setup() {
   };
 
   const fetch = vi.fn<typeof globalThis.fetch>(async (url) =>
-    String(url).endsWith("/user") ? json({ id: 7, username: "work.user" }) : json([]),
+    String(url).endsWith("/user")
+      ? json({ id: 7, username: "work.user", ...profileFields })
+      : json([]),
   );
 
   const accounts = new GitLabSelfHostedAccountRepository(db);
@@ -55,7 +63,8 @@ function setup() {
   );
 
   const insecureFetch = vi.fn(() => insecure);
-  const service = new GitLabSelfHostedAuth(accounts, secrets, fetch, insecureFetch);
+  let now = Date.now();
+  const service = new GitLabSelfHostedAuth(accounts, secrets, fetch, insecureFetch, () => now);
   const connect = (url = base, token = "glpat-private-token") =>
     service.connect(profile.id, url, token);
 
@@ -72,6 +81,9 @@ function setup() {
     accounts,
     service,
     connect,
+    advance: (ms: number) => {
+      now += ms;
+    },
   };
 }
 
@@ -107,6 +119,84 @@ it.each(["legacy-token", "fine-grained-token"])(
     expect(ctx.service.profileUrl(ctx.profile.id, base)).toBe(`${base}/work.user`);
   },
 );
+
+it("caches full profiles per instance and preserves them offline without exposing credentials", async () => {
+  const ctx = setup();
+  await ctx.connect();
+  const expected = {
+    id: "7",
+    baseUrl: base,
+    name: profileFields.name,
+    bio: profileFields.bio,
+    location: profileFields.location,
+    avatarUrl: profileFields.avatar_url,
+  };
+  ctx.fetch.mockClear();
+  expect(await ctx.service.profile(ctx.profile.id, base)).toEqual(expected);
+  expect(ctx.fetch).not.toHaveBeenCalled();
+
+  const otherBase = "https://other.company.test";
+  ctx.fetch.mockResolvedValueOnce(json({ id: 7, username: "other.user", name: "Other User" }));
+  await ctx.connect(otherBase, "other-token");
+  expect(await ctx.service.profile(ctx.profile.id, otherBase)).toMatchObject({
+    name: "Other User",
+    baseUrl: otherBase,
+  });
+  expect(await ctx.service.profile(ctx.profile.id, base)).toEqual(expected);
+  await expect(ctx.service.profile(ctx.other.id, base)).rejects.toMatchObject({
+    kind: "auth-failed",
+  });
+
+  ctx.advance(301_000);
+  ctx.fetch.mockRejectedValueOnce(new Error("Offline"));
+  expect(await ctx.service.profile(ctx.profile.id, base)).toEqual(expected);
+  await ctx.service.disconnect(ctx.profile.id, base);
+  await expect(ctx.service.profile(ctx.profile.id, base)).rejects.toMatchObject({
+    kind: "auth-failed",
+  });
+});
+
+it("loads profiles after restart using only the selected instance's TLS preference and token", async () => {
+  const ctx = setup();
+  await ctx.service.connect(ctx.profile.id, base, "private-token", true);
+  const restarted = new GitLabSelfHostedAuth(
+    ctx.accounts,
+    ctx.secrets,
+    ctx.fetch,
+    ctx.insecureFetch,
+  );
+  ctx.fetch.mockClear();
+  ctx.insecure.mockResolvedValueOnce(json({ id: 7, ...profileFields }));
+
+  expect(await restarted.profile(ctx.profile.id, base)).toMatchObject({
+    baseUrl: base,
+    name: "Work User",
+  });
+  expect(ctx.fetch).not.toHaveBeenCalled();
+  expect(ctx.insecure).toHaveBeenLastCalledWith(
+    `${base}/api/v4/user`,
+    expect.objectContaining({
+      headers: expect.objectContaining({ "PRIVATE-TOKEN": "private-token" }),
+    }),
+  );
+});
+
+it("rejects a late profile response after the instance is disconnected", async () => {
+  const ctx = setup();
+  await ctx.connect();
+  const restarted = new GitLabSelfHostedAuth(ctx.accounts, ctx.secrets, ctx.fetch);
+  let finish!: (response: Response) => void;
+  ctx.fetch.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const pending = restarted.profile(ctx.profile.id, base);
+  await vi.waitFor(() => expect(ctx.fetch).toHaveBeenCalledTimes(3));
+  await restarted.disconnect(ctx.profile.id, base);
+  finish(json({ id: 7, ...profileFields }));
+  await expect(pending).rejects.toMatchObject({ kind: "auth-failed" });
+});
 
 it("persists separate instance credentials across service restarts and isolates profiles, hosts, and base paths", async () => {
   const ctx = setup();

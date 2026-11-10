@@ -1,5 +1,9 @@
 import type { ProviderRepositoryPage } from "./integrations/provider-repositories";
-import type { GitLabSelfHostedStatus, GitLabTokenForm } from "./integrations/gitlab-self-hosted";
+import type {
+  GitLabSelfHostedStatus,
+  GitLabSelfHostedAccountProfile,
+  GitLabTokenForm,
+} from "./integrations/gitlab-self-hosted";
 import type {
   GitLabStatus,
   GitLabSignIn,
@@ -304,6 +308,10 @@ export interface EdaApi {
   };
 
   gitlabSelfHosted: {
+    profile(
+      profileId: string,
+      baseUrl: string,
+    ): Promise<Result<GitLabSelfHostedAccountProfile | null>>;
     status(profileId: string): Promise<Result<GitLabSelfHostedStatus>>;
     connect(
       profileId: string,
@@ -516,6 +524,7 @@ export const IPC_CHANNELS = {
   updatesDownload: "updates:download",
   updatesInstall: "updates:install",
   gitlabSelfHostedStatus: "gitlab-self-hosted:status",
+  gitlabSelfHostedProfile: "gitlab-self-hosted:profile",
   gitlabSelfHostedConnect: "gitlab-self-hosted:connect",
   gitlabSelfHostedCancel: "gitlab-self-hosted:cancel",
   gitlabSelfHostedDisconnect: "gitlab-self-hosted:disconnect",

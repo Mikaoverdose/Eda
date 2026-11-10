@@ -20,6 +20,18 @@ export function registerGitLabSelfHostedHandlers(services: Services): void {
     work(profile, (id) => gitlab.status(id)),
   );
 
+  handle(IPC_CHANNELS.gitlabSelfHostedProfile, async (_event, profile, url) => {
+    const baseUrl = instance(url);
+
+    return work(profile, async (id) => {
+      const details = await gitlab.profile(id, baseUrl);
+      if (!details) return null;
+      const image = await services.avatars.getGitLab(details.id, details.avatarUrl);
+      const { avatarUrl: _avatarUrl, ...accountProfile } = details;
+      return { ...accountProfile, avatarDataUrl: image.dataUrl };
+    });
+  });
+
   handle(
     IPC_CHANNELS.gitlabSelfHostedConnect,
     async (_event, profile, url, token, rawIgnoreTlsErrors) => {

@@ -3,13 +3,15 @@ import type { ReactNode } from "react";
 import { ProviderIcon, type HostingProvider } from "./ProviderIcon";
 import { cx } from "../../components/ui/cx";
 import { ConnectionCard } from "./ConnectionCard";
-import { AnimatedSize } from "../../components/ui/index";
+import { ActionIndicator, AnimatedSize } from "../../components/ui/index";
 
 export function ServiceAccountCard({
   provider,
   children,
   actions,
+  actionsPlacement = "header",
   status,
+  pendingLabel,
   contentClassName,
   compact = false,
   completedLabel,
@@ -22,7 +24,9 @@ export function ServiceAccountCard({
   provider: HostingProvider;
   children: ReactNode;
   actions?: ReactNode;
+  actionsPlacement?: "header" | "body";
   status?: ReactNode;
+  pendingLabel?: string | undefined;
   contentClassName?: string;
   compact?: boolean;
   completedLabel?: string | undefined;
@@ -32,13 +36,21 @@ export function ServiceAccountCard({
   bodySeparator?: boolean;
   onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
+  const indicator =
+    status ??
+    (pendingLabel && (
+      <span role="status" aria-label={pendingLabel} className="text-text-tertiary">
+        <ActionIndicator state="pending" />
+      </span>
+    ));
+
   if (compact)
     return (
       <ConnectionCard
         title={provider}
         icon={<ProviderIcon provider={provider} />}
         completedLabel={completedLabel}
-        status={status}
+        status={indicator}
         onOpenChange={onOpenChange}
         open={open}
       >
@@ -60,8 +72,8 @@ export function ServiceAccountCard({
           </h2>
 
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1">
-            {status}
-            {actions}
+            {indicator}
+            {actionsPlacement === "header" && actions}
           </div>
         </div>
 
@@ -76,6 +88,9 @@ export function ServiceAccountCard({
             )}
           >
             {children}
+            {actionsPlacement === "body" && actions && (
+              <footer className="flex flex-wrap items-center gap-2 pt-1">{actions}</footer>
+            )}
           </div>
         )}
       </AnimatedSize>

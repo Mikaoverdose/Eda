@@ -1,4 +1,4 @@
-import type { GitLabAccount } from "./gitlab";
+import type { GitLabAccount, GitLabAccountProfile } from "./gitlab";
 
 export type GitLabTokenForm = "legacy" | "granular" | "older";
 
@@ -10,6 +10,10 @@ export interface GitLabSelfHostedAccount extends GitLabAccount {
 export interface GitLabSelfHostedStatus {
   secureStorage: boolean;
   accounts: GitLabSelfHostedAccount[];
+}
+
+export interface GitLabSelfHostedAccountProfile extends GitLabAccountProfile {
+  baseUrl: string;
 }
 
 export function normalizeGitLabInstanceUrl(input: string): string | null {

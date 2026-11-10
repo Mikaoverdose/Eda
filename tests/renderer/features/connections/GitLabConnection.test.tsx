@@ -30,7 +30,15 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   for (const method of Object.values(gitlab)) method.mockReset();
   gitlab.status.mockResolvedValue(ok(empty));
-  gitlab.profile.mockResolvedValue(ok({ id: "7", avatarDataUrl: "data:image/png;base64,AQID" }));
+  gitlab.profile.mockResolvedValue(
+    ok({
+      id: "7",
+      name: "Work User",
+      bio: "Building useful things.",
+      location: "Example City",
+      avatarDataUrl: "data:image/png;base64,AQID",
+    }),
+  );
   gitlab.begin.mockResolvedValue(ok({ id: "session", expiresAt: Date.now() + 600_000 }));
   gitlab.poll.mockResolvedValue(ok({ state: "pending" }));
 
@@ -68,12 +76,18 @@ const button = (text: string) =>
 it("opens browser authorization, completes the account connection and disconnects", async () => {
   await act(async () => root.render(<GitLabConnection profileId="work" />));
   await act(async () => button("Sign in with GitLab").click());
+  expect(button("Open GitLab").closest("footer")).not.toBeNull();
+  expect(button("Open GitLab").dataset["variant"]).toBe("secondary");
+  expect(button("Cancel").closest("footer")).not.toBeNull();
   expect(gitlab.openAuthorization).toHaveBeenCalledWith("work", "session");
   expect(container.textContent).toContain("Authorize Eda in your browser");
   expect(container.querySelector('input[type="password"]')).toBeNull();
   gitlab.poll.mockResolvedValue(ok({ state: "connected", status: connected }));
   await act(async () => vi.advanceTimersByTimeAsync(1000));
   expect(container.textContent).toContain("@work.user");
+  expect(container.textContent).toContain("Work User");
+  expect(container.textContent).toContain("Building useful things.");
+  expect(container.textContent).toContain("Example City");
 
   expect(container.querySelector(".profile-avatar img")?.getAttribute("src")).toBe(
     "data:image/png;base64,AQID",
@@ -88,6 +102,36 @@ it("opens browser authorization, completes the account connection and disconnect
   expect(container.textContent).not.toContain("@work.user");
 });
 
+it("shows the same full profile in the compact connection without restarting sign-in", async () => {
+  gitlab.status.mockResolvedValue(ok(connected));
+  await act(async () => root.render(<GitLabConnection profileId="work" compact />));
+  await act(async () => {
+    const details = container.querySelector("details")!;
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+  });
+
+  expect(container.textContent).toContain("Work User");
+  expect(container.textContent).toContain("Building useful things.");
+  expect(container.textContent).toContain("Example City");
+  await act(async () => button("@work.user").click());
+  expect(gitlab.openProfile).toHaveBeenCalledWith("work");
+  expect(gitlab.begin).not.toHaveBeenCalled();
+});
+
+it.each([null, "", "   "])("uses the username when the GitLab display name is %j", async (name) => {
+  gitlab.status.mockResolvedValue(ok(connected));
+  gitlab.profile.mockResolvedValue(
+    ok({ id: "7", name, bio: null, location: null, avatarDataUrl: null }),
+  );
+  await act(async () => root.render(<GitLabConnection profileId="work" />));
+
+  expect([...container.querySelectorAll("p")].map((item) => item.textContent)).toContain(
+    "work.user",
+  );
+  expect(button("@work.user")).toBeDefined();
+});
+
 it("ignores a late poll response after cancellation", async () => {
   await act(async () => root.render(<GitLabConnection profileId="work" />));
   await act(async () => button("Sign in with GitLab").click());
@@ -100,7 +144,7 @@ it("ignores a late poll response after cancellation", async () => {
   );
 
   await act(async () => vi.advanceTimersByTimeAsync(1000));
-  await act(async () => button("Cancel sign-in").click());
+  await act(async () => button("Cancel").click());
   await act(async () => finish(ok({ state: "connected", status: connected })));
   expect(gitlab.cancel).toHaveBeenCalledWith("work", "session");
   expect(button("Sign in with GitLab")).toBeDefined();
@@ -132,8 +176,8 @@ it("reveals the cached profile and avatar together without flashing initials dur
 
   await act(async () => root.render(<GitLabConnection profileId="work" />));
   expect(container.querySelector(".ui-skeleton")).not.toBeNull();
-  expect(container.querySelector(".profile-avatar")).toBeNull();
-  expect(container.textContent).not.toContain("@work.user");
+  expect(container.querySelector(".profile-avatar.ui-skeleton")).not.toBeNull();
+  expect(button("@work.user")).toBeUndefined();
   await act(async () => finish(ok({ id: "7", avatarDataUrl: "data:image/png;base64,AQID" })));
   expect(container.querySelector(".ui-skeleton")).toBeNull();
   expect(container.textContent).toContain("@work.user");

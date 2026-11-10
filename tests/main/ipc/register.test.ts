@@ -205,6 +205,14 @@ function setup() {
     },
     resetData: vi.fn(async () => {}),
     gitlabSelfHosted: {
+      profile: vi.fn(async (_profileId: string, baseUrl: string) => ({
+        id: "7",
+        baseUrl,
+        name: "Work User",
+        bio: "Building useful things.",
+        location: "Example City",
+        avatarUrl: "https://git.company.test/uploads/photo.png",
+      })),
       status: vi.fn(() => ({ secureStorage: true, accounts: [] })),
       connect: vi.fn(async () => ({ secureStorage: true, accounts: [] })),
       cancel: vi.fn(),
@@ -218,6 +226,9 @@ function setup() {
     gitlab: {
       profile: vi.fn(async () => ({
         id: "7",
+        name: "Work User",
+        bio: "Building useful things.",
+        location: "Example City",
         avatarUrl: "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
       })),
       status: vi.fn(() => ({ secureStorage: true, account: null })),
@@ -824,20 +835,48 @@ it("guards GitLab authorization and cancellation with active profile ownership",
   expect(gitlab.cancel).toHaveBeenCalledWith(profile.id, repositoryId);
 });
 
-it("loads GitLab provider avatars for the active profile without exposing remote URLs", async () => {
+it("loads GitLab profile details and avatars for the active profile without exposing remote URLs", async () => {
   const { gitlab, avatars } = setup();
   expect(await invoke(IPC_CHANNELS.gitlabProfile, repositoryId)).toMatchObject({ ok: false });
   expect(gitlab.profile).not.toHaveBeenCalled();
 
   expect(await invoke(IPC_CHANNELS.gitlabProfile, profile.id)).toEqual({
     ok: true,
-    value: { id: "7", avatarDataUrl: "data:image/png;base64,AQID" },
+    value: {
+      id: "7",
+      name: "Work User",
+      bio: "Building useful things.",
+      location: "Example City",
+      avatarDataUrl: "data:image/png;base64,AQID",
+    },
   });
 
   expect(avatars.getGitLab).toHaveBeenCalledExactlyOnceWith(
     "7",
     "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
   );
+});
+
+it("loads self-hosted profile details through the active profile without exposing avatar URLs", async () => {
+  const { gitlabSelfHosted, avatars } = setup();
+  const baseUrl = "https://git.company.test";
+  expect(await invoke(IPC_CHANNELS.gitlabSelfHostedProfile, repositoryId, baseUrl)).toMatchObject({
+    ok: false,
+  });
+  expect(gitlabSelfHosted.profile).not.toHaveBeenCalled();
+  expect(await invoke(IPC_CHANNELS.gitlabSelfHostedProfile, profile.id, baseUrl)).toEqual({
+    ok: true,
+    value: {
+      id: "7",
+      baseUrl,
+      name: "Work User",
+      bio: "Building useful things.",
+      location: "Example City",
+      avatarDataUrl: "data:image/png;base64,AQID",
+    },
+  });
+  expect(gitlabSelfHosted.profile).toHaveBeenCalledWith(profile.id, baseUrl);
+  expect(avatars.getGitLab).toHaveBeenCalledWith("7", "https://git.company.test/uploads/photo.png");
 });
 
 it("guards self-hosted GitLab credentials and browser actions with active profile ownership", async () => {

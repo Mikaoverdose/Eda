@@ -9,6 +9,9 @@ export interface GitLabStatus {
 }
 export interface GitLabAccountProfile {
   id: string;
+  name: string | null;
+  bio: string | null;
+  location: string | null;
   avatarDataUrl: string | null;
 }
 export interface GitLabSignIn {

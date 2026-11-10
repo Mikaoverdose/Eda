@@ -3,17 +3,12 @@ import { t } from "@shared/i18n";
 import type { GitHubAccountProfile, GitHubSignIn, GitHubStatus } from "@shared/integrations/github";
 import { Copy, ExternalLink, Unplug } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { GitHubProfile } from "./GitHubProfile";
-import {
-  ActionIndicator,
-  Button,
-  CodeBlock,
-  CopyButton,
-  ActionsMenu,
-  Skeleton,
-} from "../../components/ui/index";
+import { ConnectionProfile } from "./ConnectionProfile";
+import { Button, CodeBlock, CopyButton, ActionsMenu, Skeleton } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
+import { ConnectionAccountSkeleton, ConnectionActionSkeleton } from "./ConnectionSkeleton";
+import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
 
 export function GitHubConnection({
   profileId,
@@ -245,18 +240,22 @@ export function GitHubConnection({
         setConnectRequested(open);
       }}
       completedLabel={isConnected ? t("settings.gitHubConnection.gitHubConnected") : undefined}
+      actionsPlacement={pending || starting ? "body" : "header"}
       contentClassName={pending ? "min-h-20" : ""}
       bodySeparator={!account || !!pending || !!error}
       bodyOpen={!!pending || starting || !!error || !!(status && !status.secureStorage)}
       summary={
-        loading ? (
-          <Skeleton className="h-11 w-36 rounded-md" />
+        loading && account ? (
+          <ConnectionAccountSkeleton login={account.login} hue={hue} />
         ) : account ? (
-          <GitHubProfile
+          <ConnectionProfile
             login={login ?? account.login}
             name={details?.name}
             avatarDataUrl={details?.avatarDataUrl}
             hue={hue}
+            profileLabel={t("settings.gitHubConnection.viewOnGitHub", {
+              login: login ?? account.login,
+            })}
             connected={isConnected}
             bio={details?.bio}
             location={details?.location}
@@ -264,22 +263,14 @@ export function GitHubConnection({
           />
         ) : null
       }
-      status={
-        starting || pending || loading ? (
-          <span
-            role="status"
-            aria-label={
-              starting
-                ? t("settings.gitHubConnection.gettingGitHubCode")
-                : pending
-                  ? t("settings.gitHubConnection.waitingForGitHub")
-                  : t("settings.gitHubConnection.loadingGitHub")
-            }
-            className="text-text-tertiary"
-          >
-            <ActionIndicator state="pending" />
-          </span>
-        ) : null
+      pendingLabel={
+        starting
+          ? t("settings.gitHubConnection.gettingGitHubCode")
+          : pending
+            ? t("settings.gitHubConnection.waitingForGitHub")
+            : loading && compact
+              ? t("settings.gitHubConnection.loadingGitHub")
+              : undefined
       }
       actions={
         pending || starting ? (
@@ -294,14 +285,11 @@ export function GitHubConnection({
             </Button>
 
             <Button size="sm" variant="ghost" disabled={starting} onClick={cancel}>
-              {t("settings.gitHubConnection.cancelSignIn")}
+              {t("common.cancel")}
             </Button>
           </>
-        ) : loading && compact ? null : loading ? (
-          <div aria-hidden="true" className="flex items-center gap-3">
-            <Skeleton className="h-8 w-32 rounded-md" />
-            <Skeleton className="h-4 w-16" />
-          </div>
+        ) : loading && compact ? null : loading && !account ? (
+          <ConnectionActionSkeleton label={t("settings.gitHubConnection.signInWithGitHub")} />
         ) : status ? (
           <>
             {!isConnected && !compact && (
@@ -356,10 +344,10 @@ export function GitHubConnection({
         </p>
       )}
 
-      {loading ? (
+      {loading && compact ? (
         <div aria-hidden="true" className="space-y-3">
           <div className="flex items-center gap-3">
-            <Skeleton className="size-11 shrink-0 rounded-full" />
+            <ProfileAvatar name={account?.login ?? ""} hue={hue} loading />
 
             <div className="min-w-0 flex-1 space-y-1.5">
               <Skeleton className="h-4 w-16" />
@@ -376,7 +364,7 @@ export function GitHubConnection({
         </div>
       ) : account && compact ? (
         <div>
-          <GitHubProfile
+          <ConnectionProfile
             key={account.id}
             login={login ?? account.login}
             name={details?.name}
@@ -384,6 +372,9 @@ export function GitHubConnection({
             location={details?.location}
             avatarDataUrl={details?.avatarDataUrl}
             hue={hue}
+            profileLabel={t("settings.gitHubConnection.viewOnGitHub", {
+              login: login ?? account.login,
+            })}
             onOpenProfile={() => void openProfile()}
           />
         </div>

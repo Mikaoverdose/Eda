@@ -74,9 +74,28 @@ const button = (text: string) =>
 const render = () => act(async () => root.render(<GitHubConnection profileId="work" />));
 const click = (text: string) => act(async () => button(text).click());
 
+it.each([null, "", "   "])("uses the username when the GitHub display name is %j", async (name) => {
+  github.status.mockResolvedValue(
+    ok({ ...status, account: { id: "1", login: "work-user", state: "connected" } }),
+  );
+  github.profile.mockResolvedValue(
+    ok({ id: "1", login: "work-user", name, bio: null, location: null, avatarDataUrl: null }),
+  );
+
+  await render();
+
+  expect([...container.querySelectorAll("p")].map((item) => item.textContent)).toContain(
+    "work-user",
+  );
+  expect(button("@work-user")).toBeDefined();
+});
+
 it("opens GitHub with the displayed verification code, honors polling intervals, and saves the connection", async () => {
   await render();
   await click("Sign in with GitHub");
+  expect(button("Open GitHub").closest("footer")).not.toBeNull();
+  expect(button("Open GitHub").dataset["variant"]).toBe("secondary");
+  expect(button("Cancel").closest("footer")).not.toBeNull();
   expect(container.textContent).toContain("ABCD-EFGH");
   expect(container.textContent).not.toContain("false");
   expect(container.querySelector('input[type="password"]')).toBeNull();
@@ -164,7 +183,7 @@ it("cancels pending sign-in on close and does not accept a late response", async
   );
 
   await act(async () => vi.advanceTimersByTimeAsync(5000));
-  await click("Cancel sign-in");
+  await click("Cancel");
   await act(async () => finish(ok({ state: "connected", status })));
   expect(github.cancel).toHaveBeenCalledWith("work", "session");
   expect(button("Sign in with GitHub")).toBeDefined();
@@ -202,7 +221,7 @@ it("starts compact sign-in on expansion and keeps the pending session when reope
   await toggleCard(false);
   await toggleCard(true);
   expect(github.begin).toHaveBeenCalledOnce();
-  await click("Cancel sign-in");
+  await click("Cancel");
   expect(container.querySelector("details")?.open).toBe(false);
   await toggleCard(false);
   await toggleCard(true);
@@ -273,7 +292,7 @@ it("keeps instructions and disabled actions visible while fetching the verificat
   await toggleCard(true);
   expect(container.textContent).toContain("Enter this code on GitHub.");
   expect(button("Open GitHub").disabled).toBe(true);
-  expect(button("Cancel sign-in").disabled).toBe(true);
+  expect(button("Cancel").disabled).toBe(true);
   expect(button("Copy code").disabled).toBe(true);
   const code = container.querySelector('[aria-label="GitHub verification code"]')!;
   expect(code.querySelectorAll(".ui-skeleton")).toHaveLength(2);
@@ -282,8 +301,8 @@ it("keeps instructions and disabled actions visible while fetching the verificat
   expect(container.querySelector('[aria-label="GitHub verification code"]')).toBe(code);
   expect(code.textContent).toBe("ABCD-EFGH");
   expect(button("Open GitHub").disabled).toBe(false);
-  expect(button("Cancel sign-in").disabled).toBe(false);
+  expect(button("Cancel").disabled).toBe(false);
   expect(button("Copy code").disabled).toBe(false);
-  await click("Cancel sign-in");
+  await click("Cancel");
   expect(container.querySelector("details")?.open).toBe(false);
 });

@@ -3,17 +3,11 @@ import { t } from "@shared/i18n";
 import type { GitLabSignIn, GitLabStatus, GitLabAccountProfile } from "@shared/integrations/gitlab";
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Unplug } from "lucide-react";
-import {
-  ActionIndicator,
-  Button,
-  ActionsMenu,
-  TextButton,
-  Skeleton,
-} from "../../components/ui/index";
-import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
+import { Button, ActionsMenu } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
-import { ConnectionAccount } from "./ConnectionAccount";
+import { ConnectionProfile } from "./ConnectionProfile";
+import { ConnectionAccountSkeleton, ConnectionActionSkeleton } from "./ConnectionSkeleton";
 
 export function GitLabConnection({
   profileId,
@@ -202,6 +196,22 @@ export function GitLabConnection({
     }
   };
 
+  const account = status?.account;
+  const details = profile?.id === account?.id ? profile : null;
+  const accountProfile = account ? (
+    <ConnectionProfile
+      login={account.login}
+      name={details?.name}
+      bio={details?.bio}
+      location={details?.location}
+      avatarDataUrl={details?.avatarDataUrl}
+      hue={hue}
+      connected={connected}
+      profileLabel={t("settings.gitLabConnection.viewProfile", { login: account.login })}
+      onOpenProfile={() => void openProfile()}
+    />
+  ) : null;
+
   return (
     <ServiceAccountCard
       provider="GitLab"
@@ -212,29 +222,17 @@ export function GitLabConnection({
         setConnectRequested(open);
       }}
       completedLabel={connected ? t("settings.gitLabConnection.connected") : undefined}
+      actionsPlacement={pending ? "body" : "header"}
       bodyOpen={!!pending || !!error || !!(status && !status.secureStorage)}
       summary={
-        loading ? (
-          <Skeleton className="h-11 w-36 rounded-md" />
-        ) : status?.account ? (
-          <ConnectionAccount
-            login={status.account.login}
-            avatarDataUrl={profile?.id === status.account.id ? profile.avatarDataUrl : undefined}
-            hue={hue}
-            connected={connected}
-            profileLabel={t("settings.gitLabConnection.viewProfile", {
-              login: status.account.login,
-            })}
-            onOpen={() => void openProfile()}
-          />
-        ) : null
+        loading && status?.account ? (
+          <ConnectionAccountSkeleton login={status.account.login} hue={hue} />
+        ) : (
+          accountProfile
+        )
       }
-      status={
-        loading || busy || pending ? (
-          <span role="status" aria-label={t("settings.gitLabConnection.waiting")}>
-            <ActionIndicator state="pending" />
-          </span>
-        ) : null
+      pendingLabel={
+        (loading && compact) || busy || pending ? t("settings.gitLabConnection.waiting") : undefined
       }
       actions={
         pending ? (
@@ -248,11 +246,11 @@ export function GitLabConnection({
             </Button>
 
             <Button size="sm" variant="ghost" onClick={cancel}>
-              {t("settings.gitLabConnection.cancel")}
+              {t("common.cancel")}
             </Button>
           </>
-        ) : loading ? (
-          <Skeleton className="h-8 w-32 rounded-md" />
+        ) : loading && !status?.account ? (
+          <ConnectionActionSkeleton label={t("settings.gitLabConnection.signIn")} />
         ) : status ? (
           <>
             {!connected && (
@@ -303,47 +301,11 @@ export function GitLabConnection({
         </p>
       )}
 
-      {loading ? (
-        <div aria-hidden="true" className="flex items-center gap-3">
-          <Skeleton className="size-11 shrink-0 rounded-full" />
-
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-4 w-32" />
-          </div>
-        </div>
-      ) : (
-        compact &&
-        !pending &&
-        status?.account && (
-          <div className="flex min-w-0 items-center gap-3">
-            <ProfileAvatar
-              name={status.account.login}
-              hue={hue}
-              imageUrl={
-                profile?.id === status.account.id ? (profile.avatarDataUrl ?? undefined) : undefined
-              }
-            />
-
-            <div className="min-w-0">
-              <TextButton
-                onClick={() => void openProfile()}
-                aria-label={t("settings.gitLabConnection.viewProfile", {
-                  login: status.account.login,
-                })}
-              >
-                @{status.account.login}
-              </TextButton>
-
-              <p className="text-xs text-text-tertiary">
-                {connected
-                  ? t("settings.gitLabConnection.connected")
-                  : t("settings.gitLabConnection.reconnectRequired")}
-              </p>
-            </div>
-          </div>
-        )
-      )}
+      {loading && compact ? (
+        <ConnectionAccountSkeleton login={account?.login ?? ""} hue={hue} />
+      ) : compact && !pending ? (
+        accountProfile
+      ) : null}
 
       {status && !status.secureStorage && (
         <p className="text-xs text-git-modified">{t("settings.gitLabConnection.unlockStorage")}</p>

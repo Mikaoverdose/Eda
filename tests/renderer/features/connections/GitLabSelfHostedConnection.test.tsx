@@ -15,6 +15,7 @@ const account = {
 };
 
 const api = {
+  profile: vi.fn(),
   status: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
@@ -30,6 +31,16 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   for (const method of Object.values(api)) method.mockReset();
   api.status.mockResolvedValue(ok({ secureStorage: true, accounts: [] }));
+  api.profile.mockImplementation(async (_profileId, baseUrl) =>
+    ok({
+      id: "7",
+      baseUrl,
+      name: "Work User",
+      bio: "Building useful things.",
+      location: "Example City",
+      avatarDataUrl: "data:image/png;base64,AQID",
+    }),
+  );
   api.connect.mockResolvedValue(ok({ secureStorage: true, accounts: [account] }));
   for (const method of [api.disconnect, api.openTokenSettings, api.openProfile, api.cancel])
     method.mockResolvedValue(ok(undefined));
@@ -55,6 +66,81 @@ const urlInput = () =>
 
 const tokenInput = () => container.querySelector<HTMLInputElement>('input[type="password"]')!;
 
+it.each([false, true])("shows the shared profile layout with compact=%j", async (compact) => {
+  api.status.mockResolvedValue(ok({ secureStorage: true, accounts: [account] }));
+  await act(async () =>
+    root.render(<GitLabSelfHostedConnection profileId="work" compact={compact} />),
+  );
+
+  expect(container.textContent).toContain("Work User");
+  expect(container.textContent).toContain("Building useful things.");
+  expect(container.textContent).toContain("Example City");
+  expect(container.textContent).toContain(base);
+  expect(container.querySelector(".profile-avatar img")?.getAttribute("src")).toBe(
+    "data:image/png;base64,AQID",
+  );
+  await act(async () => button("@work.user").click());
+  expect(api.openProfile).toHaveBeenCalledWith("work", base);
+});
+
+it("keeps the avatar skeleton visible until the matching self-hosted profile is ready", async () => {
+  api.status.mockResolvedValue(ok({ secureStorage: true, accounts: [account] }));
+  let finish!: (value: unknown) => void;
+  api.profile.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+
+  await act(async () => root.render(<GitLabSelfHostedConnection profileId="work" />));
+  expect(container.querySelector(".profile-avatar.ui-skeleton")).not.toBeNull();
+  expect(button("@work.user")).toBeUndefined();
+
+  await act(async () =>
+    finish(ok({ id: "7", baseUrl: base, name: "Work User", avatarDataUrl: null })),
+  );
+  expect(container.querySelector(".ui-skeleton")).toBeNull();
+  expect(container.textContent).toContain("Work User");
+  expect(button("@work.user")).toBeDefined();
+});
+
+it("keeps profiles with matching account IDs separate across self-hosted instances", async () => {
+  const other = "https://other.company.test";
+  api.status.mockResolvedValue(
+    ok({ secureStorage: true, accounts: [account, { ...account, baseUrl: other }] }),
+  );
+  api.profile.mockImplementation(async (_profileId, baseUrl) =>
+    ok({
+      id: "7",
+      baseUrl,
+      name: baseUrl === base ? "Work User" : "Other User",
+      avatarDataUrl: null,
+    }),
+  );
+  await act(async () => root.render(<GitLabSelfHostedConnection profileId="work" />));
+
+  expect(container.textContent).toContain("Work User");
+  expect(container.textContent).toContain("Other User");
+  expect(container.querySelectorAll(".profile-avatar")).toHaveLength(2);
+});
+
+it("uses the username when profile loading fails and rejects details from a different instance", async () => {
+  api.status.mockResolvedValue(ok({ secureStorage: true, accounts: [account] }));
+  api.profile.mockResolvedValue(
+    ok({ id: "7", baseUrl: "https://other.company.test", name: "Wrong User", avatarDataUrl: null }),
+  );
+  await act(async () => root.render(<GitLabSelfHostedConnection profileId="work" />));
+  expect(container.textContent).not.toContain("Wrong User");
+  expect([...container.querySelectorAll("p")].map((item) => item.textContent)).toContain(
+    "work.user",
+  );
+
+  api.profile.mockRejectedValue(new Error("Offline"));
+  await act(async () => root.render(<GitLabSelfHostedConnection key="retry" profileId="work" />));
+  expect(button("@work.user")).toBeDefined();
+  expect(container.querySelector(".ui-skeleton")).toBeNull();
+});
+
 async function fill(input: HTMLInputElement, value: string) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
@@ -77,6 +163,7 @@ it("keeps the integration card compact until setup is opened", async () => {
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(container.textContent).not.toContain("permissions");
   expect(button("Connect instance")).toBeDefined();
+  expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
 it("keeps every setup step inside the provider card without opening a dialog", async () => {
@@ -84,6 +171,8 @@ it("keeps every setup step inside the provider card without opening a dialog", a
   await act(async () => button("Connect instance").click());
 
   const card = container.querySelector('[aria-label="GitLab Self-Hosted connection"]')!;
+
+  expect(card.querySelector('[role="status"] .animate-spin-fast')).not.toBeNull();
 
   expect(card.contains(urlInput())).toBe(true);
   expect(card.querySelector('ol, [aria-current="step"]')).toBeNull();

@@ -18,7 +18,7 @@ import {
 import { usePreferencesStore } from "../../../stores/preferences-store";
 import { useShellStore } from "../../../stores/shell-store";
 import { useSimulationStore } from "../../../stores/simulation-store";
-import { GitHubProfile } from "../../connections/GitHubProfile";
+import { ConnectionProfile } from "../../connections/ConnectionProfile";
 import { ProviderIcon } from "../../connections/ProviderIcon";
 import { UpdatesSettings } from "../../updates/UpdatesSettings";
 
@@ -207,13 +207,16 @@ export function AboutSettings() {
                   </div>
                 </div>
               ) : (
-                <GitHubProfile
+                <ConnectionProfile
                   login={profile?.login ?? maintainer}
                   name={profile?.name ?? t("settings.aboutSettings.yuzu")}
                   bio={profile?.bio}
                   location={profile?.location}
                   avatarDataUrl={profile?.avatarDataUrl}
                   hue={45}
+                  profileLabel={t("settings.gitHubConnection.viewOnGitHub", {
+                    login: profile?.login ?? maintainer,
+                  })}
                   onOpenProfile={() =>
                     window.open(`https://github.com/${maintainer}`, "_blank", "noopener,noreferrer")
                   }
@@ -233,7 +236,7 @@ export function AboutSettings() {
                       />
                     </span>
                   </div>
-                </GitHubProfile>
+                </ConnectionProfile>
               )}
             </div>
           </div>
