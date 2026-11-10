@@ -14,14 +14,19 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-it("reads relative and symlinked templates without changing their text", async () => {
+it("reads a relative template without changing its text", async () => {
   const template = "Subject\n\n# Commit details\n";
   await writeFile(join(directory, "template"), template);
-  await symlink(join(directory, "template"), join(directory, "linked"));
 
   expect(await readCommitTemplate(directory, undefined)).toBeNull();
   expect(await readCommitTemplate(directory, "template")).toBe(template);
-  expect(await readCommitTemplate(directory, "linked")).toBe(template);
+});
+
+it.skipIf(process.platform === "win32")("allows symlinked templates", async () => {
+  await writeFile(join(directory, "template"), "Subject\n");
+  await symlink(join(directory, "template"), join(directory, "linked"));
+
+  expect(await readCommitTemplate(directory, "linked")).toBe("Subject\n");
 });
 
 it("rejects oversized, non-file, and non-UTF-8 templates", async () => {
