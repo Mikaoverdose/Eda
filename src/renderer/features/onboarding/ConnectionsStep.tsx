@@ -1,4 +1,5 @@
 import { GitLabConnection } from "../connections/GitLabConnection";
+import { GitLabSelfHostedConnection } from "../connections/GitLabSelfHostedConnection";
 import { t } from "@shared/i18n";
 import { useAppStore } from "../../stores/app-store";
 import { ConnectionCard } from "../connections/ConnectionCard";
@@ -8,10 +9,13 @@ import { SshSetupCard } from "./SshSetupCard";
 
 export function ConnectionsStep({ profileId }: { profileId: string }) {
   const identity = useAppStore((state) => state.activeIdentity);
+
   return (
     <div className="space-y-3">
-      <GitHubConnection key={profileId} profileId={profileId} compact />
-      <GitLabConnection key={`gitlab:${profileId}`} profileId={profileId} compact />
+      <GitHubConnection key={profileId} profileId={profileId} />
+      <GitLabConnection key={`gitlab:${profileId}`} profileId={profileId} />
+      <GitLabSelfHostedConnection key={`gitlab-self-hosted:${profileId}`} profileId={profileId} />
+
       {(["Bitbucket", "Azure DevOps"] as const).map((provider) => (
         <ConnectionCard
           key={provider}
@@ -19,6 +23,7 @@ export function ConnectionsStep({ profileId }: { profileId: string }) {
           icon={<ProviderIcon provider={provider} />}
         />
       ))}
+
       {identity?.id === profileId && <SshSetupCard key={profileId} identity={identity} />}
       <p className="text-xs leading-relaxed text-text-tertiary">
         {t("onboarding.connectionsStep.connectionsAndKeysBelongToThisProfileYou")}

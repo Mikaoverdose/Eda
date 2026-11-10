@@ -22,9 +22,14 @@ import { ProviderIcon } from "../connections/ProviderIcon";
 import { TransferProgress, TransportFields } from "../sync/TransportFields";
 import { ProviderRepositoryBrowser } from "./ProviderRepositoryBrowser";
 
-type Source = RepositoryProvider | "url";
+type Source = RepositoryProvider | "url" | `gitlab-self-hosted:${string}`;
 
-type Connection = { status: GitHubStatus | null; error: string | null };
+type Connection = {
+  status: GitHubStatus | null;
+  error: string | null;
+  provider: RepositoryProvider;
+  baseUrl?: string;
+};
 
 function folderName(url: string): string {
   return (
@@ -43,9 +48,7 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
   const profileId = profile.id;
 
   const [source, setSource] = useState<Source | null>(null);
-  const [connections, setConnections] = useState<Record<RepositoryProvider, Connection> | null>(
-    null,
-  );
+  const [connections, setConnections] = useState<Record<string, Connection> | null>(null);
 
   const [url, setUrl] = useState("");
   const [parent, setParent] = useState("");
@@ -59,6 +62,12 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
   const currentSource = source ?? "url";
   const connection = currentSource === "url" ? null : connections?.[currentSource];
   const connected = connection?.status?.account?.state === "connected";
+
+  const sourceOptions: Source[] = [
+    ...(Object.keys(connections ?? {}) as Exclude<Source, "url">[]),
+    "url",
+  ];
+
   const destination =
     parent.trim() && name.trim()
       ? `${parent.trim().replace(/[\\/]+$/, "")}${parent.includes("\\") ? "\\" : "/"}${name.trim()}`
@@ -69,20 +78,24 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
 
     const load = async () => {
       const providers = ["github", "gitlab"] as const;
-      const results = await Promise.allSettled(
-        providers.map((provider) => window.eda[provider].status(profileId)),
-      );
+
+      const results = await Promise.allSettled([
+        ...providers.map((provider) => window.eda[provider].status(profileId)),
+        window.eda.gitlabSelfHosted.status(profileId),
+      ]);
 
       if (!active) return;
 
       const values = Object.fromEntries(
         providers.map((provider, index) => {
           const result = results[index]!;
+
           return [
             provider,
             result.status === "fulfilled" && result.value.ok
-              ? { status: result.value.value, error: null }
+              ? { provider, status: result.value.value, error: null }
               : {
+                  provider,
                   status: null,
                   error:
                     result.status === "fulfilled" && !result.value.ok
@@ -91,13 +104,33 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
                 },
           ];
         }),
-      ) as Record<RepositoryProvider, Connection>;
+      ) as Record<string, Connection>;
+
+      const selfHosted = results[2];
+
+      if (
+        selfHosted?.status === "fulfilled" &&
+        selfHosted.value.ok &&
+        "accounts" in selfHosted.value.value
+      ) {
+        for (const account of selfHosted.value.value.accounts) {
+          values[`gitlab-self-hosted:${account.baseUrl}`] = {
+            provider: "gitlab",
+            baseUrl: account.baseUrl,
+            error: null,
+            status: { secureStorage: selfHosted.value.value.secureStorage, account },
+          };
+        }
+      }
 
       setConnections(values);
+
       setSource(
         (current) =>
           current ??
-          providers.find((provider) => values[provider].status?.account?.state === "connected") ??
+          (Object.keys(values).find(
+            (value) => values[value]?.status?.account?.state === "connected",
+          ) as Source | undefined) ??
           "url",
       );
     };
@@ -208,16 +241,16 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
                   value={currentSource}
                   onValueChange={(value) => {
                     if (value === "add") openIntegrations();
-                    else if (value === "github" || value === "gitlab" || value === "url")
-                      changeSource(value);
+                    else if (sourceOptions.includes(value as Source)) changeSource(value as Source);
                   }}
                   disabled={busy}
                   className="w-full"
                 >
-                  {(["github", "gitlab", "url"] as const)
-                    .filter((value) => value === "url" || connections?.[value].status?.account)
+                  {sourceOptions
+                    .filter((value) => value === "url" || connections?.[value]?.status?.account)
                     .map((value) => {
-                      const account = value === "url" ? null : connections?.[value].status?.account;
+                      const account =
+                        value === "url" ? null : connections?.[value]?.status?.account;
 
                       return (
                         <option key={value} value={value}>
@@ -227,13 +260,19 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
                             ) : (
                               <ProviderIcon provider={value === "github" ? "GitHub" : "GitLab"} />
                             )}
+
                             <span>
                               {value === "url"
                                 ? t("cloneRepositoryDialog.urlSource")
                                 : value === "github"
                                   ? "GitHub"
-                                  : "GitLab"}
+                                  : connections?.[value]?.baseUrl
+                                    ? t("settings.gitLabSelfHosted.connectionLabel", {
+                                        instance: connections[value]!.baseUrl,
+                                      })
+                                    : "GitLab"}
                             </span>
+
                             {value !== "url" && (
                               <span className="truncate text-xs text-text-tertiary">
                                 {!connections
@@ -297,7 +336,8 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
               <ProviderRepositoryBrowser
                 key={currentSource}
                 profileId={profileId}
-                provider={currentSource}
+                provider={connection?.provider ?? "gitlab"}
+                baseUrl={connection?.baseUrl}
                 selectedUrl={url}
                 disabled={busy}
                 onSelect={(repository) => updateUrl(repository.cloneUrl)}
@@ -381,6 +421,7 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
               <p className="text-xs font-medium text-text-secondary">
                 {t("cloneRepositoryDialog.destinationPath")}
               </p>
+
               <CodeBlock
                 label={t("cloneRepositoryDialog.destinationPath")}
                 wrap

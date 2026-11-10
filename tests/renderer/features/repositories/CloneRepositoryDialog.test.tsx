@@ -48,17 +48,23 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   previous = useAppStore.getState();
   useAppStore.setState({ activeIdentity: profile, refreshRepositories, selectRepository });
+
   vi.stubGlobal("eda", {
     github: {
       status: vi.fn().mockResolvedValue(ok(connected)),
       repositories: vi.fn().mockResolvedValue(ok({ repositories, nextPage: null })),
     },
     gitlab: { status: vi.fn().mockResolvedValue(ok({ secureStorage: true, account: null })) },
+    gitlabSelfHosted: {
+      status: vi.fn().mockResolvedValue(ok({ secureStorage: true, accounts: [] })),
+      repositories: vi.fn(),
+    },
     remotes: { clone },
     repository: { chooseFolder: vi.fn().mockResolvedValue(ok("/repos")) },
     operations: { list: vi.fn().mockResolvedValue(ok([])) },
     events: { onOperationsChanged: () => () => {} },
   });
+
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -75,6 +81,7 @@ afterEach(async () => {
 
 const field = (label: string) =>
   document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+
 const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) =>
     item.textContent?.includes(text),
@@ -95,17 +102,21 @@ it("uses a connected account, filters repositories, suggests the folder and clon
   expect(document.body.textContent).not.toContain("team/website");
   await act(async () => button("team/eda").click());
   expect(field("Clone folder name").value).toBe("eda");
+
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[aria-label="Browse folders..."]')!.click(),
   );
+
   expect(document.body.textContent).toContain("/repos/eda");
   await act(async () => button("Clone repository").click());
+
   expect(clone).toHaveBeenCalledWith({
     profileId: "work",
     url: "https://github.com/team/eda.git",
     parent: "/repos",
     name: "eda",
   });
+
   expect(refreshRepositories).toHaveBeenCalled();
   expect(selectRepository).toHaveBeenCalledWith("cloned");
   expect(onClose).toHaveBeenCalled();
@@ -113,11 +124,13 @@ it("uses a connected account, filters repositories, suggests the folder and clon
 
 it("keeps a URL being entered while connection checks finish and preserves an edited folder name", async () => {
   let finish!: (value: ReturnType<typeof ok<GitHubStatus>>) => void;
+
   vi.mocked(window.eda.github.status).mockReturnValue(
     new Promise((resolve) => {
       finish = resolve;
     }),
   );
+
   await act(async () => root.render(<CloneRepositoryDialog onClose={onClose} />));
   await fill(field("Repository URL"), "git@github.com:team/eda.git");
   expect(field("Clone folder name").value).toBe("eda");
@@ -131,6 +144,7 @@ it("keeps a URL being entered while connection checks finish and preserves an ed
 
 async function openSelect(label: string) {
   const control = document.querySelector<HTMLElement>(`[role="combobox"][aria-label="${label}"]`)!;
+
   await act(async () =>
     control.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
   );
@@ -138,6 +152,7 @@ async function openSelect(label: string) {
 
 async function choose(label: string, value: string) {
   await openSelect(label);
+
   await act(async () =>
     document.querySelector<HTMLElement>(`[data-eda-select-value="${value}"]`)!.click(),
   );
@@ -149,9 +164,11 @@ it("hides unconfigured providers and routes Add provider to Integrations", async
   expect(document.querySelector('[data-eda-select-value="github"]')).not.toBeNull();
   expect(document.querySelector('[data-eda-select-value="gitlab"]')).toBeNull();
   expect(document.querySelector('[data-eda-select-value="url"]')).not.toBeNull();
+
   await act(async () =>
     document.querySelector<HTMLElement>('[data-eda-select-value="add"]')!.click(),
   );
+
   expect(onClose).toHaveBeenCalled();
   expect(useShellStore.getState().request).toEqual({ kind: "settings", section: "integrations" });
 });
@@ -161,10 +178,12 @@ it("combines name sorting, visibility filters and search without losing the sele
   await act(async () => button("team/eda").click());
   const rows = () => [...document.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")];
   await choose("Sort repositories", "nameDescending");
+
   expect(rows().map((row) => row.textContent)).toEqual([
     expect.stringContaining("website"),
     expect.stringContaining("eda"),
   ]);
+
   await choose("Filter repositories", "private");
   expect(rows()).toHaveLength(1);
   expect(rows()[0]!.getAttribute("aria-pressed")).toBe("true");
@@ -178,6 +197,7 @@ it("combines name sorting, visibility filters and search without losing the sele
 it("loads the next page near the scroll boundary, prevents duplicate requests, and stops at the last page", async () => {
   let intersect: (() => void) | undefined;
   const disconnect = vi.fn();
+
   vi.stubGlobal(
     "IntersectionObserver",
     class {
@@ -192,9 +212,11 @@ it("loads the next page near the scroll boundary, prevents duplicate requests, a
       disconnect = disconnect;
     },
   );
+
   let resolvePage!: (
     value: ReturnType<typeof ok<{ repositories: typeof repositories; nextPage: number | null }>>,
   ) => void;
+
   vi.mocked(window.eda.github.repositories)
     .mockResolvedValueOnce(ok({ repositories: [repositories[0]!], nextPage: 2 }))
     .mockReturnValueOnce(
@@ -202,13 +224,16 @@ it("loads the next page near the scroll boundary, prevents duplicate requests, a
         resolvePage = resolve;
       }),
     );
+
   await act(async () => root.render(<CloneRepositoryDialog onClose={onClose} />));
   expect(window.eda.github.repositories).toHaveBeenCalledTimes(1);
   expect(document.body.textContent).not.toContain("Load more");
+
   await act(async () => {
     intersect!();
     intersect!();
   });
+
   expect(window.eda.github.repositories).toHaveBeenCalledTimes(2);
   expect(window.eda.github.repositories).toHaveBeenLastCalledWith("work", 2);
   expect(document.body.textContent).toContain("Loading more…");
@@ -217,4 +242,57 @@ it("loads the next page near the scroll boundary, prevents duplicate requests, a
   expect(document.body.textContent).toContain("2 of 2 loaded");
   expect(document.body.textContent).not.toContain("Loading more…");
   expect(window.eda.github.repositories).toHaveBeenCalledTimes(2);
+});
+
+it("browses multiple self-hosted instances separately even when account and project IDs are identical", async () => {
+  const instances = ["https://git.company.test/gitlab", "https://other.company.test"];
+
+  vi.mocked(window.eda.gitlabSelfHosted.status).mockResolvedValue(
+    ok({
+      secureStorage: true,
+      accounts: instances.map((baseUrl) => ({
+        id: "7",
+        login: "work-user",
+        baseUrl,
+        ignoreTlsErrors: false,
+        state: "connected",
+      })),
+    }),
+  );
+
+  vi.mocked(window.eda.gitlabSelfHosted.repositories).mockImplementation(
+    async (_profile, baseUrl) =>
+      ok({
+        repositories: [
+          {
+            ...repositories[0]!,
+            id: "1",
+            fullName: baseUrl === instances[0] ? "team/first" : "team/second",
+            cloneUrl: `${baseUrl}/team/eda.git`,
+          },
+        ],
+        nextPage: null,
+      }),
+  );
+
+  await act(async () => root.render(<CloneRepositoryDialog onClose={onClose} />));
+  await choose("Provider", `gitlab-self-hosted:${instances[0]}`);
+
+  expect(window.eda.gitlabSelfHosted.repositories).toHaveBeenLastCalledWith(
+    "work",
+    instances[0],
+    1,
+  );
+
+  expect(document.body.textContent).toContain("team/first");
+  await choose("Provider", `gitlab-self-hosted:${instances[1]}`);
+
+  expect(window.eda.gitlabSelfHosted.repositories).toHaveBeenLastCalledWith(
+    "work",
+    instances[1],
+    1,
+  );
+
+  expect(document.body.textContent).toContain("team/second");
+  expect(document.body.textContent).not.toContain("team/first");
 });

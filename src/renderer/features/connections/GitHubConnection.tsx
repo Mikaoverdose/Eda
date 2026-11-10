@@ -1,7 +1,7 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { GitHubAccountProfile, GitHubSignIn, GitHubStatus } from "@shared/integrations/github";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink, Unplug } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { GitHubProfile } from "./GitHubProfile";
 import {
@@ -9,7 +9,7 @@ import {
   Button,
   CodeBlock,
   CopyButton,
-  ErrorDialog,
+  ActionsMenu,
   Skeleton,
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
@@ -39,6 +39,7 @@ export function GitHubConnection({
   useEffect(() => {
     alive.current = true;
     let active = true;
+
     void window.eda.github
       .status(profileId)
       .then((result) => {
@@ -52,6 +53,7 @@ export function GitHubConnection({
             t("settings.gitHubConnection.couldNotLoadTheGitHubConnectionReopenSettingsAndTryAgain"),
           );
       });
+
     return () => {
       active = false;
       alive.current = false;
@@ -64,6 +66,7 @@ export function GitHubConnection({
     let active = true;
     setProfile(null);
     const accountId = status?.account?.id;
+
     if (accountId)
       void window.eda.github
         .profile(profileId)
@@ -74,6 +77,7 @@ export function GitHubConnection({
         .finally(() => {
           if (active) setProfileReadyFor(accountId);
         });
+
     return () => {
       active = false;
     };
@@ -83,8 +87,10 @@ export function GitHubConnection({
     if (!pending) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
+
     const poll = async () => {
       if (!active || current.current?.id !== pending.id) return;
+
       if (Date.now() >= pending.expiresAt) {
         void window.eda.github.cancel(profileId, pending.id);
         current.current = null;
@@ -92,9 +98,11 @@ export function GitHubConnection({
         setError(t("settings.gitHubConnection.theVerificationCodeExpiredSignInWithGitHubAgain"));
         return;
       }
+
       try {
         const result = await window.eda.github.poll(profileId, pending.id);
         if (!active || current.current?.id !== pending.id) return;
+
         if (!result.ok) {
           current.current = null;
           setPending(null);
@@ -118,7 +126,9 @@ export function GitHubConnection({
         }
       }
     };
+
     timer = setTimeout(() => void poll(), pending.intervalMs);
+
     return () => {
       active = false;
       clearTimeout(timer);
@@ -127,6 +137,7 @@ export function GitHubConnection({
 
   const openBrowser = async (signIn: GitHubSignIn) => {
     setError(null);
+
     try {
       const result = await window.eda.github.openVerification(profileId, signIn.id);
       if (!alive.current || current.current?.id !== signIn.id) return;
@@ -137,19 +148,24 @@ export function GitHubConnection({
         setError(t("settings.gitHubConnection.couldNotCopyTheCodeAndOpenGitHubTryAgain"));
     }
   };
+
   const begin = async () => {
     setBusy(true);
     setError(null);
+
     try {
       const result = await window.eda.github.begin(profileId);
+
       if (!alive.current) {
         if (result.ok) void window.eda.github.cancel(profileId, result.value.id);
         return;
       }
+
       if (!result.ok) {
         setError(errorMessage(result.error));
         return;
       }
+
       current.current = result.value;
       setPending(result.value);
       await openBrowser(result.value);
@@ -159,6 +175,7 @@ export function GitHubConnection({
       if (alive.current) setBusy(false);
     }
   };
+
   useEffect(() => {
     if (!connectRequested || !status) return;
     setConnectRequested(false);
@@ -173,12 +190,15 @@ export function GitHubConnection({
     setPending(null);
     setError(null);
   };
+
   const disconnect = async () => {
     setBusy(true);
     setError(null);
+
     try {
       const result = await window.eda.github.disconnect(profileId);
       if (!alive.current) return;
+
       if (result.ok) {
         setExpanded(false);
         setConnectRequested(false);
@@ -191,6 +211,7 @@ export function GitHubConnection({
       if (alive.current) setBusy(false);
     }
   };
+
   const openProfile = async () => {
     try {
       const result = await window.eda.github.openProfile(profileId);
@@ -203,9 +224,11 @@ export function GitHubConnection({
 
   const account = status?.account;
   const isConnected = signedIn;
+
   useEffect(() => {
-    if (compact && isConnected) setExpanded(false);
+    if (isConnected) setExpanded(false);
   }, [compact, isConnected]);
+
   const loading = !status || !!(account && profileReadyFor !== account.id);
 
   const starting = busy && !pending && !signedIn;
@@ -222,7 +245,25 @@ export function GitHubConnection({
         setConnectRequested(open);
       }}
       completedLabel={isConnected ? t("settings.gitHubConnection.gitHubConnected") : undefined}
-      contentClassName={loading || account || pending ? "min-h-20" : ""}
+      contentClassName={pending ? "min-h-20" : ""}
+      bodySeparator={!account || !!pending || !!error}
+      bodyOpen={!!pending || starting || !!error || !!(status && !status.secureStorage)}
+      summary={
+        loading ? (
+          <Skeleton className="h-11 w-36 rounded-md" />
+        ) : account ? (
+          <GitHubProfile
+            login={login ?? account.login}
+            name={details?.name}
+            avatarDataUrl={details?.avatarDataUrl}
+            hue={hue}
+            connected={isConnected}
+            bio={details?.bio}
+            location={details?.location}
+            onOpenProfile={() => void openProfile()}
+          />
+        ) : null
+      }
       status={
         starting || pending || loading ? (
           <span
@@ -238,12 +279,6 @@ export function GitHubConnection({
           >
             <ActionIndicator state="pending" />
           </span>
-        ) : account && !compact ? (
-          <span role="status" className="sr-only">
-            {account.state !== "connected"
-              ? t("settings.gitHubConnection.reconnectRequired")
-              : t("settings.gitHubConnection.connected")}
-          </span>
         ) : null
       }
       actions={
@@ -257,6 +292,7 @@ export function GitHubConnection({
             >
               {t("settings.gitHubConnection.openGitHub")}
             </Button>
+
             <Button size="sm" variant="ghost" disabled={starting} onClick={cancel}>
               {t("settings.gitHubConnection.cancelSignIn")}
             </Button>
@@ -284,54 +320,81 @@ export function GitHubConnection({
                     : t("settings.gitHubConnection.signInWithGitHub")}
               </Button>
             )}
-            {account && (
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={t("settings.gitHubConnection.disconnectGitHub")}
-                disabled={busy}
-                onClick={() => void disconnect()}
-              >
-                {t("settings.gitHubConnection.disconnect")}
-              </Button>
-            )}
+
+            {account &&
+              (compact ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={t("settings.gitHubConnection.disconnectGitHub")}
+                  disabled={busy}
+                  onClick={() => void disconnect()}
+                >
+                  {t("settings.gitHubConnection.disconnect")}
+                </Button>
+              ) : (
+                <ActionsMenu
+                  label={t("settings.connections.manage", { provider: "GitHub" })}
+                  disabled={busy}
+                  items={[
+                    {
+                      label: t("settings.gitHubConnection.disconnect"),
+                      icon: <Unplug size={14} />,
+                      danger: true,
+                      onSelect: () => void disconnect(),
+                    },
+                  ]}
+                />
+              ))}
           </>
         ) : null
       }
     >
-      <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+      {error && (
+        <p role="alert" className="text-xs text-git-deleted">
+          {error}
+        </p>
+      )}
+
       {loading ? (
         <div aria-hidden="true" className="space-y-3">
           <div className="flex items-center gap-3">
             <Skeleton className="size-11 shrink-0 rounded-full" />
+
             <div className="min-w-0 flex-1 space-y-1.5">
               <Skeleton className="h-4 w-16" />
               <Skeleton className="h-4 w-24" />
             </div>
           </div>
+
           <Skeleton className="h-4 w-4/5" />
+
           <div className="flex items-start gap-1.5">
             <Skeleton className="mt-0.5 size-3.5 shrink-0 rounded-full" />
             <Skeleton className="h-4 w-2/3" />
           </div>
         </div>
-      ) : account ? (
-        <GitHubProfile
-          key={account.id}
-          login={login ?? account.login}
-          name={details?.name}
-          bio={details?.bio}
-          location={details?.location}
-          avatarDataUrl={details?.avatarDataUrl}
-          hue={hue}
-          onOpenProfile={() => void openProfile()}
-        />
+      ) : account && compact ? (
+        <div>
+          <GitHubProfile
+            key={account.id}
+            login={login ?? account.login}
+            name={details?.name}
+            bio={details?.bio}
+            location={details?.location}
+            avatarDataUrl={details?.avatarDataUrl}
+            hue={hue}
+            onOpenProfile={() => void openProfile()}
+          />
+        </div>
       ) : null}
+
       {status && !status.secureStorage && (
         <p className="text-xs text-git-modified">
           {t("settings.gitHubConnection.unlockYourOsKeychainAndRestartEdaToSaveAGitHubLogin")}
         </p>
       )}
+
       {pending || starting ? (
         <div className="max-w-sm space-y-3" aria-busy={starting}>
           <p className="text-xs text-text-secondary">
@@ -342,6 +405,7 @@ export function GitHubConnection({
                   : "",
             })}
           </p>
+
           <div className="relative">
             <CodeBlock
               label={t("settings.gitHubConnection.gitHubVerificationCode")}
@@ -357,6 +421,7 @@ export function GitHubConnection({
                 </span>
               )}
             </CodeBlock>
+
             <div className="absolute inset-y-0 right-1 flex items-center">
               {pending ? (
                 <CopyButton

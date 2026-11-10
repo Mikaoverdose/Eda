@@ -2,17 +2,18 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { GitLabSignIn, GitLabStatus, GitLabAccountProfile } from "@shared/integrations/gitlab";
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Unplug } from "lucide-react";
 import {
   ActionIndicator,
   Button,
-  ErrorDialog,
+  ActionsMenu,
   TextButton,
   Skeleton,
 } from "../../components/ui/index";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
+import { ConnectionAccount } from "./ConnectionAccount";
 
 export function GitLabConnection({
   profileId,
@@ -37,6 +38,7 @@ export function GitLabConnection({
 
   useEffect(() => {
     alive.current = true;
+
     void window.eda.gitlab
       .status(profileId)
       .then((result) => {
@@ -47,6 +49,7 @@ export function GitLabConnection({
       .catch(() => {
         if (alive.current) setError(t("settings.gitLabConnection.loadFailed"));
       });
+
     return () => {
       alive.current = false;
       if (current.current) void window.eda.gitlab.cancel(profileId, current.current.id);
@@ -58,6 +61,7 @@ export function GitLabConnection({
     let active = true;
     setProfile(null);
     const accountId = status?.account?.id;
+
     if (accountId)
       void window.eda.gitlab
         .profile(profileId)
@@ -68,6 +72,7 @@ export function GitLabConnection({
         .finally(() => {
           if (active) setProfileReadyFor(accountId);
         });
+
     return () => {
       active = false;
     };
@@ -77,11 +82,14 @@ export function GitLabConnection({
     if (!pending) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
+
     const poll = async () => {
       if (!active || current.current?.id !== pending.id) return;
+
       try {
         const result = await window.eda.gitlab.poll(profileId, pending.id);
         if (!active || current.current?.id !== pending.id) return;
+
         if (!result.ok) {
           current.current = null;
           setPending(null);
@@ -101,7 +109,9 @@ export function GitLabConnection({
         }
       }
     };
+
     timer = setTimeout(() => void poll(), 1000);
+
     return () => {
       active = false;
       clearTimeout(timer);
@@ -117,19 +127,24 @@ export function GitLabConnection({
       if (alive.current) setError(t("settings.gitLabConnection.openFailed"));
     }
   };
+
   const begin = async () => {
     setBusy(true);
     setError(null);
+
     try {
       const result = await window.eda.gitlab.begin(profileId);
+
       if (!alive.current) {
         if (result.ok) void window.eda.gitlab.cancel(profileId, result.value.id);
         return;
       }
+
       if (!result.ok) {
         setError(errorMessage(result.error));
         return;
       }
+
       current.current = result.value;
       setPending(result.value);
       await openBrowser(result.value);
@@ -139,11 +154,13 @@ export function GitLabConnection({
       if (alive.current) setBusy(false);
     }
   };
+
   useEffect(() => {
     if (!connectRequested || !status) return;
     setConnectRequested(false);
     if (!connected && !busy && !pending && status.secureStorage) void begin();
   }, [connectRequested, status, connected, busy, pending]);
+
   const cancel = () => {
     if (current.current) void window.eda.gitlab.cancel(profileId, current.current.id);
     current.current = null;
@@ -152,16 +169,20 @@ export function GitLabConnection({
     setExpanded(false);
     setConnectRequested(false);
   };
+
   const disconnect = async () => {
     setBusy(true);
     setError(null);
+
     try {
       const result = await window.eda.gitlab.disconnect(profileId);
       if (!alive.current) return;
+
       if (!result.ok) {
         setError(errorMessage(result.error));
         return;
       }
+
       setStatus((value) => value && { ...value, account: null });
       setExpanded(false);
       setConnectRequested(false);
@@ -171,6 +192,7 @@ export function GitLabConnection({
       if (alive.current) setBusy(false);
     }
   };
+
   const openProfile = async () => {
     try {
       const result = await window.eda.gitlab.openProfile(profileId);
@@ -190,6 +212,23 @@ export function GitLabConnection({
         setConnectRequested(open);
       }}
       completedLabel={connected ? t("settings.gitLabConnection.connected") : undefined}
+      bodyOpen={!!pending || !!error || !!(status && !status.secureStorage)}
+      summary={
+        loading ? (
+          <Skeleton className="h-11 w-36 rounded-md" />
+        ) : status?.account ? (
+          <ConnectionAccount
+            login={status.account.login}
+            avatarDataUrl={profile?.id === status.account.id ? profile.avatarDataUrl : undefined}
+            hue={hue}
+            connected={connected}
+            profileLabel={t("settings.gitLabConnection.viewProfile", {
+              login: status.account.login,
+            })}
+            onOpen={() => void openProfile()}
+          />
+        ) : null
+      }
       status={
         loading || busy || pending ? (
           <span role="status" aria-label={t("settings.gitLabConnection.waiting")}>
@@ -207,6 +246,7 @@ export function GitLabConnection({
             >
               {t("settings.gitLabConnection.openGitLab")}
             </Button>
+
             <Button size="sm" variant="ghost" onClick={cancel}>
               {t("settings.gitLabConnection.cancel")}
             </Button>
@@ -227,30 +267,53 @@ export function GitLabConnection({
                   : t("settings.gitLabConnection.signIn")}
               </Button>
             )}
-            {status.account && (
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void disconnect()}>
-                {t("settings.gitLabConnection.disconnect")}
-              </Button>
-            )}
+
+            {status.account &&
+              (compact ? (
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void disconnect()}>
+                  {t("settings.gitLabConnection.disconnect")}
+                </Button>
+              ) : (
+                <ActionsMenu
+                  label={t("settings.connections.manage", { provider: "GitLab" })}
+                  disabled={busy}
+                  items={[
+                    {
+                      label: t("settings.gitLabConnection.disconnect"),
+                      icon: <Unplug size={14} />,
+                      danger: true,
+                      onSelect: () => void disconnect(),
+                    },
+                  ]}
+                />
+              ))}
           </>
         ) : undefined
       }
     >
-      <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+      {error && (
+        <p role="alert" className="text-xs text-git-deleted">
+          {error}
+        </p>
+      )}
+
       {pending && (
         <p className="text-xs text-text-secondary">
           {t("settings.gitLabConnection.authorizeInBrowser")}
         </p>
       )}
+
       {loading ? (
         <div aria-hidden="true" className="flex items-center gap-3">
           <Skeleton className="size-11 shrink-0 rounded-full" />
+
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-4 w-32" />
           </div>
         </div>
       ) : (
+        compact &&
         !pending &&
         status?.account && (
           <div className="flex min-w-0 items-center gap-3">
@@ -261,6 +324,7 @@ export function GitLabConnection({
                 profile?.id === status.account.id ? (profile.avatarDataUrl ?? undefined) : undefined
               }
             />
+
             <div className="min-w-0">
               <TextButton
                 onClick={() => void openProfile()}
@@ -270,6 +334,7 @@ export function GitLabConnection({
               >
                 @{status.account.login}
               </TextButton>
+
               <p className="text-xs text-text-tertiary">
                 {connected
                   ? t("settings.gitLabConnection.connected")
@@ -279,6 +344,7 @@ export function GitLabConnection({
           </div>
         )
       )}
+
       {status && !status.secureStorage && (
         <p className="text-xs text-git-modified">{t("settings.gitLabConnection.unlockStorage")}</p>
       )}

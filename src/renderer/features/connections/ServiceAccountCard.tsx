@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ProviderIcon, type HostingProvider } from "./ProviderIcon";
 import { cx } from "../../components/ui/cx";
 import { ConnectionCard } from "./ConnectionCard";
+import { AnimatedSize } from "../../components/ui/index";
 
 export function ServiceAccountCard({
   provider,
@@ -14,6 +15,9 @@ export function ServiceAccountCard({
   completedLabel,
   onOpenChange,
   open,
+  summary,
+  bodyOpen = true,
+  bodySeparator = true,
 }: {
   provider: HostingProvider;
   children: ReactNode;
@@ -23,6 +27,9 @@ export function ServiceAccountCard({
   compact?: boolean;
   completedLabel?: string | undefined;
   open?: boolean | undefined;
+  summary?: ReactNode;
+  bodyOpen?: boolean;
+  bodySeparator?: boolean;
   onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
   if (compact)
@@ -43,17 +50,35 @@ export function ServiceAccountCard({
   return (
     <section
       aria-label={t("settings.serviceAccountCard.connection", { provider: provider })}
-      className="flex w-full min-w-0 max-w-sm flex-col gap-3 rounded-md border border-border-subtle bg-bg-surface p-3"
+      className="min-w-0 rounded-lg border border-border-subtle bg-bg-surface"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-medium">
-          <ProviderIcon provider={provider} />
-          {provider}
-        </h2>
-        {status}
-      </div>
-      {children && <div className={cx("min-w-0 space-y-2", contentClassName)}>{children}</div>}
-      {actions && <div className="flex min-h-8 flex-wrap gap-2">{actions}</div>}
+      <AnimatedSize>
+        <div className="flex min-h-12 flex-wrap items-center gap-2 px-3 py-2">
+          <h2 className="flex min-h-8 min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+            <ProviderIcon provider={provider} />
+            {provider}
+          </h2>
+
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1">
+            {status}
+            {actions}
+          </div>
+        </div>
+
+        {summary && <div className="min-w-0 px-3 pb-3 text-xs text-text-tertiary">{summary}</div>}
+
+        {bodyOpen && children && (
+          <div
+            className={cx(
+              "min-w-0 space-y-3 px-3 pb-3",
+              bodySeparator && "border-t border-border-subtle pt-3",
+              contentClassName,
+            )}
+          >
+            {children}
+          </div>
+        )}
+      </AnimatedSize>
     </section>
   );
 }

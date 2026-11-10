@@ -18,12 +18,14 @@ import {
 export function ProviderRepositoryBrowser({
   profileId,
   provider,
+  baseUrl,
   selectedUrl,
   disabled,
   onSelect,
 }: {
   profileId: string;
   provider: RepositoryProvider;
+  baseUrl?: string | undefined;
   selectedUrl: string;
   disabled: boolean;
   onSelect: (repository: ProviderRepository) => void;
@@ -49,8 +51,11 @@ export function ProviderRepositoryBrowser({
     setLoading(true);
     setError(null);
 
-    void window.eda[provider]
-      .repositories(profileId, page)
+    const request = baseUrl
+      ? window.eda.gitlabSelfHosted.repositories(profileId, baseUrl, page)
+      : window.eda[provider].repositories(profileId, page);
+
+    void request
       .then((result) => {
         if (!active) return;
 
@@ -78,7 +83,7 @@ export function ProviderRepositoryBrowser({
     return () => {
       active = false;
     };
-  }, [profileId, provider, page, attempt]);
+  }, [profileId, provider, baseUrl, page, attempt]);
 
   useEffect(() => {
     const root = scrollArea.current;
@@ -193,11 +198,13 @@ export function ProviderRepositoryBrowser({
                 onClick={() => onSelect(repository)}
               >
                 <BookMarked size={17} aria-hidden="true" className="shrink-0 text-text-tertiary" />
+
                 <span className="min-w-0 flex-1 space-y-1">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate font-medium" title={repository.fullName}>
                       {repository.fullName}
                     </span>
+
                     {repository.private && (
                       <LockKeyhole
                         size={12}
@@ -205,6 +212,7 @@ export function ProviderRepositoryBrowser({
                         className="shrink-0 text-text-tertiary"
                       />
                     )}
+
                     {repository.archived && (
                       <Archive
                         size={12}
@@ -213,12 +221,14 @@ export function ProviderRepositoryBrowser({
                       />
                     )}
                   </span>
+
                   {repository.description && (
                     <span className="block truncate text-xs leading-relaxed text-text-tertiary">
                       {repository.description}
                     </span>
                   )}
                 </span>
+
                 {selectedUrl === repository.cloneUrl && (
                   <Check size={16} aria-hidden="true" className="shrink-0 text-accent-text" />
                 )}

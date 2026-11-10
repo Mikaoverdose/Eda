@@ -2,8 +2,7 @@ import type { ReactNode } from "react";
 import { MapPin } from "lucide-react";
 import { t } from "@shared/i18n";
 import type { AccentColor } from "@shared/preferences/accent";
-import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
-import { TextButton } from "../../components/ui/index";
+import { ConnectionAccount } from "./ConnectionAccount";
 
 export function GitHubProfile({
   login,
@@ -14,6 +13,7 @@ export function GitHubProfile({
   hue,
   onOpenProfile,
   children,
+  connected = true,
 }: {
   login: string;
   name?: string | null | undefined;
@@ -23,24 +23,19 @@ export function GitHubProfile({
   hue: AccentColor;
   onOpenProfile: () => void;
   children?: ReactNode;
+  connected?: boolean;
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex min-w-0 items-center gap-3">
-        <ProfileAvatar name={name ?? login} hue={hue} imageUrl={avatarDataUrl ?? undefined} />
-
-        <div className="min-w-0">
-          {name && <p className="break-words text-sm font-medium">{name}</p>}
-
-          <TextButton
-            onClick={onOpenProfile}
-            aria-label={t("settings.gitHubConnection.viewOnGitHub", { login })}
-            className="max-w-full whitespace-normal text-left [overflow-wrap:anywhere]"
-          >
-            @{login}
-          </TextButton>
-        </div>
-      </div>
+      <ConnectionAccount
+        login={login}
+        name={name}
+        avatarDataUrl={avatarDataUrl}
+        hue={hue}
+        connected={connected}
+        profileLabel={t("settings.gitHubConnection.viewOnGitHub", { login })}
+        onOpen={onOpenProfile}
+      />
 
       {bio && <p className="whitespace-pre-line break-words text-xs text-text-secondary">{bio}</p>}
 

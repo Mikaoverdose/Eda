@@ -6,10 +6,12 @@ import { _electron as electron, type ElectronApplication, type Page } from "play
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { assertCompositorMotion, assertSmoothResize, sampleResize } from "../helpers/motion.ts";
 
 const root = await mkdtemp(join(tmpdir(), "eda-onboarding-gate-"));
 const config = join(root, "gitconfig");
 const imagePath = join(root, "background.png");
+
 const originalGit =
   "[user]\nname = Eda Example\nemail = eda@example.com\n[commit]\ngpgsign = false\n";
 
@@ -23,8 +25,10 @@ async function openCustomAccent(page: Page) {
     const group = [
       ...document.querySelectorAll('[role="radiogroup"][aria-label="Accent color"]'),
     ].find((element) => element.checkVisibility());
+
     return group && !group.closest("[inert]");
   });
+
   await page
     .getByRole("radiogroup", { name: "Accent color", exact: true })
     .getByTitle("Custom", { exact: true })
@@ -74,6 +78,7 @@ async function inspect(page: Page, profileId: string) {
 
 try {
   let page = await launch();
+
   const fixtureImage = await app!.evaluate(({ nativeImage }) =>
     nativeImage
       .createFromBitmap(Buffer.alloc(16, 180), { width: 2, height: 2 })
@@ -85,15 +90,19 @@ try {
   await page.setViewportSize({ width: 700, height: 600 });
   await page.getByRole("heading", { name: "Hello, from Eda." }).waitFor();
   await page.getByRole("button", { name: "Get started", exact: true }).click();
+
   await page.evaluate(async () => {
     await Promise.all(
       document.getAnimations().map((animation) => animation.finished.catch(() => {})),
     );
   });
+
   await page.waitForFunction(
     () => document.querySelector<HTMLInputElement>("input")?.value === "Eda",
   );
+
   assert.equal(await page.getByRole("textbox", { name: /^Profile name/ }).inputValue(), "Eda");
+
   assert.equal(
     await page.getByRole("textbox", { name: /^Git author name/ }).inputValue(),
     "Eda Example",
@@ -105,12 +114,15 @@ try {
   await page
     .getByRole("checkbox", { name: "Sync this profile with global Git", exact: true })
     .uncheck();
+
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
+
   await page
     .getByRole("group", { name: "Appearance mode", exact: true })
     .getByRole("button", { name: "Dark", exact: true })
     .click();
+
   await page.getByRole("radio", { name: "Lavender", exact: true }).check();
   await page.getByTitle("Pink", { exact: true }).click();
 
@@ -125,6 +137,7 @@ try {
   await picker.waitFor();
   await page.keyboard.press("Escape");
   await picker.waitFor({ state: "detached" });
+
   assert.equal(
     await page
       .getByRole("radio", { name: "Custom", exact: true })
@@ -134,6 +147,7 @@ try {
 
   await openCustomAccent(page);
   await picker.waitFor();
+
   assert.equal(
     await page.locator("form").evaluate((form) => form.getBoundingClientRect().height),
     accentHeight,
@@ -149,11 +163,13 @@ try {
 
   await app!.evaluate(({ dialog }, imagePath) => {
     const original = dialog.showOpenDialog;
+
     dialog.showOpenDialog = async () => {
       dialog.showOpenDialog = original;
       return { canceled: false, filePaths: [imagePath] };
     };
   }, imagePath);
+
   await page.getByRole("button", { name: "Choose background image", exact: true }).click();
   const preview = page.getByRole("img", { name: "Selected background", exact: true });
   await preview.or(page.getByRole("alert")).waitFor();
@@ -162,31 +178,37 @@ try {
   const selectedImage = await preview.getAttribute("src");
 
   assert.ok(selectedImage?.startsWith("data:image/jpeg;base64,"));
+
   assert.equal(
     await page.locator("form").evaluate((form) => form.getBoundingClientRect().height),
     appearanceHeight,
   );
 
   await page.getByRole("button", { name: "Remove image", exact: true }).click();
+
   assert.equal(
     await page.locator("form").evaluate((form) => form.getBoundingClientRect().height),
     appearanceHeight,
   );
+
   assert.equal(
     await page.evaluate(() =>
       document.documentElement.style.getPropertyValue("--background-strength"),
     ),
     "0",
   );
+
   assert.equal(await page.locator(".onboarding-background-controls").getAttribute("inert"), "");
 
   await app!.evaluate(({ dialog }, imagePath) => {
     const original = dialog.showOpenDialog;
+
     dialog.showOpenDialog = async () => {
       dialog.showOpenDialog = original;
       return { canceled: false, filePaths: [imagePath] };
     };
   }, imagePath);
+
   await page.getByRole("button", { name: "Choose background image", exact: true }).click();
   await page.waitForFunction(() => document.documentElement.dataset["customBackground"] === "true");
 
@@ -204,6 +226,7 @@ try {
 
   await page.getByRole("button", { name: "Back", exact: true }).click();
   assert.equal(await page.getByRole("textbox", { name: /^Profile name/ }).inputValue(), "Personal");
+
   assert.equal(
     await page
       .getByRole("checkbox", { name: "Sync this profile with global Git", exact: true })
@@ -214,6 +237,7 @@ try {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("heading", { name: "Make Eda yours", exact: true }).waitFor();
+
   assert.equal(
     await page.evaluate(() =>
       document
@@ -234,15 +258,60 @@ try {
 
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("heading", { name: "Connect your tools", exact: true }).waitFor();
-  assert.equal(await page.locator('details[aria-label="GitHub setup"]').getAttribute("open"), null);
+  await page.getByRole("region", { name: "GitHub connection", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Connect", exact: true }).count(), 0);
   assert.equal(await page.locator('details[aria-label="SSH setup"]').getAttribute("open"), null);
-  assert.equal(await page.locator("summary").getByText("Coming soon", { exact: true }).count(), 3);
-  await page.locator('details[aria-label="GitLab setup"] > summary').click();
-  await page
-    .locator('details[aria-label="GitLab setup"] p')
-    .filter({ hasText: "Coming soon" })
-    .waitFor();
+  assert.equal(await page.locator("summary").getByText("Coming soon", { exact: true }).count(), 2);
+
+  assert.equal(
+    await page
+      .locator('details[aria-label="GitLab setup"] > summary')
+      .getByText("Coming soon", { exact: true })
+      .count(),
+    0,
+  );
+
+  await page.getByRole("button", { name: "Connect instance", exact: true }).click();
+  const setup = page.getByRole("region", { name: "Connect self-hosted GitLab", exact: true });
+  const instance = "https://git.company.test/gitlab";
+  await setup.getByLabel("Instance URL", { exact: true }).fill(instance);
+  await setup.getByRole("button", { name: "Next", exact: true }).click();
+
+  await app!.evaluate(({ shell }) => {
+    const state = globalThis as typeof globalThis & { fixtureGitLabTokenUrls: string[] };
+    state.fixtureGitLabTokenUrls = [];
+    const original = shell.openExternal;
+
+    shell.openExternal = async (url) => {
+      state.fixtureGitLabTokenUrls.push(url);
+      if (state.fixtureGitLabTokenUrls.length === 3) shell.openExternal = original;
+    };
+  });
+
+  await setup.getByRole("button", { name: "Legacy token", exact: true }).click();
+  await setup.getByLabel("Personal access token", { exact: true }).waitFor();
+  await setup.getByRole("button", { name: "Fine-grained token", exact: true }).click();
+  await setup.getByRole("button", { name: "For older GitLab versions", exact: true }).click();
+
+  const tokenUrls = await app!.evaluate(
+    () =>
+      (globalThis as typeof globalThis & { fixtureGitLabTokenUrls: string[] })
+        .fixtureGitLabTokenUrls,
+  );
+
+  assert.equal(
+    new URL(tokenUrls[0]!).pathname,
+    "/gitlab/-/user_settings/personal_access_tokens/legacy/new",
+  );
+
+  assert.equal(new URL(tokenUrls[0]!).searchParams.get("scopes"), "read_api,write_repository");
+  assert.equal(tokenUrls[1], `${instance}/-/user_settings/personal_access_tokens/granular/new`);
+  assert.equal(new URL(tokenUrls[2]!).pathname, "/gitlab/-/user_settings/personal_access_tokens");
+  assert.equal(new URL(tokenUrls[2]!).searchParams.get("scopes"), "read_api,write_repository");
+  const gitlabScreenshot = process.env["EDA_GITLAB_SCREENSHOT"];
+  if (gitlabScreenshot) await page.screenshot({ path: gitlabScreenshot });
+  await setup.getByRole("button", { name: "Cancel", exact: true }).click();
+  await setup.waitFor({ state: "detached" });
   assert.equal(await page.getByText("Commit signing", { exact: true }).count(), 0);
   await page.locator('details[aria-label="SSH setup"] > summary').click();
   await page.getByRole("button", { name: "Import key", exact: true }).waitFor();
@@ -261,17 +330,100 @@ try {
   await page.getByRole("button", { name: /Active profile: Personal/ }).waitFor();
   assert.equal(await readFile(config, "utf8"), originalGit);
 
+  {
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+    await page
+      .getByRole("navigation", { name: "Settings sections", exact: true })
+      .getByRole("button", { name: "Integrations", exact: true })
+      .click();
+
+    await page.getByRole("heading", { name: "Integrations", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Connect instance", exact: true }).waitFor();
+
+    const snapshot = async (suffix: string) => {
+      await page.evaluate(async () => {
+        await new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done())),
+        );
+
+        await Promise.all(
+          document.getAnimations().map((animation) => animation.finished.catch(() => {})),
+        );
+      });
+
+      if (gitlabScreenshot)
+        await page.screenshot({ path: gitlabScreenshot.replace(/\.png$/, `-${suffix}.png`) });
+    };
+
+    await snapshot("card");
+
+    const card = page.getByRole("region", { name: "GitLab Self-Hosted connection", exact: true });
+
+    assertSmoothResize(
+      await sampleResize(card, () =>
+        page.getByRole("button", { name: "Connect instance", exact: true }).click(),
+      ),
+    );
+
+    const setup = page.getByRole("region", { name: "Connect self-hosted GitLab", exact: true });
+    assert.equal(await setup.locator('ol, [aria-current="step"]').count(), 0);
+    await setup.getByLabel("Instance URL", { exact: true }).fill(instance);
+    await snapshot("server");
+
+    assertSmoothResize(
+      await sampleResize(card, () =>
+        setup.getByRole("button", { name: "Next", exact: true }).click(),
+      ),
+    );
+
+    await snapshot("token");
+    await setup.getByLabel("Personal access token", { exact: true }).waitFor();
+
+    assert.equal(
+      await setup.getByRole("button", { name: "I already have a token", exact: true }).count(),
+      0,
+    );
+
+    assert.equal(await setup.locator("details").count(), 0);
+
+    assertSmoothResize(
+      await sampleResize(card, () =>
+        setup.getByRole("button", { name: "Cancel", exact: true }).click(),
+      ),
+    );
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+
+    const reduced = await sampleResize(card, () =>
+      page.getByRole("button", { name: "Connect instance", exact: true }).click(),
+    );
+
+    assert.ok(
+      new Set(reduced.map(Math.round)).size <= 2,
+      `Reduced motion should resize immediately: ${[...new Set(reduced.map(Math.round))].join(", ")}`,
+    );
+
+    await setup.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await assertCompositorMotion(page);
+    await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  }
+
   const profile = await page.evaluate(async () => {
     const result = await window.eda.identity.getActive();
     if (!result.ok || !result.value) throw new Error("Onboarding profile missing");
     return result.value;
   });
+
   const choices = await inspect(page, profile.id);
 
   assert.deepEqual(
     choices.map((choice) => choice.source.kind),
     ["application", "application", "application", "application", "profile"],
   );
+
   assert.deepEqual(
     choices.map((choice) => choice.value),
     [
@@ -330,6 +482,7 @@ try {
   assert.deepEqual(inheritedBackground, savedBackground);
   assert.equal(inherited[4]?.value, true);
   assert.notEqual(inherited[4]?.source.kind, "profile");
+
   assert.deepEqual(await page.evaluate(() => window.eda.app.getGlobalGitUser()), {
     ok: true,
     value: { name: "Eda Work", email: "eda.work@example.com" },
@@ -341,6 +494,7 @@ try {
   await openCustomAccent(page);
   picker = page.getByRole("dialog", { name: "Custom accent color", exact: true });
   await picker.getByRole("textbox", { name: "Hex color", exact: true }).fill("#638f86");
+
   await expect
     .poll(
       () =>
@@ -351,6 +505,7 @@ try {
       { timeout: 30_000 },
     )
     .toBe(true);
+
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Profile: Appearance", exact: true }).click();
   await page.getByRole("combobox", { name: "Accent color source", exact: true }).click();
@@ -358,6 +513,7 @@ try {
   await openCustomAccent(page);
   picker = page.getByRole("dialog", { name: "Custom accent color", exact: true });
   await picker.getByRole("textbox", { name: "Hex color", exact: true }).fill("#ac799f");
+
   await expect
     .poll(
       () =>
@@ -368,6 +524,7 @@ try {
       { timeout: 30_000 },
     )
     .toBe(true);
+
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
 
@@ -380,20 +537,24 @@ try {
       accentComponents(hex).hue,
       { timeout: 10_000 },
     );
+
   await waitForAccent("#638f86");
   await page.getByRole("button", { name: "Profile: Appearance", exact: true }).click();
   await waitForAccent("#ac799f");
   await page.getByRole("combobox", { name: "Accent color source", exact: true }).click();
   await page.getByRole("option", { name: "Follow global", exact: true }).click();
+
   await expect
     .poll(
       () =>
         page.evaluate(async () => {
           const profile = await window.eda.identity.getActive();
           if (!profile.ok || !profile.value) return false;
+
           const result = await window.eda.settings.resolve("accentHue", {
             profileId: profile.value.id,
           });
+
           return (
             result.ok &&
             result.value.value === "#638f86" &&
@@ -403,8 +564,10 @@ try {
       { timeout: 30_000 },
     )
     .toBe(true);
+
   await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
   await page.getByRole("button", { name: "Remove image", exact: true }).click();
+
   await page.waitForFunction(
     () => document.documentElement.dataset["customBackground"] === "false",
   );
@@ -421,11 +584,13 @@ try {
 
   await app!.evaluate(({ dialog }, imagePath) => {
     const original = dialog.showOpenDialog;
+
     dialog.showOpenDialog = async () => {
       dialog.showOpenDialog = original;
       return { canceled: false, filePaths: [imagePath] };
     };
   }, imagePath);
+
   await page.getByRole("button", { name: "Choose background image", exact: true }).click();
   await page.waitForFunction(() => document.documentElement.dataset["customBackground"] === "true");
   assert.equal(errors.length, 0, errors.join("\n"));

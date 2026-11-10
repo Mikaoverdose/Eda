@@ -17,6 +17,7 @@ const suites = [
   "large-repo",
   "bundled-git",
   "remotes",
+  "gitlab-tls",
   "ssh-remotes",
 ];
 
@@ -30,7 +31,7 @@ Suites: ${suites.join(", ")}
 
 Run pnpm build first. Suites run sequentially and stop at the first failure.
 Use --packaged with bundled-git after pnpm package --dir (Windows only).
-Remotes requires OpenSSL and Git http-backend; ssh-remotes requires ssh-keygen and GPG.`);
+Remotes requires OpenSSL and Git http-backend; gitlab-tls requires OpenSSL; ssh-remotes requires ssh-keygen and GPG.`);
 } else {
   const packaged = args.includes("--packaged");
   const names = args.filter((arg) => arg !== "--packaged");
@@ -64,6 +65,7 @@ Remotes requires OpenSSL and Git http-backend; ssh-remotes requires ssh-keygen a
           console.error(`Could not start ${name}: ${error.message}`);
           resolve(1);
         });
+
         child.on("exit", (status) => resolve(status ?? 1));
       });
 

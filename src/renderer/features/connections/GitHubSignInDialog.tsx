@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { openSettings } from "../../commands/open-settings";
+import { openSettings } from "../../stores/shell-store";
 import { Button, Dialog } from "../../components/ui/index";
 
 export function GitHubSignInDialog({
@@ -28,6 +28,7 @@ export function GitHubSignInDialog({
           <Button variant="ghost" onClick={onClose}>
             {t("common.cancel")}
           </Button>
+
           <Button
             variant="primary"
             onClick={() => {
