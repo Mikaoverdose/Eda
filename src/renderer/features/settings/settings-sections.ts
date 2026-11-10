@@ -1,19 +1,19 @@
 import { t } from "@shared/i18n";
 import {
-  FlaskConical,
-  FolderGit2,
-  GitBranch,
-  Info,
-  KeyRound,
-  Monitor,
-  Palette,
-  PanelsTopLeft,
-  Plug,
-  SlidersHorizontal,
-  Trash2,
-  UsersRound,
+  FlaskConicalIcon as FlaskConical,
+  FolderGit2Icon as FolderGit2,
+  BranchIcon as GitBranch,
+  InfoIcon as Info,
+  KeyRoundIcon as KeyRound,
+  MonitorIcon as Monitor,
+  PaletteIcon as Palette,
+  PanelsTopLeftIcon as PanelsTopLeft,
+  PlugIcon as Plug,
+  SlidersHorizontalIcon as SlidersHorizontal,
+  Trash2Icon as Trash2,
+  UsersRoundIcon as UsersRound,
   type LucideIcon,
-} from "lucide-react";
+} from "../../components/ui/icons";
 
 export type SettingsSection =
   | "profiles"

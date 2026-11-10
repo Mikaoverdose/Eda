@@ -4,7 +4,7 @@ import { t } from "@shared/i18n";
 
 import { useAppStore } from "../../../stores/app-store";
 import { useEffect, useRef } from "react";
-import { ImagePlus } from "lucide-react";
+import { ImagePlusIcon as ImagePlus } from "../../../components/ui/icons";
 import { AsyncButton, Button, Checkbox, Select, RangeField } from "../../../components/ui/index";
 import { useScopedSetting } from "../hooks/useScopedSetting";
 import {

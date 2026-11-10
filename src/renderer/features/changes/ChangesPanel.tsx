@@ -2,7 +2,16 @@ import { categorizeChanges } from "../../repository/working-changes";
 import { t } from "@shared/i18n";
 import { MAX_FILE_VIEW_PATHS, defaultFileView, type FileView } from "@shared/preferences/file-view";
 import type { RepositoryChange } from "@shared/repository/repository-read";
-import { EyeOff, History, Minus, PackageCheck, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  EyeOffIcon as EyeOff,
+  HistoryIcon as History,
+  MinusIcon as Minus,
+  PackageCheckIcon as PackageCheck,
+  PencilIcon as Pencil,
+  PlusIcon as Plus,
+  Trash2Icon as Trash2,
+  CloseIcon as X,
+} from "../../components/ui/icons";
 import { useEffect, useMemo, useState } from "react";
 import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";

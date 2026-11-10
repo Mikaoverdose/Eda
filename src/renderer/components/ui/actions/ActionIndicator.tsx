@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Check, LoaderCircle, X } from "lucide-react";
+import { CheckIcon as Check, SpinnerIcon as LoaderCircle, CloseIcon as X } from "../icons";
 import { cx } from "../cx";
 
 export type ActionState = "idle" | "pending" | "success" | "error";

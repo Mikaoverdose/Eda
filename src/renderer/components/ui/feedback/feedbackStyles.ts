@@ -1,4 +1,11 @@
-import { CircleAlert, CircleCheck, Info, LoaderCircle, SearchX, TriangleAlert } from "lucide-react";
+import {
+  CircleAlertIcon as CircleAlert,
+  CircleCheckIcon as CircleCheck,
+  InfoIcon as Info,
+  SpinnerIcon as LoaderCircle,
+  SearchXIcon as SearchX,
+  TriangleAlertIcon as TriangleAlert,
+} from "../icons";
 
 export const FEEDBACK_TONES = {
   info: { Icon: Info, color: "text-accent-text" },

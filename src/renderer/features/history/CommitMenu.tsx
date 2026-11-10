@@ -2,16 +2,16 @@ import { errorText } from "@shared/error-codes";
 import { errorMessage, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
 import {
-  Cherry,
-  Copy,
-  GitBranch,
-  GitCommitHorizontal,
-  GitMerge,
-  Link,
-  RotateCcw,
-  Tag,
-  Undo2,
-} from "lucide-react";
+  CherryIcon as Cherry,
+  CopyIcon as Copy,
+  BranchIcon as GitBranch,
+  GitCommitHorizontalIcon as GitCommitHorizontal,
+  GitMergeIcon as GitMerge,
+  LinkIcon as Link,
+  RotateCcwIcon as RotateCcw,
+  TagIcon as Tag,
+  Undo2Icon as Undo2,
+} from "../../components/ui/icons";
 import { useRef, useState } from "react";
 import {
   captureRepositoryCommand,

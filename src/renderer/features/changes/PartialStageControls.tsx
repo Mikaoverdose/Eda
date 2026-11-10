@@ -1,7 +1,7 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { PartialStagePreview, PartialStageRequest } from "@shared/repository/partial-stage";
-import { Minus, Plus } from "lucide-react";
+import { MinusIcon as Minus, PlusIcon as Plus } from "../../components/ui/icons";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   DialogActions,

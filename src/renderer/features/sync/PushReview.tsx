@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import type { PushPreview, PushRequest } from "@shared/integrations/remotes";
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon as ArrowRight } from "../../components/ui/icons";
 import { Button, Input } from "../../components/ui/index";
 
 export function PushReview({

@@ -2,7 +2,12 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { isImagePath } from "@shared/repository/image-preview";
 import type { DiffMode } from "@shared/repository/repository-read";
-import { ArrowLeft, Columns2, EyeOff, Rows3 } from "lucide-react";
+import {
+  ArrowLeftIcon as ArrowLeft,
+  Columns2Icon as Columns2,
+  EyeOffIcon as EyeOff,
+  Rows3Icon as Rows3,
+} from "../../components/ui/icons";
 import { useEffect, useState } from "react";
 import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";

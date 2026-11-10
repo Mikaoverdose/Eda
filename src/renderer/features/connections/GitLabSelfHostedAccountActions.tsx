@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import type { GitLabSelfHostedAccount } from "@shared/integrations/gitlab-self-hosted";
-import { KeyRound, Unplug } from "lucide-react";
+import { KeyRoundIcon as KeyRound, UnplugIcon as Unplug } from "../../components/ui/icons";
 import { ActionsMenu } from "../../components/ui/index";
 
 export function GitLabSelfHostedAccountActions({

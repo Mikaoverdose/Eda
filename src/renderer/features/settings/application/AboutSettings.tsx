@@ -6,7 +6,13 @@ import {
   type GitHubAccountProfile,
 } from "@shared/integrations/github";
 import { UPDATE_DOWNLOAD_PAGE } from "@shared/updates";
-import { ExternalLink, Heart, Mail, RotateCcw, Star } from "lucide-react";
+import {
+  ExternalLinkIcon as ExternalLink,
+  HeartIcon as Heart,
+  MailIcon as Mail,
+  RotateCcwIcon as RotateCcw,
+  StarIcon as Star,
+} from "../../../components/ui/icons";
 import { useEffect, useState } from "react";
 import {
   Button,

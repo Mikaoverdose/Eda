@@ -1,5 +1,5 @@
 import type { ComponentPropsWithRef } from "react";
-import { Search } from "lucide-react";
+import { SearchIcon as Search } from "../icons";
 import { cx } from "../cx";
 import type { ControlSize } from "./controlStyles";
 

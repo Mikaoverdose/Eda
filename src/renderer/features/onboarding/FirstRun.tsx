@@ -7,7 +7,12 @@ import {
   SETTING_DEFINITIONS,
   type SettingValues,
 } from "@shared/preferences/settings";
-import { ArrowLeft, ArrowRight, Check, GitBranch } from "lucide-react";
+import {
+  ArrowLeftIcon as ArrowLeft,
+  ArrowRightIcon as ArrowRight,
+  CheckIcon as Check,
+  BranchIcon as GitBranch,
+} from "../../components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { ViewTransition } from "../../components/layout/ViewTransition";
 import { useViewTransition } from "../../components/layout/hooks/useViewTransition";

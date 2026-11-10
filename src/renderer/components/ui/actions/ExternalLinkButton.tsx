@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLinkIcon as ExternalLink } from "../icons";
 import { Button, type ButtonProps } from "./Button";
 
 export function ExternalLinkButton({

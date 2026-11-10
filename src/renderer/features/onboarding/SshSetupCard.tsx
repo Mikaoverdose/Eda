@@ -2,7 +2,7 @@ import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
 import type { SshKey } from "@shared/identity/ssh";
-import { KeyRound } from "lucide-react";
+import { KeyRoundIcon as KeyRound } from "../../components/ui/icons";
 import { useEffect, useState } from "react";
 import {
   ActionIndicator,

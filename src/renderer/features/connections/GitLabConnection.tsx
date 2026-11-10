@@ -2,7 +2,7 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { GitLabSignIn, GitLabStatus, GitLabAccountProfile } from "@shared/integrations/gitlab";
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Unplug } from "lucide-react";
+import { ExternalLinkIcon as ExternalLink, UnplugIcon as Unplug } from "../../components/ui/icons";
 import { Button, ActionsMenu } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";

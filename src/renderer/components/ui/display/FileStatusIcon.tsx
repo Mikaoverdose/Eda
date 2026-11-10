@@ -1,5 +1,5 @@
 import type { ChangeCode, FileDiff } from "@shared/repository/repository-read";
-import { Minus, Pencil, Plus } from "lucide-react";
+import { MinusIcon as Minus, PencilIcon as Pencil, PlusIcon as Plus } from "../icons";
 
 export function fileStatusTone(status: ChangeCode | FileDiff["status"]) {
   switch (status) {

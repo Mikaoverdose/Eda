@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { formatDateTime } from "../../utils/format";
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon as ArrowRight } from "../../components/ui/icons";
 import type { StashContents } from "@shared/workflows/stashes";
 import {
   Button,

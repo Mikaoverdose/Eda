@@ -6,7 +6,7 @@ import {
   type GitConfigEntry,
   type ProfileGitInspection,
 } from "@shared/identity/profile-session";
-import { RotateCcw, UserRound } from "lucide-react";
+import { RotateCcwIcon as RotateCcw, IdentityIcon as UserRound } from "../../components/ui/icons";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   AsyncButton,

@@ -2,7 +2,13 @@ import { Localized } from "@renderer/i18n/Localized";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { ArrowUpRight, FolderOpen, Pencil, SquareArrowOutUpRight, Star } from "lucide-react";
+import {
+  ArrowUpRightIcon as ArrowUpRight,
+  FolderOpenIcon as FolderOpen,
+  PencilIcon as Pencil,
+  SquareArrowOutUpRightIcon as SquareArrowOutUpRight,
+  StarIcon as Star,
+} from "../../components/ui/icons";
 import { lazy, Suspense, useState } from "react";
 import { ButtonBase } from "../../components/ui/actions/ButtonBase";
 import {

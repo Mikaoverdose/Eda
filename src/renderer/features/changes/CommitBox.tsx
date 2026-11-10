@@ -1,7 +1,12 @@
 import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { CommitPreview } from "@shared/repository/repository-write";
-import { FileInput, KeyRound, ShieldOff, UserPlus } from "lucide-react";
+import {
+  FileInputIcon as FileInput,
+  KeyRoundIcon as KeyRound,
+  ShieldOffIcon as ShieldOff,
+  UserPlusIcon as UserPlus,
+} from "../../components/ui/icons";
 import { useEffect, useState } from "react";
 import { Skeleton } from "../../components/ui/feedback/Skeleton";
 import {

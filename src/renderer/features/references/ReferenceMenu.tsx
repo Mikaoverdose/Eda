@@ -9,16 +9,16 @@ import type {
   TagVerification,
 } from "@shared/repository/repository-write";
 import {
-  Copy,
-  GitBranch,
-  GitMerge,
-  GitPullRequestArrow,
-  Link,
-  Pencil,
-  ShieldCheck,
-  Trash2,
-  Upload,
-} from "lucide-react";
+  CopyIcon as Copy,
+  BranchIcon as GitBranch,
+  GitMergeIcon as GitMerge,
+  GitPullRequestArrowIcon as GitPullRequestArrow,
+  LinkIcon as Link,
+  PencilIcon as Pencil,
+  ShieldCheckIcon as ShieldCheck,
+  Trash2Icon as Trash2,
+  UploadIcon as Upload,
+} from "../../components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import {
   captureRepositoryCommand,

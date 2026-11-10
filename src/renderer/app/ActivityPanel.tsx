@@ -1,7 +1,11 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
-import { Activity, ChevronUp, RefreshCw } from "lucide-react";
+import {
+  ActivityIcon as Activity,
+  ChevronUpIcon as ChevronUp,
+  RefreshIcon as RefreshCw,
+} from "../components/ui/icons";
 import { useState } from "react";
 import {
   CodeBlock,

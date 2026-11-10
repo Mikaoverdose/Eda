@@ -1,5 +1,5 @@
 import type { DetailsHTMLAttributes, ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRightIcon as ChevronRight } from "../icons";
 import { cx } from "../cx";
 import { AnimatedSize } from "./AnimatedSize";
 

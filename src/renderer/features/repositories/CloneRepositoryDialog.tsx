@@ -3,7 +3,12 @@ import { t } from "@shared/i18n";
 import type { GitHubStatus } from "@shared/integrations/github";
 import type { RepositoryProvider } from "@shared/integrations/provider-repositories";
 import type { TransportCredentials } from "@shared/integrations/remotes";
-import { ArrowDownToLine, Folder, Link, Plus } from "lucide-react";
+import {
+  ArrowDownToLineIcon as ArrowDownToLine,
+  FolderIcon as Folder,
+  LinkIcon as Link,
+  PlusIcon as Plus,
+} from "../../components/ui/icons";
 import { useEffect, useState } from "react";
 import {
   Button,

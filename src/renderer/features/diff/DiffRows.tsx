@@ -1,7 +1,13 @@
 import { stateLabel } from "@shared/i18n/labels";
 import { t } from "@shared/i18n";
 import { ButtonBase } from "../../components/ui/actions/ButtonBase";
-import { ChevronDown, ChevronRight, File, Plus, Minus } from "lucide-react";
+import {
+  ChevronDownIcon as ChevronDown,
+  ChevronRightIcon as ChevronRight,
+  FileIcon as File,
+  PlusIcon as Plus,
+  MinusIcon as Minus,
+} from "../../components/ui/icons";
 import type { TextToken, UnifiedRow } from "../../repository/diff-model";
 import { diffSearchMatches } from "../../repository/diff-search";
 import { PartialLineControl } from "../changes/PartialStageControls";

@@ -1,7 +1,13 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { EdaApi } from "@shared/ipc";
-import { Copy, GitBranch, Minus, Square, X } from "lucide-react";
+import {
+  CopyIcon as Copy,
+  BranchIcon as GitBranch,
+  MinusIcon as Minus,
+  SquareIcon as Square,
+  CloseIcon as X,
+} from "../components/ui/icons";
 import { useEffect, useState, type ReactNode } from "react";
 import { ErrorDialog, WindowControlButton } from "../components/ui/index";
 

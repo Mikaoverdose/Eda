@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { ArrowUp } from "lucide-react";
+import { ArrowUpIcon as ArrowUp } from "../../components/ui/icons";
 import { DialogActions, Button, Dialog } from "../../components/ui/index";
 import { openSettings } from "../../stores/shell-store";
 import { useRepositoryStore } from "../../stores/repository-store";

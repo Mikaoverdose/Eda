@@ -1,4 +1,4 @@
-import { Ellipsis } from "lucide-react";
+import { EllipsisIcon as Ellipsis } from "../icons";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { IconButton } from "./Button";
 import { MenuItem } from "./ListItemButton";

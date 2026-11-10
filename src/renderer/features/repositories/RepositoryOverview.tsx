@@ -1,6 +1,11 @@
 import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { ArrowDown, ArrowUp, CircleAlert, GitBranch } from "lucide-react";
+import {
+  ArrowDownIcon as ArrowDown,
+  ArrowUpIcon as ArrowUp,
+  CircleAlertIcon as CircleAlert,
+  BranchIcon as GitBranch,
+} from "../../components/ui/icons";
 import { lazy, Suspense, useState } from "react";
 import { Skeleton } from "../../components/ui/feedback/Skeleton";
 import { cx, RefreshButton, TextButton } from "../../components/ui/index";

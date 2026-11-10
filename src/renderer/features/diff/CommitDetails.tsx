@@ -5,7 +5,12 @@ import {
   type CommitInspection,
   type HistoryCommit,
 } from "@shared/repository/repository-read";
-import { ChevronRight, KeyRound, RefreshCw, ShieldOff } from "lucide-react";
+import {
+  ChevronRightIcon as ChevronRight,
+  KeyRoundIcon as KeyRound,
+  RefreshIcon as RefreshCw,
+  ShieldOffIcon as ShieldOff,
+} from "../../components/ui/icons";
 import { useId, useState, type ReactNode } from "react";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
 import {

@@ -3,7 +3,7 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
 import type { HistoryReversal } from "@shared/workflows/history-recovery";
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon as ArrowRight } from "../../components/ui/icons";
 import { useEffect, useState } from "react";
 import { AsyncButton, Button, Checkbox, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";

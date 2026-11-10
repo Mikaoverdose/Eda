@@ -1,7 +1,7 @@
 import { t } from "@shared/i18n";
 import { autosquashPlan, type RebasePlanEntry } from "@shared/workflows/rebase";
 import { useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp } from "../../components/ui/icons";
 import { Button, IconButton, Select, Textarea } from "../../components/ui/index";
 
 export function RebasePlanEditor({

@@ -1,7 +1,11 @@
 import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { defaultGraphColumns } from "@shared/preferences/graph-view";
-import { ArrowLeft, ArrowRight, GitCommitHorizontal } from "lucide-react";
+import {
+  ArrowLeftIcon as ArrowLeft,
+  ArrowRightIcon as ArrowRight,
+  GitCommitHorizontalIcon as GitCommitHorizontal,
+} from "../../components/ui/icons";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";

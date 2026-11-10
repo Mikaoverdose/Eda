@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp } from "../components/ui/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Coachmark, Spotlight } from "../components/ui/overlays/Spotlight";
 import { POPOVER_SURFACE_STYLE } from "../components/ui/overlays/PopoverSurface";

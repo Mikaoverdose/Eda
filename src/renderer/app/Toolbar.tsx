@@ -2,7 +2,7 @@ import { t } from "@shared/i18n";
 import type { ReactNode } from "react";
 import { IdentitySwitcher } from "../features/profiles/IdentitySwitcher";
 import { Button, SettingsIcon, cx } from "../components/ui/index";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, SearchIcon as Search } from "../components/ui/icons";
 import { shortcutLabel, type DesktopPlatform } from "../commands/shell-commands";
 import { WindowTitlebar } from "./WindowControls";
 

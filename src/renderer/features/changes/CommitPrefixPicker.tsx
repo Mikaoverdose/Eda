@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { useId, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { CheckIcon as Check, ChevronDownIcon as ChevronDown } from "../../components/ui/icons";
 import { Button, ListItemButton, SearchField } from "../../components/ui/index";
 import { AnchoredPopover } from "../../components/ui/overlays/PopoverSurface";
 

@@ -1,7 +1,7 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { BackgroundPreference } from "@shared/preferences/settings";
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlusIcon as ImagePlus, CloseIcon as X } from "../../components/ui/icons";
 import { useEffect, useState } from "react";
 import { AsyncButton, Button } from "../../components/ui/index";
 import { previewBackground } from "../../stores/preferences-store";

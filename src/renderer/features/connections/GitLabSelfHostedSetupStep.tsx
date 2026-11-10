@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import type { GitLabTokenForm } from "@shared/integrations/gitlab-self-hosted";
-import { ExternalLink } from "lucide-react";
+import { ExternalLinkIcon as ExternalLink } from "../../components/ui/icons";
 import { Button, Field, Input } from "../../components/ui/index";
 
 interface Props {

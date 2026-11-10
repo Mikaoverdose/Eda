@@ -1,6 +1,11 @@
 import { t } from "@shared/i18n";
 import type { ThemePreference } from "@shared/preferences/settings";
-import { Globe, Monitor, Moon, Sun } from "lucide-react";
+import {
+  GlobeIcon as Globe,
+  MonitorIcon as Monitor,
+  MoonIcon as Moon,
+  SunIcon as Sun,
+} from "../../../components/ui/icons";
 import { useId } from "react";
 import { cx, RadioCard } from "../../../components/ui/index";
 import { ThemeGrid } from "./ThemeGrid";

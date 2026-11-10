@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { Copy, RefreshCw } from "lucide-react";
+import { CopyIcon as Copy, RefreshIcon as RefreshCw } from "../icons";
 import { useEffect, useRef, useState } from "react";
 import { ACTION_FEEDBACK } from "../../../motion";
 import { copyText } from "../../../utils/clipboard";

@@ -1,7 +1,7 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon as ArrowRight } from "../../components/ui/icons";
 import { useState } from "react";
 import { DialogActions, Button, Dialog, ErrorDialog } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";

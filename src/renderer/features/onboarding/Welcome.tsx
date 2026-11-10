@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowRight, GitBranch } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, BranchIcon as GitBranch } from "../../components/ui/icons";
 import { CommitMessage } from "../history/CommitMessage";
 import { Button, Select } from "../../components/ui/index";
 import { motionDuration } from "../../motion";

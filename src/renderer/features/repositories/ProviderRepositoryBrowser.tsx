@@ -4,7 +4,12 @@ import type {
   ProviderRepository,
   RepositoryProvider,
 } from "@shared/integrations/provider-repositories";
-import { Archive, BookMarked, Check, LockKeyhole } from "lucide-react";
+import {
+  ArchiveIcon as Archive,
+  BookMarkedIcon as BookMarked,
+  CheckIcon as Check,
+  LockKeyholeIcon as LockKeyhole,
+} from "../../components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import {
   ActionIndicator,

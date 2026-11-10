@@ -1,6 +1,9 @@
 import { t } from "@shared/i18n";
 import { defaultGraphColumns, type GraphColumn } from "@shared/preferences/graph-view";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import {
+  ArrowLeftIcon as ArrowLeft,
+  ArrowRightIcon as ArrowRight,
+} from "../../components/ui/icons";
 import { useSessionStore } from "../../stores/session-store";
 import { Button, Dialog, Checkbox, IconButton, Slider } from "../../components/ui/index";
 

@@ -2,7 +2,13 @@ import { ReferenceRow } from "./ReferenceRow";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { BranchSummary, TagSummary } from "@shared/repository/repository-write";
-import { GitBranch, Globe, PanelLeftClose, PanelLeftOpen, Tag } from "lucide-react";
+import {
+  BranchIcon as GitBranch,
+  GlobeIcon as Globe,
+  PanelLeftCloseIcon as PanelLeftClose,
+  PanelLeftOpenIcon as PanelLeftOpen,
+  TagIcon as Tag,
+} from "../../components/ui/icons";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLayoutTransition } from "../../components/layout/hooks/useLayoutTransition";
 import { Skeleton, SkeletonRows } from "../../components/ui/feedback/Skeleton";

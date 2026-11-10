@@ -2,7 +2,7 @@ import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { Identity } from "@shared/identity/identity";
 import type { ProfileDeletePreview } from "@shared/identity/profile-session";
-import { Check, Plus } from "lucide-react";
+import { CheckIcon as Check, PlusIcon as Plus } from "../../components/ui/icons";
 import { useState } from "react";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
 import { Button, ErrorDialog } from "../../components/ui/index";

@@ -2,7 +2,13 @@ import { errorMessage } from "@shared/errors";
 import { PACKAGE_MANAGER_NAMES } from "@shared/application";
 import { t } from "@shared/i18n";
 import type { UpdatePhase, UpdateState } from "@shared/updates";
-import { CircleAlert, CircleCheck, Download, Info, RotateCw } from "lucide-react";
+import {
+  CircleAlertIcon as CircleAlert,
+  CircleCheckIcon as CircleCheck,
+  DownloadIcon as Download,
+  InfoIcon as Info,
+  RotateCwIcon as RotateCw,
+} from "../../components/ui/icons";
 import { useId, useState } from "react";
 import { AsyncButton, Button, Checkbox, Disclosure, NoticeBanner } from "../../components/ui/index";
 import { useSessionStore } from "../../stores/session-store";

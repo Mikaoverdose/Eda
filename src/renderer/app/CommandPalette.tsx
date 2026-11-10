@@ -1,7 +1,7 @@
 import { t } from "@shared/i18n";
 import { ErrorDialog } from "../components/ui/index";
 import { useId, useRef, useState } from "react";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDownIcon as ArrowUpDown } from "../components/ui/icons";
 import {
   commandReason,
   sameCommandContext,

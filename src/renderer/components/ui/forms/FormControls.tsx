@@ -7,7 +7,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown } from "lucide-react";
+import { CheckIcon as Check, ChevronDownIcon as ChevronDown } from "../icons";
 import { cx } from "../cx";
 import { controlAppearance, controlSize, type ControlSurface } from "./controlStyles";
 

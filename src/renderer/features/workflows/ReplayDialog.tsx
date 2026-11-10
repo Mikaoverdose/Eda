@@ -3,7 +3,7 @@ import { errorMessage } from "@shared/errors";
 import { getLocale, t } from "@shared/i18n";
 import { replayActionLabel } from "@shared/i18n/labels";
 import type { ReplayAction, ReplayKind, ReplayReview } from "@shared/workflows/replay";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp } from "../../components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import {
   Button,

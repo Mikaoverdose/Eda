@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { RotateCcw } from "lucide-react";
+import { RotateCcwIcon as RotateCcw } from "../../../components/ui/icons";
 import { defaultCommitPrefixes, parseCommitPrefixes } from "@shared/preferences/commit-prefix";
 import { useEffect, useId, useState } from "react";
 import {

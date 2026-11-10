@@ -1,7 +1,11 @@
 import { ThemePreview } from "../settings/appearance/ThemeGrid";
 import { useId } from "react";
 import { t } from "@shared/i18n";
-import { Monitor, Moon, Sun } from "lucide-react";
+import {
+  MonitorIcon as Monitor,
+  MoonIcon as Moon,
+  SunIcon as Sun,
+} from "../../components/ui/icons";
 import type { AccentColor } from "@shared/preferences/accent";
 import { BackgroundChoice } from "./BackgroundChoice";
 import type { BackgroundPreference, ThemePreference } from "@shared/preferences/settings";

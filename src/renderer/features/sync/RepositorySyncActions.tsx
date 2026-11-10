@@ -2,7 +2,13 @@ import { HttpsAuthenticationDialog } from "./HttpsAuthenticationDialog";
 import { t } from "@shared/i18n";
 import { DirectFetchActions } from "./DirectFetchActions";
 import { useRef, useState } from "react";
-import { ArrowDown, ChevronDown, FastForward, GitMerge, GitPullRequestArrow } from "lucide-react";
+import {
+  ArrowDownIcon as ArrowDown,
+  ChevronDownIcon as ChevronDown,
+  FastForwardIcon as FastForward,
+  GitMergeIcon as GitMerge,
+  GitPullRequestArrowIcon as GitPullRequestArrow,
+} from "../../components/ui/icons";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { Button, MenuItem, AnchoredPopover, ErrorDialog } from "../../components/ui/index";

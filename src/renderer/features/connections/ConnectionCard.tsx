@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import type { ReactNode } from "react";
-import { Check } from "lucide-react";
+import { CheckIcon as Check } from "../../components/ui/icons";
 import { Disclosure } from "../../components/ui/index";
 
 export function ConnectionCard({

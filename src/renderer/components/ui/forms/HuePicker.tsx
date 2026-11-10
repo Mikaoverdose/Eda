@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { useEffect, useId, useRef, useState } from "react";
-import { Palette } from "lucide-react";
+import { PaletteIcon as Palette } from "../icons";
 import {
   ACCENT_SWATCH_LIGHTNESS,
   DEFAULT_ACCENT_CHROMA,

@@ -1,5 +1,5 @@
 import { t } from "@shared/i18n";
-import { X } from "lucide-react";
+import { CloseIcon as X } from "../icons";
 import type { ReactNode } from "react";
 import { IconButton } from "../actions/Button";
 import { cx } from "../cx";

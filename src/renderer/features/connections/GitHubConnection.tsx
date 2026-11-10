@@ -1,7 +1,11 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { GitHubAccountProfile, GitHubSignIn, GitHubStatus } from "@shared/integrations/github";
-import { Copy, ExternalLink, Unplug } from "lucide-react";
+import {
+  CopyIcon as Copy,
+  ExternalLinkIcon as ExternalLink,
+  UnplugIcon as Unplug,
+} from "../../components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { ConnectionProfile } from "./ConnectionProfile";
 import { Button, CodeBlock, CopyButton, ActionsMenu, Skeleton } from "../../components/ui/index";

@@ -2,7 +2,7 @@ import { errorText } from "@shared/error-codes";
 import { errorMessage, type Result } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { BranchSummary } from "@shared/repository/repository-write";
-import { Circle } from "lucide-react";
+import { CircleIcon as Circle } from "../../components/ui/icons";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   captureRepositoryCommand,

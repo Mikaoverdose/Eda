@@ -1,7 +1,7 @@
 import type { DiffMode, UnifiedDiff } from "@shared/repository/repository-read";
 import { t, getLocale } from "@shared/i18n";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp } from "../../components/ui/icons";
 
 import { type UnifiedRow, toSideBySideRows, toUnifiedRows } from "../../repository/diff-model";
 import { diffSearchMatches } from "../../repository/diff-search";

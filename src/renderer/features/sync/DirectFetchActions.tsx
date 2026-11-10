@@ -2,7 +2,12 @@ import type { TransportCredentials } from "@shared/integrations/remotes";
 import { HttpsAuthenticationDialog } from "./HttpsAuthenticationDialog";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { ChevronDown, Globe, RefreshCw, Settings } from "lucide-react";
+import {
+  ChevronDownIcon as ChevronDown,
+  GlobeIcon as Globe,
+  RefreshIcon as RefreshCw,
+  SettingsIcon as Settings,
+} from "../../components/ui/icons";
 import { useRef, useState } from "react";
 import { openSettings } from "../../stores/shell-store";
 import { Button, ErrorDialog, MenuItem, AnchoredPopover } from "../../components/ui/index";
