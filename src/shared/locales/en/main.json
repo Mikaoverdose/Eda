@@ -140,6 +140,8 @@
   "main.git.errorMapping.itMayHaveBeenMovedOrDeletedRemoveItFromEdaOrOpenADifferentFolder": "It may have been moved or deleted. Remove it from Eda, or open a different folder.",
   "main.git.errorMapping.mergeTheBranchOrReviewItsCommitsBeforeDeletingIt": "Merge the branch or review its commits before deleting it.",
   "main.git.errorMapping.resolveTheConflictingFilesThenCommitTheResult": "Resolve the conflicting files, then commit the result.",
+  "main.git.errorMapping.remoteRejectedPush": "The remote server rejected this push.",
+  "main.git.errorMapping.reviewServerPushRequirements": "Check the branch protection rules and server hook requirements. Push to an allowed branch and open a pull or merge request, or ask a repository administrator for help.",
   "main.git.errorMapping.runGitFsckToInspectTheDamageAFreshCloneMayBeTheFastestFix": "Run `git fsck` to inspect the damage. A fresh clone may be the fastest fix.",
   "main.git.errorMapping.stageTheChangesYouWantToIncludeThenCommit": "Stage the changes you want to include, then commit.",
   "main.git.errorMapping.thatFolderIsNotAGitRepository": "That folder is not a Git repository.",

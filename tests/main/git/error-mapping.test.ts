@@ -1,11 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { gitErrorFixtures as fx } from "../../fixtures/git-errors";
+import { gitErrorFixtures as fx, pushErrorFixtures } from "../../fixtures/git-errors";
 import { mapGitError } from "@main/git/execution/error-mapping";
 
 const map = (stderr: string, overrides: Partial<Parameters<typeof mapGitError>[0]> = {}) =>
   mapGitError({ operation: "push", exitCode: 128, stderr, ...overrides });
 
 describe("mapGitError", () => {
+  it.each(["protectedBranch", "hookRejected", "policyMentionsHistory"] as const)(
+    "maps %s to an actionable server rejection before history patterns",
+    (fixture) => {
+      const { stderr, stdout } = pushErrorFixtures[fixture];
+      const error = map(stderr, { stdout });
+
+      expect(error).toMatchObject({
+        kind: "remote-rejected",
+        isExpected: true,
+        message: "The remote server rejected this push.",
+        suggestedAction: expect.stringContaining(
+          "branch protection rules and server hook requirements",
+        ),
+      });
+      expect(error.toData()).not.toHaveProperty("rawStderr");
+    },
+  );
+
+  it.each(["nonFastForward", "fetchFirst", "staleLease"] as const)(
+    "recognizes the %s porcelain reason even when stderr only reports a generic failure",
+    (fixture) => {
+      const { stderr, stdout } = pushErrorFixtures[fixture];
+      expect(map(stderr, { stdout }).kind).toBe("non-fast-forward");
+    },
+  );
+
+  it.each([pushErrorFixtures.generic.stderr, "hint: Updates were rejected by the server."])(
+    "does not infer a history conflict from generic push output: %s",
+    (stderr) => {
+      expect(map(stderr).kind).toBe("unknown");
+    },
+  );
+
+  it("distinguishes write permission failures from history conflicts", () => {
+    expect(map(pushErrorFixtures.permissionDenied.stderr).kind).toBe("auth-failed");
+  });
+
   it.each([
     "error: The branch 'feature/new' is not fully merged.",
     "error: the branch 'feature/new' is not fully merged\nhint: If you are sure you want to delete it, run 'git branch -D feature/new'",

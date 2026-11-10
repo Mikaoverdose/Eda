@@ -32,8 +32,14 @@ const PATTERNS: readonly Pattern[] = [
     suggestedAction: () => errorText("main.git.errorMapping.checkThisProfileSSigningKeyAndUnlock"),
   },
   {
+    kind: "remote-rejected",
+    test: /\[remote rejected\]|protected branch|(?:pre-receive|update) hook declined|GH006:|GH013:|repository rule violations/i,
+    message: () => errorText("main.git.errorMapping.remoteRejectedPush"),
+    suggestedAction: () => errorText("main.git.errorMapping.reviewServerPushRequirements"),
+  },
+  {
     kind: "auth-failed",
-    test: /permission denied \(publickey|could not read from remote repository|authentication failed|invalid username or (password|token)|access denied|host key verification failed|could not read Username|terminal prompts disabled|returned error: (401|403)/i,
+    test: /permission denied \(publickey|could not read from remote repository|authentication failed|invalid username or (password|token)|access denied|write access to repository not granted|permission to .+ denied to|host key verification failed|could not read Username|terminal prompts disabled|returned error: (401|403)/i,
     message: (c) =>
       c.identityName
         ? errorText("main.git.errorMapping.authenticationFailedForIdentity", {
@@ -73,7 +79,7 @@ const PATTERNS: readonly Pattern[] = [
   },
   {
     kind: "non-fast-forward",
-    test: /non-fast-forward|failed to push some refs|tip of your current branch is behind|fetch first|updates were rejected/i,
+    test: /\[rejected\][^\r\n]*\((?:non-fast-forward|fetch first|stale info)\)|tip of your current branch is behind/i,
     message: () =>
       errorText("main.git.errorMapping.theRemoteRejectedThisUpdateItsHistoryOrLeaseMayHaveChanged"),
     suggestedAction: () =>

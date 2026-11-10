@@ -52,3 +52,39 @@ and the repository exists.`,
   authHostKeyUnverified: `Host key verification failed.
 fatal: Could not read from remote repository.`,
 } as const;
+
+// Representative push failures with --porcelain status records on stdout.
+const pushFailed = "error: failed to push some refs to 'https://example.com/repo.git'";
+
+export const pushErrorFixtures = {
+  protectedBranch: {
+    stderr: `remote: error: GH006: Protected branch update failed for refs/heads/main.\n${pushFailed}`,
+    stdout:
+      "!\trefs/heads/main:refs/heads/main\t[remote rejected] (protected branch hook declined)",
+  },
+  hookRejected: {
+    stderr: pushFailed,
+    stdout: "!\trefs/heads/main:refs/heads/main\t[remote rejected] (pre-receive hook declined)",
+  },
+  policyMentionsHistory: {
+    stderr: `remote: Push access denied: non-fast-forward updates are not allowed by server policy.\n${pushFailed}`,
+    stdout: "!\trefs/heads/main:refs/heads/main\t[remote rejected] (hook declined)",
+  },
+  generic: { stderr: pushFailed, stdout: "" },
+  nonFastForward: {
+    stderr: pushFailed,
+    stdout: "!\trefs/heads/main:refs/heads/main\t[rejected] (non-fast-forward)",
+  },
+  fetchFirst: {
+    stderr: pushFailed,
+    stdout: "!\trefs/heads/main:refs/heads/main\t[rejected] (fetch first)",
+  },
+  staleLease: {
+    stderr: pushFailed,
+    stdout: "!\trefs/heads/main:refs/heads/main\t[rejected] (stale info)",
+  },
+  permissionDenied: {
+    stderr: `remote: Write access to repository not granted.\n${pushFailed}`,
+    stdout: "",
+  },
+} as const;

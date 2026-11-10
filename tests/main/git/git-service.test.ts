@@ -8,6 +8,7 @@ import type { GitEngine } from "@main/git/execution/git-engine";
 import { assertHermetic, createTempRepo, type TempRepo } from "../../helpers/temp-repo";
 import { access, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { pushErrorFixtures } from "../../fixtures/git-errors";
 
 const FAKE_ENGINE: GitEngine = {
   source: "system",
@@ -219,6 +220,19 @@ describe("GitService against real Git", () => {
 
 describe("GitService command construction", () => {
   const service = (runner: FakeProcessRunner) => new GitService(runner, FAKE_ENGINE);
+
+  it("uses porcelain stdout to distinguish a server hook rejection from generic push stderr", async () => {
+    const runner = new FakeProcessRunner().otherwise({
+      exitCode: 1,
+      ...pushErrorFixtures.hookRejected,
+    });
+
+    await expect(
+      service(runner).exec(["push", "--porcelain", "--", "origin", "main:main"], {
+        operation: "push",
+      }),
+    ).rejects.toMatchObject({ kind: "remote-rejected" });
+  });
 
   it("passes argv, never a shell string", async () => {
     const runner = new FakeProcessRunner().otherwise({ stdout: "true\n" });

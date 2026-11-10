@@ -16,6 +16,7 @@ export const EXPECTED_KINDS = [
   "lock-contention",
   "dirty-working-tree",
   "non-fast-forward",
+  "remote-rejected",
   "not-a-repository",
   "no-upstream",
   "nothing-to-commit",
