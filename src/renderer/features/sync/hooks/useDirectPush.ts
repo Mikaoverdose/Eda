@@ -1,4 +1,4 @@
-import { errorMessage, type GitErrorData } from "@shared/errors";
+import { errorAction, errorMessage, type GitErrorData } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { isGitHubHttps } from "@shared/integrations/github";
 import {
@@ -30,7 +30,7 @@ export function useDirectPush(repositoryId: string, afterCommit: boolean) {
   const started = useRef(false);
 
   const handleFailure = (failure: GitErrorData) => {
-    setError(errorMessage(failure));
+    setError([errorMessage(failure), errorAction(failure)].filter(Boolean).join(" "));
 
     const github =
       failure.kind === "github-auth-required"
@@ -43,6 +43,11 @@ export function useDirectPush(repositoryId: string, afterCommit: boolean) {
     const authentication = failure.kind === "auth-failed" || github !== null;
     setNeedsAuth(authentication);
     if (authentication) setPreview(null);
+
+    if (failure.kind === "remote-rejected") {
+      setPreview(null);
+      if (preview) setShowError(true);
+    }
   };
 
   const closeAuthentication = () => {

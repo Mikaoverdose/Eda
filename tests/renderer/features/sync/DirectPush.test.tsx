@@ -7,6 +7,8 @@ import { useAppStore } from "@renderer/stores/app-store";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
 import { useShellStore } from "@renderer/stores/shell-store";
 import { ACTION_FEEDBACK } from "@renderer/motion";
+import { mapGitError } from "@main/git/execution/error-mapping";
+import { pushErrorFixtures } from "../../../fixtures/git-errors";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -95,6 +97,108 @@ it("shows pending then a check, resets the outcome and supports another push", a
   expect(push).toHaveBeenCalledTimes(2);
   expect(button().querySelector(".ui-action-visible .lucide-check")).not.toBeNull();
 });
+
+it.each(["protectedBranch", "hookRejected", "policyMentionsHistory", "generic"] as const)(
+  "shows %s details without preparing or offering a force push",
+  async (fixture) => {
+    const failure = mapGitError({ operation: "push", exitCode: 1, ...pushErrorFixtures[fixture] });
+    push.mockResolvedValueOnce(err(failure));
+
+    await act(async () => button().click());
+    await finish();
+
+    expect(preparePush).toHaveBeenCalledOnce();
+    expect(preparePush).toHaveBeenCalledWith(expect.objectContaining({ mode: "normal" }));
+    expect(push).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain("Force with lease");
+
+    await act(async () => button().click());
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("Push failed");
+    expect(dialog?.textContent).toContain(failure.message);
+    expect(dialog?.textContent).toContain(failure.suggestedAction);
+    expect(dialog?.textContent).not.toContain("Force with lease");
+    expect(dialog?.querySelector('input[type="password"]')).toBeNull();
+    expect(push).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(["nonFastForward", "fetchFirst"] as const)(
+  "offers a reviewed force-with-lease push for %s and only pushes after confirmation",
+  async (fixture) => {
+    push.mockResolvedValueOnce(
+      err(mapGitError({ operation: "push", exitCode: 1, ...pushErrorFixtures[fixture] })),
+    );
+    preparePush
+      .mockResolvedValueOnce(ok(preview))
+      .mockResolvedValueOnce(ok({ ...preview, token: "lease" }));
+
+    await act(async () => button().click());
+    await finish();
+
+    expect(preparePush).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "lease" }));
+    expect(push).toHaveBeenCalledOnce();
+    const confirm = [...document.querySelectorAll("button")].find(
+      (item) => item.textContent === "Force with lease",
+    )!;
+    expect(confirm).toBeDefined();
+
+    await act(async () => confirm.click());
+    await finish();
+    expect(push).toHaveBeenLastCalledWith("repo", "lease", undefined);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Push completed.");
+  },
+);
+
+it("offers authentication recovery for mapped permission failures without preparing a force push", async () => {
+  push.mockResolvedValueOnce(
+    err(mapGitError({ operation: "push", exitCode: 1, ...pushErrorFixtures.permissionDenied })),
+  );
+
+  await act(async () => button().click());
+  await finish();
+
+  const dialog = document.querySelector('[role="dialog"]');
+  expect(dialog?.textContent).toContain("HTTPS authentication");
+  expect(dialog?.querySelector('input[type="password"]')).not.toBeNull();
+  expect(dialog?.textContent).not.toContain("Force with lease");
+  expect(preparePush).toHaveBeenCalledOnce();
+  expect(push).toHaveBeenCalledOnce();
+});
+
+it.each(["hookRejected", "staleLease"] as const)(
+  "does not retry automatically when a confirmed force-with-lease push fails with %s",
+  async (fixture) => {
+    push.mockResolvedValueOnce(
+      err(mapGitError({ operation: "push", exitCode: 1, ...pushErrorFixtures.nonFastForward })),
+    );
+    await act(async () => button().click());
+    await finish();
+
+    push.mockResolvedValueOnce(
+      err(mapGitError({ operation: "push", exitCode: 1, ...pushErrorFixtures[fixture] })),
+    );
+    const confirm = [...document.querySelectorAll("button")].find(
+      (item) => item.textContent === "Force with lease",
+    )!;
+    await act(async () => confirm.click());
+    await finish();
+
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(preparePush).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      fixture === "hookRejected"
+        ? "The remote server rejected this push."
+        : "history or lease may have changed",
+    );
+    if (fixture === "hookRejected")
+      expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+        "Force with lease",
+      );
+  },
+);
 
 it.each(["preview", "push"])(
   "shows an inline X for %s failure and opens details on click",
