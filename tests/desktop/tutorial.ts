@@ -181,6 +181,27 @@ try {
   await frame.getByRole("button", { name: "Skip tour", exact: true }).click();
   await page.locator("iframe").waitFor({ state: "detached" });
 
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search settings", exact: true }).fill("tutorial");
+  await page.getByRole("button", { name: "About", exact: true }).click();
+  const replay = page.getByRole("button", { name: "Take the tour again", exact: true });
+  await replay.click();
+  await frame.getByRole("heading", { name: "Your way around Eda" }).waitFor();
+  await frame.getByRole("button", { name: "Next", exact: true }).click();
+  await frame.getByRole("heading", { name: "Three ways to get started", exact: true }).waitFor();
+  await frame.getByRole("button", { name: "Skip tour", exact: true }).click();
+  await page.locator("iframe").waitFor({ state: "detached" });
+  assert.equal(await replay.evaluate((button) => button === document.activeElement), true);
+
+  await replay.click();
+  await frame.getByRole("heading", { name: "Your way around Eda" }).waitFor();
+  await frame.locator("body").press("Escape");
+  await page.locator("iframe").waitFor({ state: "detached" });
+  await replay.waitFor();
+  assert.deepEqual(await page.evaluate(() => window.eda.repository.list()), {
+    ok: true,
+    value: [],
+  });
   assert.deepEqual(errors, []);
   console.log("Tutorial desktop checks passed.");
 } catch (e) {

@@ -6,7 +6,7 @@ import {
   type GitHubAccountProfile,
 } from "@shared/integrations/github";
 import { UPDATE_DOWNLOAD_PAGE } from "@shared/updates";
-import { ExternalLink, Heart, Mail, Star } from "lucide-react";
+import { ExternalLink, Heart, Mail, RotateCcw, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -16,6 +16,7 @@ import {
   Skeleton,
 } from "../../../components/ui/index";
 import { usePreferencesStore } from "../../../stores/preferences-store";
+import { useShellStore } from "../../../stores/shell-store";
 import { useSimulationStore } from "../../../stores/simulation-store";
 import { GitHubProfile } from "../../connections/GitHubProfile";
 import { ProviderIcon } from "../../connections/ProviderIcon";
@@ -77,7 +78,7 @@ export function AboutSettings() {
   }, []);
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl space-y-6">
       <section aria-labelledby="about-eda-heading" className="space-y-4">
         <div>
           <h2 id="about-eda-heading" className="text-2xl font-semibold tracking-tight">
@@ -157,6 +158,123 @@ export function AboutSettings() {
             </dd>
           </div>
         </dl>
+      </section>
+
+      <div className="space-y-3">
+        <section
+          aria-labelledby="about-maintainer-heading"
+          className="flex flex-wrap items-stretch gap-4"
+        >
+          <div className="min-w-0 flex-1 basis-64 space-y-3 rounded-md border border-border-subtle bg-bg-surface p-4">
+            <h2
+              id="about-maintainer-heading"
+              className="flex items-center gap-2 text-sm font-medium"
+            >
+              <ProviderIcon provider="GitHub" />
+              {t("settings.aboutSettings.maintainer")}
+            </h2>
+
+            <div className="min-h-32" aria-busy={loadingProfile}>
+              {loadingProfile ? (
+                <div
+                  role="status"
+                  aria-label={t("settings.aboutSettings.loadingMaintainerProfile")}
+                >
+                  <div aria-hidden="true" className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    </div>
+
+                    <div className="flex h-4.5 items-center">
+                      <Skeleton className="h-4 w-4/5" />
+                    </div>
+
+                    <div className="flex h-4.5 items-center gap-1.5">
+                      <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-full" />
+                      <Skeleton className="h-4 w-2/3" />
+                    </div>
+
+                    <div className="flex h-4.5 items-center gap-1.5">
+                      <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-6 w-6 rounded-sm" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <GitHubProfile
+                  login={profile?.login ?? maintainer}
+                  name={profile?.name ?? t("settings.aboutSettings.yuzu")}
+                  bio={profile?.bio}
+                  location={profile?.location}
+                  avatarDataUrl={profile?.avatarDataUrl}
+                  hue={45}
+                  onOpenProfile={() =>
+                    window.open(`https://github.com/${maintainer}`, "_blank", "noopener,noreferrer")
+                  }
+                >
+                  <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+                    <Mail size={14} aria-hidden="true" className="shrink-0" />
+
+                    <span className="selectable min-w-0 [overflow-wrap:anywhere]">
+                      {maintainerEmail}
+                    </span>
+
+                    <span className="-my-1 inline-flex shrink-0">
+                      <CopyButton
+                        value={maintainerEmail}
+                        label={t("settings.aboutSettings.copyMaintainerEmail")}
+                        size="icon-xs"
+                      />
+                    </span>
+                  </div>
+                </GitHubProfile>
+              )}
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1 basis-64 space-y-3 rounded-md border border-[var(--sponsor-bg)] bg-bg-surface p-4">
+            <div>
+              <h3 className="text-sm font-medium text-text-primary">
+                {t("settings.aboutSettings.supportEda")}
+              </h3>
+
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                {t("settings.aboutSettings.sponsorYuzuToHelpKeepEdaGrowingAndFreelyAvailable")}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <ExternalLinkButton
+                href={`https://github.com/sponsors/${maintainer}`}
+                variant="primary"
+                size="md"
+                block
+                className="bg-[var(--sponsor-bg)]! text-white!"
+                icon={<Heart size={16} aria-hidden="true" className="ui-heartbeat fill-current" />}
+              >
+                {t("settings.aboutSettings.sponsorOnGitHub")}
+                <ExternalLink size={12} aria-hidden="true" />
+              </ExternalLinkButton>
+
+              <ExternalLinkButton
+                href={repositoryUrl}
+                variant="secondary"
+                size="md"
+                block
+                icon={<Star size={16} aria-hidden="true" />}
+              >
+                {t("settings.aboutSettings.starTheRepo")}
+                <ExternalLink size={12} aria-hidden="true" />
+              </ExternalLinkButton>
+            </div>
+          </div>
+        </section>
 
         <div className="flex flex-wrap gap-2">
           <ExternalLinkButton href="https://eda.kirameki.cafe">
@@ -171,118 +289,30 @@ export function AboutSettings() {
             {t("settings.updatesSettings.downloadPage")}
           </ExternalLinkButton>
         </div>
-      </section>
-
-      <section
-        aria-labelledby="about-maintainer-heading"
-        className="flex flex-wrap items-stretch gap-6 border-t border-border-subtle pt-6"
-      >
-        <div className="min-w-0 flex-1 basis-64 space-y-3 rounded-md border border-border-subtle bg-bg-surface p-3">
-          <h2 id="about-maintainer-heading" className="flex items-center gap-2 text-sm font-medium">
-            <ProviderIcon provider="GitHub" />
-            {t("settings.aboutSettings.maintainer")}
-          </h2>
-
-          <div className="min-h-36" aria-busy={loadingProfile}>
-            {loadingProfile ? (
-              <div role="status" aria-label={t("settings.aboutSettings.loadingMaintainerProfile")}>
-                <div aria-hidden="true" className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
-
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <Skeleton className="h-4 w-16" />
-                      <Skeleton className="h-4 w-24" />
-                    </div>
-                  </div>
-
-                  <div className="flex h-4.5 items-center">
-                    <Skeleton className="h-4 w-4/5" />
-                  </div>
-
-                  <div className="flex h-4.5 items-center gap-1.5">
-                    <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-full" />
-                    <Skeleton className="h-4 w-2/3" />
-                  </div>
-
-                  <div className="flex h-4.5 items-center gap-1.5">
-                    <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
-                    <Skeleton className="h-4 w-36" />
-                    <Skeleton className="h-6 w-6 rounded-sm" />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <GitHubProfile
-                login={profile?.login ?? maintainer}
-                name={profile?.name ?? t("settings.aboutSettings.yuzu")}
-                bio={profile?.bio}
-                location={profile?.location}
-                avatarDataUrl={profile?.avatarDataUrl}
-                hue={45}
-                onOpenProfile={() =>
-                  window.open(`https://github.com/${maintainer}`, "_blank", "noopener,noreferrer")
-                }
-              >
-                <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
-                  <Mail size={14} aria-hidden="true" className="shrink-0" />
-
-                  <span className="selectable min-w-0 [overflow-wrap:anywhere]">
-                    {maintainerEmail}
-                  </span>
-
-                  <span className="-my-1 inline-flex shrink-0">
-                    <CopyButton
-                      value={maintainerEmail}
-                      label={t("settings.aboutSettings.copyMaintainerEmail")}
-                      size="icon-xs"
-                    />
-                  </span>
-                </div>
-              </GitHubProfile>
-            )}
-          </div>
-        </div>
-
-        <div className="min-w-0 flex-1 basis-64 space-y-3 rounded-md border border-[var(--sponsor-bg)] bg-bg-surface p-4">
-          <div>
-            <h3 className="text-sm font-medium text-text-primary">
-              {t("settings.aboutSettings.supportEda")}
-            </h3>
-
-            <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-              {t("settings.aboutSettings.sponsorYuzuToHelpKeepEdaGrowingAndFreelyAvailable")}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <ExternalLinkButton
-              href={`https://github.com/sponsors/${maintainer}`}
-              variant="primary"
-              size="md"
-              block
-              className="bg-[var(--sponsor-bg)]! text-white!"
-              icon={<Heart size={16} aria-hidden="true" className="ui-heartbeat fill-current" />}
-            >
-              {t("settings.aboutSettings.sponsorOnGitHub")}
-              <ExternalLink size={12} aria-hidden="true" />
-            </ExternalLinkButton>
-
-            <ExternalLinkButton
-              href={repositoryUrl}
-              variant="secondary"
-              size="md"
-              block
-              icon={<Star size={16} aria-hidden="true" />}
-            >
-              {t("settings.aboutSettings.starTheRepo")}
-              <ExternalLink size={12} aria-hidden="true" />
-            </ExternalLinkButton>
-          </div>
-        </div>
-      </section>
+      </div>
 
       <UpdatesSettings />
+
+      <section
+        aria-labelledby="about-tour-heading"
+        className="space-y-4 border-t border-border-subtle pt-6"
+      >
+        <h2 id="about-tour-heading" className="text-sm font-medium">
+          {t("settings.aboutSettings.guidedTour")}
+        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-border-subtle bg-bg-surface p-4">
+          <p className="min-w-0 flex-1 basis-64 text-xs leading-relaxed text-text-secondary">
+            {t("settings.aboutSettings.guidedTourDescription")}
+          </p>
+          <Button
+            variant="secondary"
+            icon={<RotateCcw size={14} aria-hidden="true" />}
+            onClick={() => useShellStore.getState().startTour()}
+          >
+            {t("settings.aboutSettings.takeTheTourAgain")}
+          </Button>
+        </div>
+      </section>
 
       <section
         aria-labelledby="about-license-heading"
