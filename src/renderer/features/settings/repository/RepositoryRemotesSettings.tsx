@@ -7,7 +7,7 @@ export function RepositoryRemotesSettings({ repositoryId }: { repositoryId: stri
   const { state, edit, setEdit, remove, setRemove, run, busy, error, setError, message } =
     useRemotesDialog(repositoryId, "configure");
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="space-y-4">
       <RemoteConfiguration
         remotes={state.remotes}
         edit={edit}

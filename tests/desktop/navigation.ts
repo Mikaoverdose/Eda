@@ -390,8 +390,54 @@ try {
     true,
   );
 
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await settings.click();
+  await page.getByRole("button", { name: "About", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Enable developer settings", exact: true }).check();
+
+  const sidebar = page.getByRole("navigation", { name: "Settings sections", exact: true });
+  const panels = await sidebar
+    .locator("button[aria-controls]")
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-controls")!));
+
+  for (const width of [1440, 700]) {
+    await page.setViewportSize({ width, height: 900 });
+
+    for (const id of panels) {
+      await sidebar.locator(`button[aria-controls="${id}"]`).click();
+      await page.locator(`#${id}`).waitFor();
+
+      if (id === "settings-debug") await page.locator(".component-gallery").waitFor();
+
+      const widths = await page.locator(`#${id}`).evaluate((panel) => {
+        const header = panel.querySelector("header")!.getBoundingClientRect();
+        const selectors = [":scope > div > :first-child"];
+
+        if (panel.id === "settings-global-git") selectors.push(":scope > div > div > :last-child");
+
+        if (panel.id === "settings-repository-sync")
+          selectors.push(":scope > div > div > section > div");
+
+        return [...panel.querySelectorAll(selectors.join(","))].map((content) => {
+          const bounds = content.getBoundingClientRect();
+
+          return { left: bounds.left - header.left, right: bounds.right - header.right };
+        });
+      });
+
+      assert.ok(widths.length > 0, `${id} must render content at ${width}px.`);
+
+      for (const bounds of widths) {
+        assert.ok(
+          Math.abs(bounds.left) < 1 && Math.abs(bounds.right) < 1,
+          `${id} must fill the shared settings content width at ${width}px: ${JSON.stringify(bounds)}`,
+        );
+      }
+    }
+  }
+
   console.log(
-    "Shared navigation motion passed: repository close/reopen, history/diff and commit/working-tree changes, pane resizing, Activity disclosure, retained drafts, reduced motion, pointer interruption, watching and scale restoration.",
+    "Shared navigation passed: repository close/reopen, history/diff and commit/working-tree changes, pane resizing, Activity disclosure, retained drafts, reduced motion, pointer interruption, watching, scale restoration and shared settings widths on wide and narrow windows.",
   );
 } finally {
   await app?.close();

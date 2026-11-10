@@ -31,7 +31,7 @@ export function StateSimulations() {
   ];
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <section aria-labelledby="update-simulation-heading" className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 id="update-simulation-heading" className="text-sm font-medium">

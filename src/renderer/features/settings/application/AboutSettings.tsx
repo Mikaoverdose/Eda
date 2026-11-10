@@ -78,7 +78,7 @@ export function AboutSettings() {
   }, []);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <section aria-labelledby="about-eda-heading" className="space-y-4">
         <div>
           <h2 id="about-eda-heading" className="text-2xl font-semibold tracking-tight">

@@ -15,7 +15,7 @@ export function FetchSettings({ repositoryId }: { repositoryId?: string }) {
       ? t("settings.fetchSettings.everyMinutes", { minutes: minutes })
       : t("settings.fetchSettings.off");
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="space-y-5">
       <h2 className="text-sm font-medium">{t("settings.fetchSettings.backgroundFetch")}</h2>
       <p className="text-xs text-text-secondary">
         {t("settings.fetchSettings.fetchOpenRepositoriesInTheActiveProfileWhileEdaIsRunning")}

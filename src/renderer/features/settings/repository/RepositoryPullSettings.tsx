@@ -40,7 +40,7 @@ export function RepositoryPullSettings({ repositoryId }: { repositoryId: string 
   };
 
   return (
-    <div className="max-w-xl space-y-3">
+    <div className="space-y-3">
       <label className="block space-y-2 text-sm">
         {t("settings.repositoryPullSettings.defaultPullStrategy")}
         <Select
