@@ -1,3 +1,4 @@
+import { commitGitConfig } from "@shared/identity/identity";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -28,6 +29,7 @@ const invalid = (message: ErrorText) =>
 
 export class ReplayService {
   private readonly recovery: DiscardService;
+
   private readonly reviews = new PreviewStore<{
     review: ReplayReview;
     root: string;
@@ -58,6 +60,7 @@ export class ReplayService {
       ["show", "--no-patch", "--no-walk=unsorted", "-z", "--format=%H%x00%P%x00%s", ...oids, "--"],
       { cwd: root, operation: t("operations.reviewReplayCommits"), maxStdoutBytes: 1024 * 1024 },
     );
+
     const fields = result.stdout.split("\0");
 
     if (fields.at(-1) === "") fields.pop();
@@ -126,6 +129,7 @@ export class ReplayService {
             throw invalid(
               errorText("main.replayService.noIsAvailableRefreshRepositoryState", { kind: kind }),
             );
+
           if (!matchesNativeWorkflow(record, workflow)) record = undefined;
 
           if (record && record.profileId !== identity.id)
@@ -181,10 +185,12 @@ export class ReplayService {
           snapshot = await this.recovery.prepareOperation(root, identity.id, repositoryId, [
             ...paths,
           ]);
+
           snapshot.record.source = "replay-recovery";
         }
 
         const captured = record?.identity ?? identity;
+
         const review: ReplayReview = {
           token: randomUUID(),
           kind,
@@ -301,14 +307,8 @@ export class ReplayService {
           this.journal.save(record);
         }
 
-        const signing = identity.signing;
         const config = {
-          "user.name": identity.gitName,
-          "user.email": identity.gitEmail,
-          "gpg.format": signing.format === "ssh" ? "ssh" : "openpgp",
-          "user.signingkey": signing.keyRef ?? "",
-          "commit.gpgsign":
-            signing.format !== "none" && !!signing.keyRef && signing.signCommits ? "true" : "false",
+          ...commitGitConfig(identity),
           "submodule.recurse": "false",
         };
 

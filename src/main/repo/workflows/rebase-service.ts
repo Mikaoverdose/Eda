@@ -1,3 +1,4 @@
+import { commitGitConfig } from "@shared/identity/identity";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { errorMessage, GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -33,6 +34,7 @@ const invalid = (message: ErrorText) =>
 
 export class RebaseService {
   private readonly recovery: DiscardService;
+
   private readonly reviews = new PreviewStore<{
     review: RebaseReview;
     root: string;
@@ -117,6 +119,7 @@ export class RebaseService {
             throw invalid(
               errorText("main.rebaseService.noNativeRebaseIsAvailableRefreshRepositoryState"),
             );
+
           if (!matchesNativeWorkflow(record, workflow)) record = undefined;
 
           if (record && record.profileId !== identity.id)
@@ -130,6 +133,7 @@ export class RebaseService {
             throw invalid(
               errorText("main.rebaseService.resolveAndStageEveryConflictBeforeContinuing"),
             );
+
           if (action === "amend" && !workflow.rebaseEdit)
             throw invalid(
               errorText("main.rebaseService.amendIsOnlyAvailableAtAResolvedInteractiveEditStop"),
@@ -174,6 +178,7 @@ export class RebaseService {
           snapshot = await this.recovery.prepareOperation(root, identity.id, repositoryId, [
             ...paths,
           ]);
+
           snapshot.record.source = "rebase-recovery";
         }
 
@@ -354,6 +359,7 @@ export class RebaseService {
           record.pullAutostash = await createPullAutostash(this.git, root, identity);
           this.journal.save(record);
         }
+
         const rewriteStart =
           review.action === "amend" || review.action === "abort"
             ? undefined
@@ -364,14 +370,8 @@ export class RebaseService {
           this.journal.save(record);
         }
 
-        const signing = identity.signing;
         const config = {
-          "user.name": identity.gitName,
-          "user.email": identity.gitEmail,
-          "gpg.format": signing.format === "ssh" ? "ssh" : "openpgp",
-          "user.signingkey": signing.keyRef ?? "",
-          "commit.gpgsign":
-            signing.format !== "none" && !!signing.keyRef && signing.signCommits ? "true" : "false",
+          ...commitGitConfig(identity),
           "rebase.autoStash": "false",
           "rebase.updateRefs": "false",
           "submodule.recurse": "false",
@@ -396,6 +396,7 @@ export class RebaseService {
         const sequenceEditor = plan
           ? await writeRebasePlan(this.git, root, record.id, plan)
           : "true";
+
         const result = await this.git.exec(
           [
             ...Object.entries(config).flatMap(([key, value]) => ["-c", `${key}=${value}`]),

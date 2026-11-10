@@ -99,6 +99,7 @@ export class IdentityRepository {
       .set({ sshKeyPath: path, updatedAt: new Date().toISOString() })
       .where(eq(identities.id, id))
       .run();
+
     return this.findById(id);
   }
 
@@ -130,12 +131,13 @@ export class IdentityRepository {
     this.db.update(appState).set({ activeIdentityId: id }).where(eq(appState.id, 1)).run();
   }
 
-  private requireAvailableName(name: string, exceptId?: string): void {
+  requireAvailableName(name: string, exceptId?: string): void {
     const existing = this.db
       .select({ id: identities.id })
       .from(identities)
       .where(eq(identities.nameKey, profileNameKey(name)))
       .get();
+
     if (existing && existing.id !== exceptId) {
       throw new GitError({
         kind: "invalid-input",
@@ -207,6 +209,7 @@ function profileNameKey(name: string): string {
 function parseRules(value: string): string[] {
   try {
     const parsed: unknown = JSON.parse(value);
+
     return Array.isArray(parsed)
       ? parsed.filter((rule): rule is string => typeof rule === "string")
       : [];

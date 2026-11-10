@@ -70,6 +70,7 @@ export class IdentityManager {
             "main.identity.identityManager.theActiveProfileChangedReviewItsGitSettingsBeforeApplyingThem",
           ),
         });
+
       if (!(this.preferences?.resolve("syncGlobalGitConfig", { profileId: id }).value ?? true))
         throw new GitError({
           kind: "invalid-input",
@@ -78,6 +79,7 @@ export class IdentityManager {
             "main.identity.identityManager.globalGitSynchronizationIsDisabledForThisProfile",
           ),
         });
+
       await this.activate(this.requireIdentity(id));
     });
   }
@@ -87,9 +89,11 @@ export class IdentityManager {
       profileId: profile.id,
       repositoryId,
     }).value;
+
     const identity = override
       ? { ...profile, gitName: override.name, gitEmail: override.email }
       : profile;
+
     this.assertOperationIdentity(identity);
     return { ...identity, signing: { ...identity.signing } };
   }
@@ -121,6 +125,7 @@ export class IdentityManager {
 
       if (fallbackId) {
         const fallback = this.requireIdentity(fallbackId);
+
         await this.activate(fallback, async () => {
           await cleanup();
           return fallback;
@@ -136,26 +141,14 @@ export class IdentityManager {
   async update(id: string, draft: Partial<IdentityDraft>): Promise<Identity> {
     return this.serialize(async () => {
       const previous = this.requireIdentity(id);
+
       const proposed = {
         ...previous,
         ...draft,
         signing: { ...previous.signing, ...draft.signing },
       };
 
-      if (
-        this.identities
-          .list()
-          .some(
-            (item) =>
-              item.id !== id && item.name.toLocaleLowerCase() === proposed.name.toLocaleLowerCase(),
-          )
-      ) {
-        throw new GitError({
-          kind: "invalid-input",
-          operation: t("operations.saveProfile"),
-          message: errorText("main.identity.identityManager.aProfileWithThatNameAlreadyExists"),
-        });
-      }
+      this.identities.requireAvailableName(proposed.name, id);
 
       if (this.getActive()?.id !== id) return this.identities.update(id, draft)!;
 
@@ -186,104 +179,66 @@ export class IdentityManager {
     const enabled =
       this.preferences?.resolve("syncGlobalGitConfig", { profileId: candidate.id }).value ?? true;
     const steps: IdentitySwitchStep[] = [];
-    const writes: { key: string; previous: string | undefined; written: string | undefined }[] = [];
-    let identity = candidate;
+    this.assertOperationIdentity(candidate);
 
-    try {
-      this.assertOperationIdentity(candidate);
-      if (enabled) {
-        const expected = profileGitConfig(candidate);
-
-        for (const [key, value] of Object.entries(expected)) {
-          const previous = await this.git.readConfig(key, { scope: "global" });
-          if (previous === value) continue;
-          // Record this before writing: Git can change the config even if the write fails.
-          writes.push({ key, previous, written: value });
-          if (value === undefined) await this.git.unsetConfig(key, { scope: "global" });
-          else await this.git.writeConfig(key, value, { scope: "global" });
+    const identity = await this.configure(
+      enabled ? profileGitConfig(candidate) : {},
+      { scope: "global" },
+      {
+        verify: (key) =>
+          new GitError({
+            kind: "config-write-refused",
+            operation: t("operations.switchProfile"),
+            message: errorText("main.identity.identityManager.gitDidNotRecordCorrectly", { key }),
+            suggestedAction: errorText(
+              "main.identity.identityManager.checkWhetherYourGlobalGitConfigurationIsWritable",
+            ),
+          }),
+        rollback: (incomplete) =>
+          new GitError({
+            kind: "config-write-refused",
+            operation: t("operations.switchProfile"),
+            message: errorText(
+              "main.identity.identityManager.theProfileWasNotSwitchedSomeGlobalGitValuesCouldNotBeRestored",
+            ),
+            suggestedAction: errorText(
+              "main.identity.identityManager.inspectInYourGlobalGitConfigurationExternalEditsWerePreserved",
+              { incomplete: incomplete.join(", ") },
+            ),
+          }),
+      },
+      async () => {
+        for (const name of [
+          "write-global-config",
+          "verify-read-back",
+          "write-signing-config",
+        ] as const) {
+          steps.push({ name, status: enabled ? "ok" : "skipped" });
         }
 
-        for (const [key, value] of Object.entries(expected)) {
-          if ((await this.git.readConfig(key, { scope: "global" })) !== value) {
-            throw new GitError({
-              kind: "config-write-refused",
-              operation: t("operations.switchProfile"),
-              message: errorText("main.identity.identityManager.gitDidNotRecordCorrectly", {
-                key: key,
-              }),
-              suggestedAction: errorText(
-                "main.identity.identityManager.checkWhetherYourGlobalGitConfigurationIsWritable",
-              ),
-            });
-          }
-        }
-      }
-
-      for (const name of [
-        "write-global-config",
-        "verify-read-back",
-        "write-signing-config",
-      ] as const) {
-        steps.push({ name, status: enabled ? "ok" : "skipped" });
-      }
-
-      steps.push({
-        name: "activate-ssh-key",
-        status: candidate.sshKeyPath
-          ? existsSync(candidate.sshKeyPath)
-            ? "ok"
-            : "failed"
-          : "skipped",
-        ...(candidate.sshKeyPath
-          ? {
-              detail: existsSync(candidate.sshKeyPath)
-                ? candidate.sshKeyPath
-                : t(
-                    "main.identity.identityManager.theAssignedSshKeyIsMissingRestoreItBeforeRemoteOperations",
-                  ),
-            }
-          : {}),
-      });
-      identity = persist ? await persist() : candidate;
-      this.identities.setActiveId(identity.id);
-    } catch (error) {
-      const incomplete: string[] = [];
-
-      for (const write of writes.reverse()) {
-        try {
-          const current = await this.git.readConfig(write.key, { scope: "global" });
-
-          if (current === write.previous) continue;
-
-          if (current !== write.written) {
-            incomplete.push(write.key);
-            continue;
-          }
-
-          if (write.previous === undefined)
-            await this.git.unsetConfig(write.key, { scope: "global" });
-          else await this.git.writeConfig(write.key, write.previous, { scope: "global" });
-        } catch {
-          incomplete.push(write.key);
-        }
-      }
-
-      if (incomplete.length > 0) {
-        throw new GitError({
-          kind: "config-write-refused",
-          operation: t("operations.switchProfile"),
-          message: errorText(
-            "main.identity.identityManager.theProfileWasNotSwitchedSomeGlobalGitValuesCouldNotBeRestored",
-          ),
-          suggestedAction: errorText(
-            "main.identity.identityManager.inspectInYourGlobalGitConfigurationExternalEditsWerePreserved",
-            { incomplete: incomplete.join(", ") },
-          ),
+        steps.push({
+          name: "activate-ssh-key",
+          status: candidate.sshKeyPath
+            ? existsSync(candidate.sshKeyPath)
+              ? "ok"
+              : "failed"
+            : "skipped",
+          ...(candidate.sshKeyPath
+            ? {
+                detail: existsSync(candidate.sshKeyPath)
+                  ? candidate.sshKeyPath
+                  : t(
+                      "main.identity.identityManager.theAssignedSshKeyIsMissingRestoreItBeforeRemoteOperations",
+                    ),
+              }
+            : {}),
         });
-      }
 
-      throw error;
-    }
+        const identity = persist ? await persist() : candidate;
+        this.identities.setActiveId(identity.id);
+        return identity;
+      },
+    );
 
     this.emit(identity);
 
@@ -330,34 +285,68 @@ export class IdentityManager {
 
   async applyToRepository(repositoryPath: string, identity: Identity): Promise<void> {
     const options = { scope: "local" as const, cwd: repositoryPath };
-    const expected = {
-      "user.name": identity.gitName,
-      "user.email": identity.gitEmail,
-      ...this.expectedSigningConfig(identity),
-    };
+
+    const expected = profileGitConfig(
+      identity.signing.keyRef
+        ? identity
+        : { ...identity, signing: { format: "none", signCommits: false } },
+    );
+
+    await this.configure(
+      expected,
+      options,
+      {
+        verify: (key) =>
+          new AppError(errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.IDENTITY_NOT_RECORDED], { key })),
+        rollback: (incomplete) =>
+          new GitError({
+            kind: "config-write-refused",
+            operation: t("operations.applyProfile"),
+            message: errorText(
+              "main.identity.identityManager.someLocalGitValuesCouldNotBeRestoredExternalEditsWerePreserved",
+              { incomplete: incomplete.join(", ") },
+            ),
+            repositoryPath,
+          }),
+      },
+      async () => {},
+    );
+  }
+
+  private async configure<T>(
+    expected: Record<string, string | undefined>,
+    options: { scope: "global" | "local"; cwd?: string },
+    errors: { verify: (key: string) => Error; rollback: (keys: string[]) => Error },
+    complete: () => Promise<T>,
+  ): Promise<T> {
     const writes: { key: string; previous: string | undefined; written: string | undefined }[] = [];
+
+    const write = (key: string, value: string | undefined) =>
+      value === undefined
+        ? this.git.unsetConfig(key, options)
+        : this.git.writeConfig(key, value, options);
 
     try {
       for (const [key, written] of Object.entries(expected)) {
         const previous = await this.git.readConfig(key, options);
         if (previous === written) continue;
+
+        // Git can change the config even when the write reports a failure.
         writes.push({ key, previous, written });
-        if (written === undefined) await this.git.unsetConfig(key, options);
-        else await this.git.writeConfig(key, written, options);
+        await write(key, written);
       }
 
-      for (const [key, value] of Object.entries(expected))
-        if ((await this.git.readConfig(key, options)) !== value)
-          throw new AppError(
-            errorText(ERROR_MESSAGE_KEYS[ERROR_CODE.IDENTITY_NOT_RECORDED], { key: key }),
-          );
+      for (const [key, value] of Object.entries(expected)) {
+        if ((await this.git.readConfig(key, options)) !== value) throw errors.verify(key);
+      }
+
+      return await complete();
     } catch (error) {
       const incomplete: string[] = [];
 
       for (const { key, previous, written } of writes.reverse()) {
         try {
           const current = await this.git.readConfig(key, options);
-
           if (current === previous) continue;
 
           if (current !== written) {
@@ -365,38 +354,15 @@ export class IdentityManager {
             continue;
           }
 
-          if (previous === undefined) await this.git.unsetConfig(key, options);
-          else await this.git.writeConfig(key, previous, options);
+          await write(key, previous);
         } catch {
           incomplete.push(key);
         }
       }
 
-      if (incomplete.length)
-        throw new GitError({
-          kind: "config-write-refused",
-          operation: t("operations.applyProfile"),
-          message: errorText(
-            "main.identity.identityManager.someLocalGitValuesCouldNotBeRestoredExternalEditsWerePreserved",
-            { incomplete: incomplete.join(", ") },
-          ),
-          repositoryPath,
-        });
-
+      if (incomplete.length) throw errors.rollback(incomplete);
       throw error;
     }
-  }
-
-  private expectedSigningConfig(identity: Identity): Record<string, string | undefined> {
-    if (identity.signing.format === "none" || !identity.signing.keyRef) {
-      return { "gpg.format": undefined, "user.signingkey": undefined, "commit.gpgsign": "false" };
-    }
-
-    return {
-      "gpg.format": identity.signing.format === "gpg" ? "openpgp" : "ssh",
-      "user.signingkey": identity.signing.keyRef,
-      "commit.gpgsign": identity.signing.signCommits ? "true" : "false",
-    };
   }
 
   private emit(identity: Identity | null): void {

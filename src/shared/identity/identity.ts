@@ -19,6 +19,7 @@ export interface CommitIdentity {
 export function isCommitIdentity(value: unknown): value is CommitIdentity {
   if (!isRecord(value)) return false;
   const { name, email } = value;
+
   return (
     typeof name === "string" &&
     name.length > 0 &&
@@ -34,6 +35,7 @@ export function isCommitIdentity(value: unknown): value is CommitIdentity {
 
 export function profileGitConfig(identity: Identity): Record<string, string | undefined> {
   const signing = identity.signing;
+
   return {
     "user.name": identity.gitName,
     "user.email": identity.gitEmail,
@@ -41,6 +43,18 @@ export function profileGitConfig(identity: Identity): Record<string, string | un
       signing.format === "none" ? undefined : signing.format === "gpg" ? "openpgp" : "ssh",
     "user.signingkey": signing.format === "none" ? undefined : signing.keyRef,
     "commit.gpgsign": signing.format !== "none" && signing.signCommits ? "true" : "false",
+  };
+}
+
+export function commitGitConfig(identity: Identity): Record<string, string> {
+  const { signing } = identity;
+
+  return {
+    ...profileGitConfig(identity),
+    "gpg.format": signing.format === "ssh" ? "ssh" : "openpgp",
+    "user.signingkey": signing.keyRef ?? "",
+    "commit.gpgsign":
+      signing.format !== "none" && !!signing.keyRef && signing.signCommits ? "true" : "false",
   };
 }
 

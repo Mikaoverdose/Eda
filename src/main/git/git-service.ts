@@ -1,3 +1,4 @@
+import { commitGitConfig } from "@shared/identity/identity";
 import { isUtf8 } from "node:buffer";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
@@ -45,6 +46,7 @@ const UNIFIED_DIFF_FLAGS = [
   "--full-index",
   "--unified=3",
 ] as const;
+
 const DIFF_OUTPUT_LIMITS = { maxStdoutBytes: 32 * 1024 * 1024, maxStderrBytes: 1024 * 1024 };
 
 export interface GitExecOptions {
@@ -148,10 +150,12 @@ export class GitService {
       options.signal && this.operations?.signal
         ? AbortSignal.any([options.signal, this.operations.signal])
         : (options.signal ?? this.operations?.signal);
+
     const env = buildGitEnvironment({
       ...options.env,
       overrides: { ...this.engine.environment, ...this.baseEnv, ...options.env?.overrides },
     });
+
     if (this.baseEnv["SSH_AUTH_SOCK"] !== undefined) {
       // Don't let ~/.ssh/config switch away from Eda's SSH agent.
       env["SSH_AUTH_SOCK"] = this.baseEnv["SSH_AUTH_SOCK"];
@@ -160,6 +164,7 @@ export class GitService {
 
     let cwd = options.cwd ?? this.trust?.neutralDirectory;
     const repositoryArgs: string[] = [];
+
     if (this.trust) {
       if (options.cwd) {
         if (args[0] === "init" && !(await this.trust.findRoot(options.cwd))) {
@@ -174,20 +179,24 @@ export class GitService {
           // Let Git discover the approved metadata so its native ownership check still runs.
           cwd = repository.root;
           env["GIT_CEILING_DIRECTORIES"] = dirname(repository.root);
+
           repositoryArgs.push(
             `--work-tree=${repository.root}`,
             "-c",
             "safe.bareRepository=explicit",
           );
+
           if (env["EDA_SSH_HOST_TRUST"]) repositoryArgs.push("-c", "core.hooksPath=/dev/null");
         }
       } else {
         env["GIT_CEILING_DIRECTORIES"] = dirname(this.trust.neutralDirectory);
       }
     }
+
     if (args[0] === "clone") {
       // An attribute in the first checkout can select a global filter that executes a tracked file.
       const remote = args[args.indexOf("--") + 1];
+
       if (remote?.startsWith("https://") && this.trust) {
         for (const [key, variable] of [
           ["http.sslCAInfo", "GIT_SSL_CAINFO"],
@@ -198,6 +207,7 @@ export class GitService {
             allowedExitCodes: [0, 1],
             maxStdoutBytes: 16 * 1024,
           });
+
           if (exitCode === 0) {
             const value = stdout.replace(/\r?\n$/, "");
             if (variable) env[variable] = value;
@@ -205,10 +215,12 @@ export class GitService {
           }
         }
       }
+
       env["GIT_CONFIG_NOSYSTEM"] = "1";
       env["GIT_CONFIG_GLOBAL"] = "/dev/null";
       env["GIT_TEMPLATE_DIR"] = "";
     }
+
     env["GIT_NO_LAZY_FETCH"] = "1";
     env["GIT_ALLOW_PROTOCOL"] ??= "https:ssh:file";
 
@@ -341,6 +353,7 @@ export class GitService {
         operation: t("operations.checkRepository"),
         signal: AbortSignal.timeout(10_000),
       });
+
       return stdout.trim() === "true";
     } catch (error) {
       if (error instanceof GitError && error.kind === "not-a-repository") return false;
@@ -375,6 +388,7 @@ export class GitService {
         repositoryPath: path,
         message: errorText("main.git.gitService.unsupportedStatusEncoding"),
       });
+
     return parseOutput(parseStatus, stdoutBytes, path, t("operations.readStatus"));
   }
 
@@ -423,6 +437,7 @@ export class GitService {
         ];
 
     const stashes = page.showStashes ? await readStashHistory(this, path) : null;
+
     const { stdoutBytes } = await this.exec(
       [
         "log",
@@ -557,6 +572,7 @@ export class GitService {
             maxStderrBytes: 64 * 1024,
           },
         );
+
         if (status.stdout.trim() === "B")
           return { ...verification, status: "invalid", reasonCode: "bad-signature" };
       }
@@ -566,6 +582,7 @@ export class GitService {
       if (error instanceof GitError && error.kind === "cancelled") throw error;
       const diagnostics =
         error instanceof GitError ? error.rawStderr || error.message : String(error);
+
       return {
         ...parseCommitVerification(format, 1, diagnostics),
         status: "unverified",
@@ -597,6 +614,7 @@ export class GitService {
 
     const status = await this.status(path);
     const selected = options.paths?.length ? new Set(options.paths) : undefined;
+
     const untracked = status.changes.filter(
       (change) => change.kind === "untracked" && (!selected || selected.has(change.path)),
     );
@@ -611,6 +629,7 @@ export class GitService {
       if (remaining <= 0) throw outputTooLarge(path, t("operations.readWorkingDiff"));
 
       const nullPath = process.platform === "win32" ? "NUL" : "/dev/null";
+
       const result = await this.exec(
         [
           "-c",
@@ -632,6 +651,7 @@ export class GitService {
       );
 
       remaining -= result.stdoutBytes.length;
+
       diff.files.push(
         ...parseOutput(
           parseUnifiedDiff,
@@ -649,6 +669,7 @@ export class GitService {
     assertFullObjectId(oid, t("operations.readCommitDiff"));
 
     const safePaths = literalPathspecs(paths, t("operations.readCommitDiff"));
+
     const { stdoutBytes } = await this.exec(
       [
         "-c",
@@ -713,6 +734,7 @@ export class GitService {
         cwd: path,
         operation: t("operations.unstageChanges"),
       });
+
       return;
     }
 
@@ -728,6 +750,7 @@ export class GitService {
         cwd: path,
         operation: t("operations.unstageAllChanges"),
       });
+
       return;
     }
 
@@ -764,16 +787,7 @@ export class GitService {
     const overrides: Record<string, string> = {};
 
     if (identity) {
-      const signing = identity.signing;
-      // Hooks inherit these -c values through Git's config environment.
-      const config = {
-        "user.name": identity.gitName,
-        "user.email": identity.gitEmail,
-        "gpg.format": signing.format === "ssh" ? "ssh" : "openpgp",
-        "user.signingkey": signing.keyRef ?? "",
-        "commit.gpgsign":
-          signing.format !== "none" && !!signing.keyRef && signing.signCommits ? "true" : "false",
-      };
+      const config = commitGitConfig(identity);
 
       args.unshift(...Object.entries(config).flatMap(([key, value]) => ["-c", `${key}=${value}`]));
       overrides["GIT_COMMITTER_NAME"] = identity.gitName;
@@ -811,6 +825,7 @@ export class GitService {
       assertFullObjectId(options.startPoint, t("operations.createBranch"));
 
     const start = options.startPoint === undefined ? [] : [options.startPoint];
+
     const args = options.checkout
       ? ["checkout", "--no-overwrite-ignore", "-b", name, ...start]
       : ["branch", name, ...start];
@@ -820,6 +835,7 @@ export class GitService {
 
   async checkoutBranch(path: string, name: string): Promise<void> {
     assertValidRefName(name, t("operations.checkoutBranch"));
+
     await this.exec(["checkout", "--no-overwrite-ignore", name, "--"], {
       cwd: path,
       operation: t("operations.checkoutBranch"),
@@ -828,6 +844,7 @@ export class GitService {
 
   async deleteBranch(path: string, name: string, options: { force?: boolean } = {}): Promise<void> {
     assertValidRefName(name, t("operations.deleteBranch"));
+
     await this.exec(["branch", options.force ? "-D" : "-d", name], {
       cwd: path,
       operation: t("operations.deleteBranch"),
@@ -837,6 +854,7 @@ export class GitService {
   async renameBranch(path: string, from: string, to: string): Promise<void> {
     assertValidRefName(from, t("operations.renameBranch"));
     assertValidRefName(to, t("operations.renameBranch"));
+
     await this.exec(["branch", "-m", from, to], {
       cwd: path,
       operation: t("operations.renameBranch"),
@@ -895,6 +913,7 @@ export class GitService {
       });
 
     const target = options.target === undefined ? [] : [options.target];
+
     const args = options.message
       ? [
           "-c",
@@ -945,6 +964,7 @@ export class GitService {
       cwd: path,
       operation: t("operations.resolveTag"),
     });
+
     const oid = stdout.trim();
 
     assertFullObjectId(oid, t("operations.verifyTag"));
@@ -1021,6 +1041,7 @@ export class GitService {
 
   async checkoutTag(path: string, name: string): Promise<void> {
     assertValidRefName(name, t("operations.checkoutTag"));
+
     await this.exec(["checkout", "--no-overwrite-ignore", "--detach", `refs/tags/${name}`, "--"], {
       cwd: path,
       operation: t("operations.checkoutTag"),
@@ -1033,6 +1054,7 @@ export class GitService {
       operation: t("operations.readRepositoryState"),
       allowedExitCodes: [0, 1],
     });
+
     return exitCode === 0;
   }
 
@@ -1041,15 +1063,18 @@ export class GitService {
       cwd: path,
       operation: t("operations.openRepository"),
     });
+
     return stdout.replace(/\r?\n$/, "");
   }
 
   async isRefNameValid(ref: string): Promise<boolean> {
     assertValidRefName(ref, t("operations.validateReferenceName"));
+
     const { exitCode } = await this.exec(["check-ref-format", "--branch", ref], {
       operation: t("operations.validateReferenceName"),
       allowedExitCodes: [0, 1, 128, 129],
     });
+
     return exitCode === 0;
   }
 
@@ -1058,6 +1083,7 @@ export class GitService {
     options: { cwd?: string; scope?: "global" | "local" } = {},
   ): Promise<GitConfigEntry> {
     const showScope = this.engine.versionParts.major > 2 || this.engine.versionParts.minor >= 26;
+
     const result = await this.exec(
       [
         "config",
@@ -1096,6 +1122,7 @@ export class GitService {
   ): Promise<string | undefined> {
     const scopeArgs =
       options.scope === "global" ? ["--global"] : options.scope === "local" ? ["--local"] : [];
+
     const { stdout, exitCode } = await this.exec(["config", ...scopeArgs, "--get", "--", key], {
       ...(options.cwd !== undefined && { cwd: options.cwd }),
       operation: t("operations.readGitConfiguration"),

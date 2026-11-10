@@ -10,6 +10,7 @@ const fixtures: { repo: TempRepo; db: Database }[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
+
   for (const { repo, db } of fixtures.splice(0)) {
     db.close();
     await repo.cleanup();
@@ -23,6 +24,7 @@ async function setup(homeSync?: boolean) {
   fixtures.push({ repo, db });
 
   const profiles = new IdentityRepository(db);
+
   const work = profiles.create({
     name: "Work",
     gitName: "Eda Work",
@@ -56,9 +58,11 @@ describe("profile Git synchronization", () => {
     await manager.setActive(work.id);
     await repo.git.writeConfig("user.email", "external@example.com", { scope: "global" });
     expect(manager.getActive()?.gitEmail).toBe(work.gitEmail);
+
     expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(
       "external@example.com",
     );
+
     await manager.reapplyGlobal(work.id);
     expect(manager.getActive()?.id).toBe(work.id);
     expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(work.gitEmail);
@@ -71,9 +75,11 @@ describe("profile Git synchronization", () => {
     settings.set("syncGlobalGitConfig", { kind: "application" }, false);
     await repo.git.writeConfig("user.email", "external@example.com", { scope: "global" });
     await expect(manager.reapplyGlobal(work.id)).rejects.toThrow(/disabled/);
+
     expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(
       "external@example.com",
     );
+
     settings.set("syncGlobalGitConfig", { kind: "profile", profileId: work.id }, true);
     await manager.reapplyGlobal(work.id);
     expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(work.gitEmail);
@@ -90,8 +96,10 @@ describe("profile Git synchronization", () => {
     expect(result.map((item) => item.status)).toEqual(["fulfilled", "rejected"]);
     expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(home.gitEmail);
   });
+
   it("preserves machine helper, tool, proxy and certificate configuration across profile switches", async () => {
     const { manager, work, home, repo } = await setup();
+
     const configuration = {
       "credential.helper": "manager",
       "credential.useHttpPath": "true",
@@ -123,10 +131,13 @@ describe("profile Git synchronization", () => {
       if (key === "user.email") throw new Error("config denied");
       return original(key, value, options);
     });
+
     await expect(manager.applyToRepository(repo.path, work)).rejects.toThrow(/denied/);
+
     expect(await repo.git.readConfig("user.name", { cwd: repo.path, scope: "local" })).toBe(
       "Original",
     );
+
     expect(await repo.git.readConfig("core.editor", { cwd: repo.path, scope: "local" })).toBe(
       "my-editor",
     );
@@ -184,9 +195,11 @@ describe("profile Git synchronization", () => {
       if (key === "user.email") throw new Error("read-only config");
       return original(key, value, options);
     });
+
     await expect(
       manager.update(work.id, { gitName: "New name", gitEmail: "new@example.com" }),
     ).rejects.toThrow();
+
     expect(profiles.findById(work.id)?.gitEmail).toBe(work.gitEmail);
     expect(manager.getActive()?.id).toBe(work.id);
     expect(await repo.git.readConfig("user.name", { scope: "global" })).toBe(work.gitName);
@@ -204,12 +217,15 @@ describe("profile Git synchronization", () => {
         await original("user.name", "External author", { scope: "global" });
         throw new Error("another client changed config");
       }
+
       return original(key, value, options);
     });
+
     await expect(manager.setActive(home.id)).rejects.toMatchObject({
       kind: "config-write-refused",
       suggestedAction: expect.stringContaining("user.name"),
     });
+
     expect(await repo.git.readConfig("user.name", { scope: "global" })).toBe("External author");
     expect(manager.getActive()?.id).toBe(work.id);
   });
@@ -217,9 +233,69 @@ describe("profile Git synchronization", () => {
   it("rejects case-insensitive duplicate names before changing Git configuration", async () => {
     const { manager, work, home, repo } = await setup();
     await manager.setActive(work.id);
+
     await expect(manager.update(work.id, { name: home.name.toUpperCase() })).rejects.toMatchObject({
       kind: "invalid-input",
     });
+
     expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(work.gitEmail);
+  });
+
+  it("rejects normalized duplicate names before making any Git writes", async () => {
+    const { manager, work, repo, profiles } = await setup();
+    await manager.setActive(work.id);
+    const writes = vi.spyOn(repo.git, "writeConfig");
+
+    await expect(
+      manager.update(work.id, {
+        name: "  Ｈｏｍｅ  ",
+        gitName: "Changed author",
+      }),
+    ).rejects.toMatchObject({ kind: "invalid-input" });
+
+    expect(writes).not.toHaveBeenCalled();
+    expect(profiles.findById(work.id)?.gitName).toBe(work.gitName);
+  });
+
+  it("rolls global configuration back when saving profile metadata fails", async () => {
+    const { manager, work, repo, profiles } = await setup();
+    await manager.setActive(work.id);
+
+    vi.spyOn(profiles, "update").mockImplementation(() => {
+      throw new Error("database unavailable");
+    });
+
+    await expect(
+      manager.update(work.id, {
+        gitName: "New author",
+        gitEmail: "new@example.com",
+      }),
+    ).rejects.toThrow("database unavailable");
+
+    expect(await repo.git.readConfig("user.name", { scope: "global" })).toBe(work.gitName);
+    expect(await repo.git.readConfig("user.email", { scope: "global" })).toBe(work.gitEmail);
+    expect(manager.getActive()?.id).toBe(work.id);
+  });
+
+  it("preserves external local config edits when a later write fails", async () => {
+    const { manager, work, repo } = await setup();
+    const options = { cwd: repo.path, scope: "local" as const };
+    const write = repo.git.writeConfig.bind(repo.git);
+    await write("user.name", "Original", options);
+
+    vi.spyOn(repo.git, "writeConfig").mockImplementation(async (key, value, options) => {
+      if (key === "user.email") {
+        await write("user.name", "External author", options);
+        throw new Error("write interrupted");
+      }
+
+      return write(key, value, options);
+    });
+
+    await expect(manager.applyToRepository(repo.path, work)).rejects.toMatchObject({
+      kind: "config-write-refused",
+    });
+
+    expect(await repo.git.readConfig("user.name", options)).toBe("External author");
   });
 });
