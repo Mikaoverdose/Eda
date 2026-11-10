@@ -51,21 +51,26 @@ function ReplayDialogContent({
   const [recoveryWarning, setRecoveryWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pages = useRepositoryStore((state) => state.pages);
+
   const commits = [
     ...new Map(
       pages.flatMap((page) => page.commits).map((commit) => [commit.oid, commit]),
     ).values(),
   ];
+
   const title = replayActionLabel(kind, action);
+
   const change = (next: string[]) => {
     setOids(next);
     setDirty(true);
     setConfirmed(false);
   };
+
   const add = (oid: string) => {
     if (oid.trim() && !oids.includes(oid.trim())) change([...oids, oid.trim()]);
     setInput("");
   };
+
   const prepare = async () => {
     const generation = ++request.current;
     setBusy(true);
@@ -84,6 +89,7 @@ function ReplayDialogContent({
       );
 
       if (generation !== request.current) return;
+
       if (result.ok) {
         setReview(result.value);
         setDirty(false);
@@ -100,6 +106,7 @@ function ReplayDialogContent({
 
   useEffect(() => {
     void prepare();
+
     return () => {
       request.current += 1;
     };
@@ -143,9 +150,8 @@ function ReplayDialogContent({
     <Dialog
       title={title}
       wide
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       description={
         action === "start"
           ? kind === "cherry-pick"
@@ -180,9 +186,11 @@ function ReplayDialogContent({
     >
       <div className="space-y-3 text-xs">
         {recoveryWarning && <p role="status">{recoveryWarning}</p>}
+
         {action === "start" && (
           <>
             <p>{t("replayDialog.executionOrderTopToBottomAddUpTo100")}</p>
+
             <Select
               aria-label={t("replayDialog.addCommitFromLoadedHistory")}
               value=""
@@ -192,6 +200,7 @@ function ReplayDialogContent({
               onValueChange={(value) => add(value)}
             >
               <option value="">{t("replayDialog.addACommitFromLoadedHistory")}</option>
+
               {commits
                 .filter((commit) => !oids.includes(commit.oid))
                 .map((commit) => (
@@ -200,6 +209,7 @@ function ReplayDialogContent({
                   </option>
                 ))}
             </Select>
+
             <div className="flex gap-2">
               <Input
                 aria-label={t("replayDialog.commitIdToAdd")}
@@ -208,6 +218,7 @@ function ReplayDialogContent({
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={t("replayDialog.orPasteAFullCommitId")}
               />
+
               <Button
                 size="sm"
                 disabled={busy || !input.trim() || oids.length >= 100}
@@ -216,6 +227,7 @@ function ReplayDialogContent({
                 {t("replayDialog.addCommit")}
               </Button>
             </div>
+
             <ol className="max-h-56 overflow-auto space-y-2">
               {oids.map((oid, index) => (
                 <li
@@ -224,10 +236,12 @@ function ReplayDialogContent({
                 >
                   <span>{index + 1}.</span>
                   <code title={oid}>{oid.slice(0, 8)}</code>
+
                   <span className="min-w-0 flex-1 truncate">
                     {review?.commits.find((commit) => commit.oid === oid)?.subject ??
                       commits.find((commit) => commit.oid === oid)?.subject}
                   </span>
+
                   {[-1, 1].map((direction) => (
                     <Button
                       key={direction}
@@ -239,10 +253,12 @@ function ReplayDialogContent({
                       })}
                       onClick={() => {
                         const next = [...oids];
+
                         [next[index], next[index + direction]] = [
                           next[index + direction]!,
                           next[index]!,
                         ];
+
                         change(next);
                       }}
                     >
@@ -253,6 +269,7 @@ function ReplayDialogContent({
                       )}
                     </Button>
                   ))}
+
                   <Button
                     size="sm"
                     disabled={busy}
@@ -264,10 +281,12 @@ function ReplayDialogContent({
                 </li>
               ))}
             </ol>
+
             {needsMainline && (
               <>
                 <label className="flex gap-2 items-center">
                   {t("replayDialog.mainlineParentForEverySelectedMerge")}
+
                   <Select
                     aria-label={t("replayDialog.mainlineParent")}
                     value={mainline ?? ""}
@@ -280,6 +299,7 @@ function ReplayDialogContent({
                     }}
                   >
                     <option value="">{t("replayDialog.chooseExplicitly")}</option>
+
                     {Array.from(
                       { length: Math.min(...merges.map((commit) => commit.parents.length)) },
                       (_, index) => (
@@ -290,10 +310,13 @@ function ReplayDialogContent({
                     )}
                   </Select>
                 </label>
+
                 <p>{t("replayDialog.theChangeIsComputedRelativeToThatParent")}</p>
+
                 {merges.map((commit) => (
                   <div key={commit.oid}>
                     <p>{commit.subject}</p>
+
                     <ol className="font-mono">
                       {commit.parents.map((parent, index) => (
                         <li key={parent}>
@@ -307,6 +330,7 @@ function ReplayDialogContent({
             )}
           </>
         )}
+
         {review && (
           <>
             <p>
@@ -318,9 +342,11 @@ function ReplayDialogContent({
                 }}
               />
             </p>
+
             <p>
               {t("replayDialog.committerDetails", { author: review.author, email: review.email })}
             </p>
+
             {(action === "abort" || action === "skip") && (
               <>
                 <p>
@@ -329,6 +355,7 @@ function ReplayDialogContent({
                     recoveryBytes: review.recoveryBytes.toLocaleString(getLocale()),
                   })}
                 </p>
+
                 <ul className="max-h-36 overflow-auto font-mono">
                   {review.paths.map((path) => (
                     <li key={path}>{path}</li>
@@ -336,11 +363,13 @@ function ReplayDialogContent({
                 </ul>
               </>
             )}
+
             {dirty && (
               <p className="text-git-modified">
                 {t("replayDialog.reviewTheChangedSelectionBeforeConfirming")}
               </p>
             )}
+
             <Checkbox
               disabled={busy || dirty}
               checked={confirmed}
@@ -350,6 +379,7 @@ function ReplayDialogContent({
             </Checkbox>
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

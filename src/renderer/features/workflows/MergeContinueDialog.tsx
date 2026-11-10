@@ -17,6 +17,7 @@ export function MergeContinueDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [discard, setDiscard] = useState(false);
+
   const refresh = async (keepMessage = false) => {
     setBusy(true);
     setError(null);
@@ -42,10 +43,10 @@ export function MergeContinueDialog({
   }, [repositoryId]);
 
   const close = () => {
-    if (busy) return;
     if (review && message !== review.message) setDiscard(true);
     else onClose();
   };
+
   const complete = async () => {
     if (!review) return;
 
@@ -72,6 +73,7 @@ export function MergeContinueDialog({
       title={t("mergeContinueDialog.completeMerge")}
       description={t("mergeContinueDialog.commitTheReviewedStagedResultUnstagedChangesRemain")}
       onClose={close}
+      busy={busy}
       footer={
         <ReviewActions
           busy={busy}
@@ -96,6 +98,7 @@ export function MergeContinueDialog({
                   : t("mergeContinueDialog.unsigned"),
               })}
             </p>
+
             <p className="text-xs text-text-tertiary">
               {review.squash
                 ? t("mergeContinueDialog.squashCommitParentSource", {
@@ -108,6 +111,7 @@ export function MergeContinueDialog({
                       .join(" + "),
                   })}
             </p>
+
             {review.state === "paused" && (
               <p className="text-xs text-git-modified">
                 {t(
@@ -115,8 +119,10 @@ export function MergeContinueDialog({
                 )}
               </p>
             )}
+
             <label className="block text-xs">
               {t("mergeContinueDialog.mergeMessage")}
+
               <Textarea
                 aria-label={t("mergeContinueDialog.mergeMessage")}
                 value={message}
@@ -127,8 +133,10 @@ export function MergeContinueDialog({
             </label>
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
+
       {discard && (
         <Dialog
           title={t("mergeContinueDialog.discardMessageEdits")}

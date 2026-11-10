@@ -35,6 +35,7 @@ export function RebaseDialog({
   const [message, setMessage] = useState("");
   const [rewritten, setRewritten] = useState(0);
   const [recoveryWarning, setRecoveryWarning] = useState<string | null>(null);
+
   const prepare = async () => {
     setBusy(true);
     setReview(null);
@@ -44,6 +45,7 @@ export function RebaseDialog({
 
     try {
       const result = await window.eda.rebase.prepare(repositoryId, action, onto, interactive);
+
       if (result.ok) {
         setReview(result.value);
         setPlan(result.value.plan);
@@ -93,9 +95,8 @@ export function RebaseDialog({
     <Dialog
       wide={interactive}
       title={labels[action]}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       description={
         action === "start"
           ? t("rebaseDialog.replayTheCurrentBranchSCommitsOnThe")
@@ -124,6 +125,7 @@ export function RebaseDialog({
     >
       <div className="space-y-3 text-xs">
         {recoveryWarning && <p role="status">{recoveryWarning}</p>}
+
         {rewritten > 0 && (
           <p role="status">
             {t("rebaseDialog.rebaseCompletedTheOriginalRangeIncludedPublishedCommits", {
@@ -131,6 +133,7 @@ export function RebaseDialog({
             })}
           </p>
         )}
+
         {action === "start" && !rewritten && (
           <Checkbox
             checked={interactive}
@@ -140,6 +143,7 @@ export function RebaseDialog({
             {t("rebaseDialog.editCommitOrderAndMessages")}
           </Checkbox>
         )}
+
         {review && !rewritten && (
           <>
             {review.publishedCommits > 0 && !rewritten && (
@@ -149,12 +153,14 @@ export function RebaseDialog({
                 })}
               </p>
             )}
+
             <p>
               <Localized
                 id="rebaseDialog.originalHead"
                 values={{ code: <code>{review.head}</code> }}
               />
             </p>
+
             {review.branch && (
               <p>
                 <Localized
@@ -163,6 +169,7 @@ export function RebaseDialog({
                 />
               </p>
             )}
+
             {review.onto && (
               <p>
                 <Localized
@@ -171,9 +178,11 @@ export function RebaseDialog({
                 />
               </p>
             )}
+
             <p>
               {t("rebaseDialog.committerDetails", { author: review.author, email: review.email })}
             </p>
+
             {action === "amend" && (
               <p>
                 {t("rebaseDialog.stagedPathsIncluded", {
@@ -183,6 +192,7 @@ export function RebaseDialog({
                 })}
               </p>
             )}
+
             {action === "amend" && (
               <Textarea
                 aria-label={t("rebaseDialog.pausedCommitMessage")}
@@ -196,6 +206,7 @@ export function RebaseDialog({
                 }}
               />
             )}
+
             {plan && (
               <RebasePlanEditor
                 original={review.plan!}
@@ -207,6 +218,7 @@ export function RebaseDialog({
                 }}
               />
             )}
+
             {(action === "abort" || action === "skip") && (
               <>
                 <p>
@@ -215,6 +227,7 @@ export function RebaseDialog({
                     recoveryBytes: review.recoveryBytes.toLocaleString(getLocale()),
                   })}
                 </p>
+
                 <ul className="max-h-40 overflow-auto font-mono">
                   {review.paths.map((path) => (
                     <li key={path}>{path}</li>
@@ -222,6 +235,7 @@ export function RebaseDialog({
                 </ul>
               </>
             )}
+
             <Checkbox
               checked={confirmed}
               disabled={busy}
@@ -231,6 +245,7 @@ export function RebaseDialog({
             </Checkbox>
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

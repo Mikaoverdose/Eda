@@ -1,11 +1,11 @@
-import { CredentialFields } from "./TransportFields";
+import { HttpsAuthenticationDialog } from "./HttpsAuthenticationDialog";
 import { t } from "@shared/i18n";
 import { DirectFetchActions } from "./DirectFetchActions";
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowDown, ChevronDown } from "lucide-react";
 import { useAppStore } from "../../stores/app-store";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { Button, MenuItem, PopoverSurface, Dialog, ErrorDialog } from "../../components/ui/index";
+import { Button, MenuItem, AnchoredPopover, ErrorDialog } from "../../components/ui/index";
 import { useDirectPull } from "./hooks/useDirectPull";
 import { DirectPush } from "./DirectPush";
 import { GitHubSignInDialog } from "../connections/GitHubSignInDialog";
@@ -13,6 +13,7 @@ import { GitHubSignInDialog } from "../connections/GitHubSignInDialog";
 export function RepositorySyncActions() {
   const repositoryId = useAppStore((state) => state.selectedRepositoryId);
   const identityId = useAppStore((state) => state.activeIdentity?.id);
+
   const ready = useRepositoryStore(
     (state) =>
       state.repositoryId === repositoryId &&
@@ -33,7 +34,8 @@ export function RepositorySyncActions() {
 
 function SyncActions({ repositoryId, disabled }: { repositoryId: string; disabled: boolean }) {
   const [menu, setMenu] = useState(false);
-  const scope = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+
   const {
     pull,
     busy,
@@ -46,9 +48,8 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
     setGitHubAuthentication,
     message,
   } = useDirectPull(repositoryId);
+
   const [showError, setShowError] = useState(false);
-  const authenticationForm = useId();
-  const [auth, setAuth] = useState({ username: "", password: "" });
   const writing = useRepositoryStore((state) => state.writing);
   const [fetching, setFetching] = useState(false);
   const unavailable = disabled || busy || writing || fetching;
@@ -65,7 +66,8 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
           disabled={disabled || busy || writing}
           onBusyChange={setFetching}
         />
-        <div ref={scope} className="relative flex items-center">
+
+        <div className="relative flex items-center">
           <Button
             variant="ghost"
             size="sm"
@@ -82,9 +84,11 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
           >
             {t("repositorySyncActions.pull")}
           </Button>
+
           <Button
             variant="ghost"
             size="icon-xs"
+            ref={trigger}
             disabled={unavailable}
             aria-label={t("repositorySyncActions.pullStrategies")}
             aria-haspopup="menu"
@@ -92,13 +96,15 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
             onClick={() => setMenu(!menu)}
             icon={<ChevronDown size={12} />}
           />
+
           {menu && (
-            <PopoverSurface
+            <AnchoredPopover
               role="menu"
               aria-label={t("repositorySyncActions.pullStrategies")}
-              interactionRef={scope}
+              anchorRef={trigger}
+              placement="bottom-start"
               onClose={() => setMenu(false)}
-              className="absolute left-0 top-full mt-2 w-72 p-1"
+              className="w-72 p-1"
             >
               {(
                 [
@@ -117,71 +123,35 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
                   {label}
                 </MenuItem>
               ))}
-            </PopoverSurface>
+            </AnchoredPopover>
           )}
         </div>
+
         <DirectPush repositoryId={repositoryId} disabled={unavailable} />
       </div>
+
       <span role="status" className="sr-only">
         {busy ? t("repositorySyncActions.pulling") : (error ?? message)}
       </span>
+
       {authentication && (
-        <Dialog
+        <HttpsAuthenticationDialog
+          key={authentication}
           title={t("repositorySyncActions.hTtpsAuthentication")}
           description={t(
             "repositorySyncActions.signInWithYourGitUsernameAndAccessTokenCredentialsArenTSaved",
           )}
+          submitLabel={t("repositorySyncActions.retryPull")}
+          busy={busy}
+          error={error}
           onClose={() => {
             setAuthentication(null);
             setError(null);
-            setAuth({ username: "", password: "" });
           }}
-          footer={
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setAuthentication(null);
-                  setError(null);
-                  setAuth({ username: "", password: "" });
-                }}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button
-                variant="primary"
-                type="submit"
-                form={authenticationForm}
-                disabled={!auth.username.trim() || !auth.password || busy}
-              >
-                {t("repositorySyncActions.retryPull")}
-              </Button>
-            </>
-          }
-        >
-          <form
-            id={authenticationForm}
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!auth.username.trim() || !auth.password || busy) return;
-              const credentials = auth;
-              setAuth({ username: "", password: "" });
-              void pull(authentication, credentials);
-            }}
-          >
-            {error && (
-              <p
-                role="alert"
-                className="rounded-md border border-git-deleted/25 bg-git-deleted/5 px-3 py-2.5 text-xs leading-relaxed text-git-deleted"
-              >
-                {error}
-              </p>
-            )}
-            <CredentialFields value={auth} onChange={setAuth} disabled={busy} />
-          </form>
-        </Dialog>
+          onSubmit={(credentials) => void pull(authentication, credentials)}
+        />
       )}
+
       {githubAuthentication && (
         <GitHubSignInDialog
           accessDenied={githubAccessDenied}
@@ -191,6 +161,7 @@ function SyncActions({ repositoryId, disabled }: { repositoryId: string; disable
           }}
         />
       )}
+
       {showError && !authentication && !githubAuthentication && (
         <ErrorDialog
           onDismiss={() => {

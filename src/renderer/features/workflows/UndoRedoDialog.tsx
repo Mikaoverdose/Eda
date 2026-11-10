@@ -21,6 +21,7 @@ export function UndoRedoDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+
   const refresh = async () => {
     setBusy(true);
     setSelected(null);
@@ -70,6 +71,7 @@ export function UndoRedoDialog({
               resumeBranchCheckout: item.resumeBranchCheckout,
             }),
       );
+
       await refresh();
     } finally {
       setBusy(false);
@@ -145,6 +147,7 @@ export function UndoRedoDialog({
       setResult(
         `${item.mode === "hard" ? t("undoRedoDialog.indexAndSavedWorkingFileRestorationCompleted") : t("undoRedoDialog.indexRestorationCompletedWorkingFilesWereRetained")}${response.value.preservedNewerWork ? ` ${t("undoRedoDialog.newerStatePreserved")}` : ""}`,
       );
+
       await refresh();
     } finally {
       setBusy(false);
@@ -200,6 +203,7 @@ export function UndoRedoDialog({
           ? t("undoRedoDialog.theInterruptedResetReachedItsReviewedTargetAnd")
           : t("undoRedoDialog.gitHadAlreadyReachedTheReviewedResetTarget"),
       );
+
       await refresh();
     } finally {
       setBusy(false);
@@ -240,6 +244,7 @@ export function UndoRedoDialog({
             : "",
         }),
       );
+
       await refresh();
     } finally {
       setBusy(false);
@@ -250,14 +255,14 @@ export function UndoRedoDialog({
     <Dialog
       title={t("undoRedoDialog.undoAndRedoLocalActions")}
       wide
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <>
           <Button disabled={busy} onClick={onClose}>
             {t("common.close")}
           </Button>
+
           <AsyncButton
             label={t("undoRedoDialog.refreshActions")}
             disabled={busy}
@@ -273,6 +278,7 @@ export function UndoRedoDialog({
         <p>{t("undoRedoDialog.reversalDoesNotPushToRemotesOrReverse")}</p>
         {busy && <p role="status">{t("undoRedoDialog.checkingRepositoryState")}</p>}
         {!busy && !items.length && <p>{t("undoRedoDialog.noRecordedLocalActions")}</p>}
+
         <ul className="max-h-60 space-y-2 overflow-auto">
           {items.map((item) => (
             <li key={item.id} className="border-b border-border-subtle pb-2">
@@ -286,7 +292,9 @@ export function UndoRedoDialog({
               >
                 {item.label}
               </Button>
+
               {item.reason && <p className="mt-1 text-text-tertiary">{item.reason}</p>}
+
               {item.resumeConfiguration && (
                 <div className="mt-2 space-y-1">
                   <p>{t("undoRedoDialog.theReferenceChangeFinishedRestoreItsSavedBranch")}</p>
@@ -295,9 +303,11 @@ export function UndoRedoDialog({
                   </Button>
                 </div>
               )}
+
               {item.resumeReset && (
                 <div className="mt-2 space-y-1">
                   <p>{item.reason}</p>
+
                   {item.publishedCommits > 0 && (
                     <p role="note">
                       {t("undoRedoDialog.thisResetAffectsPublishedCommitsKnownFromLocal", {
@@ -305,11 +315,13 @@ export function UndoRedoDialog({
                       })}
                     </p>
                   )}
+
                   <Button disabled={busy} onClick={() => void resumeReset(item)}>
                     {t("undoRedoDialog.resumeInterruptedReset", { mode: item.mode })}
                   </Button>
                 </div>
               )}
+
               {item.resumeIndex && (
                 <div className="mt-2 space-y-1">
                   <p>
@@ -322,6 +334,7 @@ export function UndoRedoDialog({
                             ),
                     })}
                   </p>
+
                   <Button disabled={busy} onClick={() => void resumeIndex(item)}>
                     {t("undoRedoDialog.resumeFor", {
                       value1:
@@ -333,6 +346,7 @@ export function UndoRedoDialog({
                   </Button>
                 </div>
               )}
+
               {item.resumeBranchCheckout && (
                 <div className="mt-2 space-y-1">
                   <p>
@@ -340,6 +354,7 @@ export function UndoRedoDialog({
                       ? t("undoRedoDialog.checkoutAlreadyReturnedToTheOriginalBranchResume")
                       : t("undoRedoDialog.theBranchWasCreatedButCheckoutIsUnfinished")}
                   </p>
+
                   <Button disabled={busy} onClick={() => void resumeBranchCheckout(item)}>
                     {t("undoRedoDialog.resume", {
                       value1:
@@ -351,6 +366,7 @@ export function UndoRedoDialog({
                   </Button>
                 </div>
               )}
+
               {item.dismissUnstarted && (
                 <div className="mt-2 space-y-1">
                   <p>{t("undoRedoDialog.gitStillMatchesTheRecordedStartingStateDismiss")}</p>
@@ -359,6 +375,7 @@ export function UndoRedoDialog({
                   </Button>
                 </div>
               )}
+
               {item.reconciliation && (
                 <div className="mt-2 space-y-1">
                   <p>
@@ -366,6 +383,7 @@ export function UndoRedoDialog({
                       value1: stateLabel(item.reconciliation),
                     })}
                   </p>
+
                   <Button disabled={busy} onClick={() => void reconcile(item)}>
                     {t("undoRedoDialog.reconcile", { label: item.label })}
                   </Button>
@@ -374,9 +392,11 @@ export function UndoRedoDialog({
             </li>
           ))}
         </ul>
+
         {selected && (
           <div className="space-y-2 border-t border-border-subtle pt-3">
             <h3 className="font-semibold">{selected.label}</h3>
+
             {selected.publishedCommits > 0 && (
               <p role="note">
                 {t("undoRedoDialog.thisReversalRemovesCommitsReachableFromLocallyKnown", {
@@ -384,6 +404,7 @@ export function UndoRedoDialog({
                 })}
               </p>
             )}
+
             <p className="break-all">
               <Localized
                 id="undoRedoDialog.head"
@@ -392,6 +413,7 @@ export function UndoRedoDialog({
               <ArrowRight size={14} className="inline align-[-2px]" aria-hidden="true" />{" "}
               <code>{selected.toHead || t("common.unbornBranch")}</code>
             </p>
+
             <p>
               {selected.kind === "branch"
                 ? t("undoRedoDialog.onlyTheLocalBranchReferenceChangesCommitsThe")
@@ -407,6 +429,7 @@ export function UndoRedoDialog({
                         ? t("undoRedoDialog.theSavedIndexIsRestoredWorkingFilesAreRetained")
                         : t("undoRedoDialog.theSavedIndexAndAffectedWorkingFilesAre")}
             </p>
+
             <Checkbox
               className="flex gap-2"
               checked={confirmed}
@@ -415,6 +438,7 @@ export function UndoRedoDialog({
             >
               {t("undoRedoDialog.iReviewedThisReversal")}
             </Checkbox>
+
             <Button disabled={busy || !confirmed} onClick={() => void execute()}>
               {t("undoRedoDialog.apply", {
                 value1:
@@ -425,6 +449,7 @@ export function UndoRedoDialog({
             </Button>
           </div>
         )}
+
         {result && <p role="status">{result}</p>}
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>

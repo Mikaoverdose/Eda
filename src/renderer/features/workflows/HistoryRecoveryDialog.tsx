@@ -40,6 +40,7 @@ export function HistoryRecoveryDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState<string | null>(null);
+
   const load = async (nextSource: RecoverySource, nextOffset = 0) => {
     setBusy(true);
     setError(null);
@@ -109,9 +110,8 @@ export function HistoryRecoveryDialog({
     <Dialog
       title={t("historyRecoveryDialog.reflogAndHistoryRecovery")}
       wide
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <Button disabled={busy} onClick={onClose}>
           {t("common.close")}
@@ -120,6 +120,7 @@ export function HistoryRecoveryDialog({
     >
       <div className="space-y-3 text-xs">
         <p>{t("historyRecoveryDialog.inspectACommitThenCreateABranchTo")}</p>
+
         <div className="flex flex-wrap gap-2">
           <Button disabled={busy} onClick={() => void load("reflog")}>
             {t("historyRecoveryDialog.reflogs")}
@@ -134,14 +135,17 @@ export function HistoryRecoveryDialog({
             {t("historyRecoveryDialog.sharedHistoryActions")}
           </Button>
         </div>
+
         {source === "rewrites" && (
           <p role="note">
             {t("historyRecoveryDialog.recordedActionsThatAffectedLocallyKnownPublishedHistory")}
           </p>
         )}
+
         <p className="text-text-tertiary">
           {t("historyRecoveryDialog.reflogsIncludeLocalRefUpdatesAndCheckoutHistory")}
         </p>
+
         <Field label={t("historyRecoveryDialog.filterThisPage")}>
           {(props) => (
             <Input
@@ -152,7 +156,9 @@ export function HistoryRecoveryDialog({
             />
           )}
         </Field>
+
         {busy && <p role="status">{t("historyRecoveryDialog.readingRepository")}</p>}
+
         {page && (
           <>
             <p>
@@ -169,6 +175,7 @@ export function HistoryRecoveryDialog({
                 value3: offset + page.entries.length,
               })}
             </p>
+
             <div className="max-h-48 overflow-auto border-y border-border-subtle">
               {page.entries
                 .filter((entry) =>
@@ -197,9 +204,11 @@ export function HistoryRecoveryDialog({
                   </ListItemButton>
                 ))}
             </div>
+
             {!page.entries.length && (
               <p>{t("historyRecoveryDialog.noEntriesAvailableInThisSource")}</p>
             )}
+
             <div className="flex gap-2">
               <Button
                 disabled={busy || offset === 0}
@@ -207,6 +216,7 @@ export function HistoryRecoveryDialog({
               >
                 {t("historyRecoveryDialog.previousPage")}
               </Button>
+
               <Button
                 disabled={busy || page.nextOffset === null}
                 onClick={() => void load(source, page.nextOffset!)}
@@ -216,6 +226,7 @@ export function HistoryRecoveryDialog({
             </div>
           </>
         )}
+
         <div className="flex gap-2">
           <Input
             aria-label={t("historyRecoveryDialog.commitIdToInspect")}
@@ -224,14 +235,17 @@ export function HistoryRecoveryDialog({
             mono
             placeholder={t("historyRecoveryDialog.fullCommitId")}
           />
+
           <Button disabled={busy || !oid.trim()} onClick={() => void inspect(oid.trim())}>
             {t("historyRecoveryDialog.inspectCommit")}
           </Button>
         </div>
+
         {inspection && (
           <section className="space-y-2 border-t border-border-subtle pt-3">
             <h3 className="font-semibold">{inspection.inspection.commit.subject}</h3>
             <p className="break-all font-mono">{inspection.inspection.commit.oid}</p>
+
             <p>
               {t("historyRecoveryDialog.authorDetails", {
                 name: inspection.inspection.commit.author.name,
@@ -239,7 +253,9 @@ export function HistoryRecoveryDialog({
                 value3: formatDateTime(inspection.inspection.commit.author.timestamp),
               })}
             </p>
+
             <p className="whitespace-pre-wrap">{inspection.inspection.commit.body}</p>
+
             <p className="break-all">
               {t("historyRecoveryDialog.parents", {
                 value1:
@@ -247,6 +263,7 @@ export function HistoryRecoveryDialog({
                   t("historyRecoveryDialog.rootCommit"),
               })}
             </p>
+
             <p className="break-all">
               {t("historyRecoveryDialog.containingBranchesTags", {
                 value1:
@@ -254,6 +271,7 @@ export function HistoryRecoveryDialog({
                   t("historyRecoveryDialog.none"),
               })}
             </p>
+
             {inspection.inspection.shallow && (
               <p>{t("historyRecoveryDialog.shallowRepositoryLocalAncestryMayBeIncomplete")}</p>
             )}
@@ -261,6 +279,7 @@ export function HistoryRecoveryDialog({
               {t("historyRecoveryDialog.changesRelativeToTheFirstParentEmptyTreeForARootCommit")}
             </p>
             {inspection.diffNotice && <p>{inspection.diffNotice}</p>}
+
             <div className="flex h-64 min-h-0 flex-col overflow-hidden border border-border-default">
               <DiffContent
                 key={inspection.inspection.commit.oid}
@@ -269,8 +288,10 @@ export function HistoryRecoveryDialog({
                 readOnly
               />
             </div>
+
             <label className="block">
               {t("historyRecoveryDialog.newBranchName")}
+
               <Input
                 aria-label={t("historyRecoveryDialog.recoveredBranchName")}
                 value={name}
@@ -281,6 +302,7 @@ export function HistoryRecoveryDialog({
                 }}
               />
             </label>
+
             <Checkbox
               className="flex gap-2"
               disabled={busy}
@@ -289,11 +311,13 @@ export function HistoryRecoveryDialog({
             >
               {t("historyRecoveryDialog.createThisBranchAtTheInspectedCommit")}
             </Checkbox>
+
             <Button disabled={busy || !confirmed || !name.trim()} onClick={() => void restore()}>
               {t("historyRecoveryDialog.restoreAsBranch")}
             </Button>
           </section>
         )}
+
         {restored && (
           <p role="status">
             {t("historyRecoveryDialog.restoredTheCurrentCheckoutIsUnchanged", {
@@ -301,6 +325,7 @@ export function HistoryRecoveryDialog({
             })}
           </p>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

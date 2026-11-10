@@ -1,9 +1,8 @@
-import { errorMessage } from "@shared/errors";
 import { getLocale, t } from "@shared/i18n";
-import type { StashArea, StashFilePreview } from "@shared/workflows/stashes";
-import { useEffect, useRef, useState } from "react";
+import type { StashArea } from "@shared/workflows/stashes";
+import { useCallback } from "react";
 import { Dialog, ErrorDialog, ReviewActions } from "../../components/ui/index";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { useReviewedOperation } from "../../repository/hooks/useReviewedOperation";
 
 export function StashFileRestoreDialog({
   repositoryId,
@@ -20,70 +19,25 @@ export function StashFileRestoreDialog({
   onClose(): void;
   onRestored(): void;
 }) {
-  const [preview, setPreview] = useState<StashFilePreview | null>(null);
-  const request = useRef(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const review = async () => {
-    const generation = ++request.current;
-    setBusy(true);
-    setError(null);
-    setPreview(null);
+  const prepare = useCallback(
+    () => window.eda.stashes.prepareFile(repositoryId, stashToken, area, path),
+    [repositoryId, stashToken, area, path],
+  );
 
-    try {
-      const result = await window.eda.stashes.prepareFile(repositoryId, stashToken, area, path);
-      if (generation !== request.current) return;
-      if (result.ok) setPreview(result.value);
-      else setError(errorMessage(result.error));
-    } catch (error) {
-      if (generation === request.current) setError(errorMessage(error));
-    } finally {
-      if (generation === request.current) setBusy(false);
-    }
-  };
+  const { preview, busy, error, setError, review, execute } = useReviewedOperation(
+    repositoryId,
+    prepare,
+  );
 
-  useEffect(() => {
-    void review();
-    return () => {
-      request.current += 1;
-    };
-  }, [repositoryId, stashToken, area, path]);
-
-  const restore = async () => {
-    if (!preview) return;
-
-    const generation = request.current;
-
-    setBusy(true);
-    setError(null);
-
-    try {
-      const result = await window.eda.stashes.restoreFile(repositoryId, preview.token);
-
-      if (generation !== request.current) return;
-      if (useRepositoryStore.getState().repositoryId === repositoryId)
-        await useRepositoryStore.getState().syncFromDisk();
-      if (generation !== request.current) return;
-
-      if (result.ok) onRestored();
-      else {
-        setError(errorMessage(result.error));
-        setPreview(null);
-      }
-    } catch (error) {
-      if (generation === request.current) setError(errorMessage(error));
-    } finally {
-      if (generation === request.current) setBusy(false);
-    }
-  };
+  const restore = () =>
+    execute((preview) => window.eda.stashes.restoreFile(repositoryId, preview.token), onRestored);
 
   return (
     <Dialog
       title={t("stashFileRestoreDialog.restoreStashFile")}
       description={t("stashFileRestoreDialog.replaceOnlyThisWorkingPathWithTheSelected")}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <ReviewActions
           busy={busy}
@@ -103,6 +57,7 @@ export function StashFileRestoreDialog({
         <p className="break-all">
           <strong>{path}</strong>
         </p>
+
         <p>
           {t("stashFileRestoreDialog.version", {
             value1:
@@ -113,6 +68,7 @@ export function StashFileRestoreDialog({
                   : t("stashFileRestoreDialog.workingFileAtStashTime"),
           })}
         </p>
+
         {preview && (
           <>
             <p>
@@ -123,6 +79,7 @@ export function StashFileRestoreDialog({
                     { savedBytes: preview.savedBytes.toLocaleString(getLocale()) },
                   )}
             </p>
+
             <p>
               {t("stashFileRestoreDialog.beforeChangingTheFileEdaWillSaveA", {
                 recoveryBytes: preview.recoveryBytes.toLocaleString(getLocale()),
@@ -130,6 +87,7 @@ export function StashFileRestoreDialog({
             </p>
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

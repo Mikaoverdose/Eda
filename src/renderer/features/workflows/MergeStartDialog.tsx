@@ -1,10 +1,9 @@
 import { Localized } from "@renderer/i18n/Localized";
-import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import type { MergeMode, MergeStartPreview } from "@shared/workflows/workflow";
-import { useEffect, useState } from "react";
+import type { MergeMode } from "@shared/workflows/workflow";
+import { useCallback, useState } from "react";
 import { Dialog, ErrorDialog, ReviewActions, Select } from "../../components/ui/index";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { useReviewedOperation } from "../../repository/hooks/useReviewedOperation";
 
 export function MergeStartDialog({
   repositoryId,
@@ -16,57 +15,26 @@ export function MergeStartDialog({
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<MergeMode>("ff");
-  const [preview, setPreview] = useState<MergeStartPreview | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const review = async () => {
-    setBusy(true);
-    setError(null);
-    setPreview(null);
 
-    try {
-      const result = await window.eda.workflows.prepareStart(repositoryId, source, mode);
-      if (result.ok) setPreview(result.value);
-      else setError(errorMessage(result.error));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const prepare = useCallback(
+    () => window.eda.workflows.prepareStart(repositoryId, source, mode),
+    [repositoryId, source, mode],
+  );
 
-  useEffect(() => {
-    void review();
-  }, [repositoryId, source, mode]);
+  const { preview, setPreview, busy, error, setError, review, execute } = useReviewedOperation(
+    repositoryId,
+    prepare,
+  );
 
-  const start = async () => {
-    if (!preview) return;
-
-    setBusy(true);
-    setError(null);
-
-    try {
-      const result = await window.eda.workflows.startMerge(repositoryId, preview.token);
-
-      await useRepositoryStore.getState().syncFromDisk();
-
-      if (!result.ok) {
-        setError(errorMessage(result.error));
-        setPreview(null);
-        return;
-      }
-
-      onClose();
-    } finally {
-      setBusy(false);
-    }
-  };
+  const start = () =>
+    execute((preview) => window.eda.workflows.startMerge(repositoryId, preview.token), onClose);
 
   return (
     <Dialog
       title={t("mergeStartDialog.mergeIntoCurrentBranch")}
       description={t("mergeStartDialog.reviewTheExactSourceCommitAndTargetBranch")}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <ReviewActions
           busy={busy}
@@ -81,6 +49,7 @@ export function MergeStartDialog({
       <div className="space-y-3 text-xs">
         <label className="block">
           {t("mergeStartDialog.mergePolicy")}
+
           <Select
             aria-label={t("mergeStartDialog.mergePolicy")}
             value={mode}
@@ -97,9 +66,11 @@ export function MergeStartDialog({
             <option value="squash">{t("mergeStartDialog.squashIntoOneOrdinaryCommit")}</option>
           </Select>
         </label>
+
         <p className="break-all">
           <Localized id="mergeStartDialog.sourceCommit" values={{ code: <code>{source}</code> }} />
         </p>
+
         {preview && (
           <>
             <p>
@@ -111,6 +82,7 @@ export function MergeStartDialog({
                 }}
               />
             </p>
+
             <div
               className="space-y-2 rounded border border-border-subtle p-3"
               aria-label={t("mergeStartDialog.mergePrediction")}
@@ -124,7 +96,9 @@ export function MergeStartDialog({
                       )
                     : t("mergeStartDialog.gitCouldNotPredictWhetherThisMergeWillHaveConflicts")}
               </p>
+
               {preview.prediction.reason && <p>{preview.prediction.reason}</p>}
+
               {!!preview.prediction.paths.length && (
                 <ul className="max-h-36 list-inside list-disc overflow-auto font-mono">
                   {preview.prediction.paths.map((path) => (
@@ -134,6 +108,7 @@ export function MergeStartDialog({
                   ))}
                 </ul>
               )}
+
               {preview.prediction.totalPaths > preview.prediction.paths.length && (
                 <p>
                   {t("mergeStartDialog.showingOfConflictedPaths", {
@@ -142,10 +117,12 @@ export function MergeStartDialog({
                   })}
                 </p>
               )}
+
               <p className="text-text-tertiary">
                 {t("mergeStartDialog.predictionForTheReviewedCommitsYourIndexAnd")}
               </p>
             </div>
+
             <p>
               {preview.upToDate
                 ? t("mergeStartDialog.theTargetAlreadyContainsThisCommit")
@@ -159,6 +136,7 @@ export function MergeStartDialog({
             </p>
           </>
         )}
+
         <p className="text-text-tertiary">
           {t("mergeStartDialog.aCleanWorkingTreeAndIndexAreRequired")}
         </p>

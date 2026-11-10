@@ -1,10 +1,8 @@
 import { Localized } from "@renderer/i18n/Localized";
-import { errorMessage } from "@shared/errors";
 import { getLocale, t } from "@shared/i18n";
-import type { MergeAbortPreview } from "@shared/workflows/workflow";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Checkbox, Dialog, ErrorDialog, ReviewActions } from "../../components/ui/index";
-import { useRepositoryStore } from "../../stores/repository-store";
+import { useReviewedOperation } from "../../repository/hooks/useReviewedOperation";
 
 export function MergeAbortDialog({
   repositoryId,
@@ -17,66 +15,23 @@ export function MergeAbortDialog({
 }) {
   const label =
     kind === "stash" ? t("mergeAbortDialog.stashApplication") : t("mergeAbortDialog.merge");
-  const [preview, setPreview] = useState<MergeAbortPreview | null>(null);
-  const request = useRef(0);
-  const [busy, setBusy] = useState(false);
+
+  const prepare = useCallback(
+    () => window.eda.workflows.prepareAbort(repositoryId),
+    [repositoryId, kind],
+  );
+
+  const { preview, busy, error, setError, review, execute } = useReviewedOperation(
+    repositoryId,
+    prepare,
+  );
+
   const [confirmed, setConfirmed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const review = async () => {
-    const generation = ++request.current;
-    setBusy(true);
-    setError(null);
-    setConfirmed(false);
-    setPreview(null);
 
-    try {
-      const result = await window.eda.workflows.prepareAbort(repositoryId);
-      if (generation !== request.current) return;
-      if (result.ok) setPreview(result.value);
-      else setError(errorMessage(result.error));
-    } catch (error) {
-      if (generation === request.current) setError(errorMessage(error));
-    } finally {
-      if (generation === request.current) setBusy(false);
-    }
-  };
+  useEffect(() => setConfirmed(false), [preview]);
 
-  useEffect(() => {
-    void review();
-    return () => {
-      request.current += 1;
-    };
-  }, [repositoryId, kind]);
-
-  const abort = async () => {
-    if (!preview) return;
-
-    const generation = request.current;
-
-    setBusy(true);
-    setError(null);
-
-    try {
-      const result = await window.eda.workflows.abortMerge(repositoryId, preview.token);
-
-      if (generation !== request.current) return;
-      if (useRepositoryStore.getState().repositoryId === repositoryId)
-        await useRepositoryStore.getState().syncFromDisk();
-      if (generation !== request.current) return;
-
-      if (!result.ok) {
-        setError(errorMessage(result.error));
-        setConfirmed(false);
-        return;
-      }
-
-      onClose();
-    } catch (error) {
-      if (generation === request.current) setError(errorMessage(error));
-    } finally {
-      if (generation === request.current) setBusy(false);
-    }
-  };
+  const abort = () =>
+    execute((preview) => window.eda.workflows.abortMerge(repositoryId, preview.token), onClose);
 
   return (
     <Dialog
@@ -85,9 +40,8 @@ export function MergeAbortDialog({
         label: label,
         value2: kind === "stash" ? t("mergeAbortDialog.theSourceStashIsRetained") : "",
       })}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <ReviewActions
           busy={busy}
@@ -109,17 +63,21 @@ export function MergeAbortDialog({
                 values={{ code: <code>{preview.originalHead.slice(0, 12)}</code> }}
               />
             </p>
+
             <p>
               {t("mergeAbortDialog.aRecoveryCopyOfBytesWillPreserveThe", {
                 bytes: preview.bytes.toLocaleString(getLocale()),
               })}
             </p>
+
             <p>{t("mergeAbortDialog.completedSnapshotsAreRetainedFor30DaysUpTo100")}</p>
+
             <ul className="max-h-48 overflow-auto font-mono">
               {preview.paths.map((path) => (
                 <li key={path}>{path}</li>
               ))}
             </ul>
+
             <Checkbox
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
@@ -129,6 +87,7 @@ export function MergeAbortDialog({
             </Checkbox>
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

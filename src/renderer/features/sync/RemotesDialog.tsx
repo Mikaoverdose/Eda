@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
-import { openSettings } from "../../commands/open-settings";
-import { RemoteSelect } from "./RemoteSelect";
+import { openSettings } from "../../stores/shell-store";
+import { Select } from "../../components/ui/forms/FormControls";
 import { RejectedPushNotice } from "./RejectedPushNotice";
 import { PushReview } from "./PushReview";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
@@ -94,6 +94,7 @@ export function RemotesDialog({
             {t("remotesDialog.localCommitSavedReviewItsPushDestinationBelow")}
           </p>
         )}
+
         <TabsPrimitive.List
           className="flex gap-1 border-b border-border-subtle pb-2"
           aria-label={t("remotesDialog.remoteActions")}
@@ -106,11 +107,15 @@ export function RemotesDialog({
             </TabsPrimitive.Trigger>
           ))}
         </TabsPrimitive.List>
+
         <TabsPrimitive.Content value={tab} className="space-y-4 outline-none">
           {tab === "push" && (
             <label className="block space-y-1 text-xs">
               {t("remotesDialog.remote")}
-              <RemoteSelect
+
+              <Select
+                compact
+                className="w-full"
                 aria-label={t("remotesDialog.remote")}
                 value={remote}
                 disabled={!!busy || !!preview}
@@ -125,7 +130,8 @@ export function RemotesDialog({
                 {state.remotes.map((item) => (
                   <option key={item.name}>{item.name}</option>
                 ))}
-              </RemoteSelect>
+              </Select>
+
               <span className="block break-all text-text-tertiary">
                 {(tab === "push" ? selectedRemote?.pushUrls : selectedRemote?.fetchUrls)?.join(
                   ", ",
@@ -133,10 +139,14 @@ export function RemotesDialog({
               </span>
             </label>
           )}
+
           {tab === "push" && (
             <label className="block space-y-1 text-xs">
               {t("remotesDialog.refType")}
-              <RemoteSelect
+
+              <Select
+                compact
+                className="w-full"
                 aria-label={t("remotesDialog.refType")}
                 value={refKind}
                 disabled={!!busy || !!preview}
@@ -148,15 +158,19 @@ export function RemotesDialog({
               >
                 <option value="branch">{t("remotesDialog.branch")}</option>
                 <option value="tag">{t("remotesDialog.tag")}</option>
-              </RemoteSelect>
+              </Select>
             </label>
           )}
+
           {(tab === "tracking" || (tab === "push" && mode !== "delete")) && (
             <label className="block space-y-1 text-xs">
               {tab === "push" && refKind === "tag"
                 ? t("remotesDialog.localTag")
                 : t("remotesDialog.localBranch")}
-              <RemoteSelect
+
+              <Select
+                compact
+                className="w-full"
                 aria-label={
                   tab === "push" && refKind === "tag"
                     ? t("remotesDialog.localTag")
@@ -177,15 +191,17 @@ export function RemotesDialog({
                       : "remotesDialog.chooseABranch",
                   )}
                 </option>
+
                 {(tab === "push" && refKind === "tag"
                   ? tagNames
                   : state.branches.filter((item) => !item.remote).map((item) => item.name)
                 ).map((name) => (
                   <option key={name}>{name}</option>
                 ))}
-              </RemoteSelect>
+              </Select>
             </label>
           )}
+
           {tab === "tracking" && (
             <>
               <p className="text-sm">
@@ -193,15 +209,20 @@ export function RemotesDialog({
                   ? `${selectedBranch.upstream} ${selectedBranch.upstreamState || t("remotesDialog.upToDate")}`
                   : t("remotesDialog.noUpstreamConfigured")}
               </p>
+
               <label className="block space-y-1 text-xs">
                 {t("remotesDialog.upstream")}
-                <RemoteSelect
+
+                <Select
+                  compact
+                  className="w-full"
                   aria-label={t("remotesDialog.upstream")}
                   value={upstream}
                   disabled={!!busy}
                   onValueChange={(value) => setUpstream(value)}
                 >
                   <option value="">{t("remotesDialog.noUpstream")}</option>
+
                   {state.branches
                     .filter((item) => item.remote)
                     .map((item) => (
@@ -209,8 +230,9 @@ export function RemotesDialog({
                         {item.name}
                       </option>
                     ))}
-                </RemoteSelect>
+                </Select>
               </label>
+
               <Button
                 disabled={!!busy || !branch || (!upstream && !selectedBranch?.upstream)}
                 onClick={() =>
@@ -221,17 +243,20 @@ export function RemotesDialog({
               >
                 {upstream ? t("remotesDialog.setUpstream") : t("remotesDialog.unsetUpstream")}
               </Button>
+
               <p className="text-xs text-text-tertiary">
                 {t("remotesDialog.aheadBehindCountsUseLocallyFetchedRefsFetch")}
               </p>
             </>
           )}
+
           {tab === "push" && (
             <>
               <label className="block space-y-1 text-xs">
                 {refKind === "tag"
                   ? t("remotesDialog.destinationTag")
                   : t("remotesDialog.destinationBranch")}
+
                 <Input
                   aria-label={
                     refKind === "tag"
@@ -243,6 +268,7 @@ export function RemotesDialog({
                   onChange={(event) => setDestination(event.target.value)}
                 />
               </label>
+
               {refKind === "branch" && mode !== "delete" && (
                 <Checkbox
                   className="flex gap-2 text-sm"
@@ -253,9 +279,13 @@ export function RemotesDialog({
                   {t("remotesDialog.setUpstreamAfterSuccessfulPush")}
                 </Checkbox>
               )}
+
               <label className="block space-y-1 text-xs">
                 {t("remotesDialog.pushMode")}
-                <RemoteSelect
+
+                <Select
+                  compact
+                  className="w-full"
                   aria-label={t("remotesDialog.pushMode")}
                   value={mode}
                   disabled={!!busy || !!preview}
@@ -268,9 +298,11 @@ export function RemotesDialog({
                   <option value="lease">{t("remotesDialog.forceWithLease")}</option>
                   <option value="delete">{t("remotesDialog.deleteRemoteRef")}</option>
                   <option value="force">{t("remotesDialog.unrestrictedForceAdvanced")}</option>
-                </RemoteSelect>
+                </Select>
               </label>
+
               <TransportFields value={auth} onChange={setAuth} disabled={!!busy || !!preview} />
+
               {preview ? (
                 <PushReview
                   preview={preview}
@@ -281,6 +313,7 @@ export function RemotesDialog({
                   onConfirm={() => {
                     const token = preview.token;
                     setPreview(null);
+
                     void run(
                       "operationTitles.pushBranch",
                       () => window.eda.remotes.push(repositoryId, token, credentials.credentials),
@@ -321,6 +354,7 @@ export function RemotesDialog({
               )}
             </>
           )}
+
           <Button
             variant="quiet"
             disabled={!!busy}
@@ -331,13 +365,17 @@ export function RemotesDialog({
           >
             {t("remotesDialog.manageRemotesInSettings")}
           </Button>
+
           {busy && <TransferProgress repositoryId={repositoryId} kindKey={busy} />}
+
           {message && (
             <p role="status" className="whitespace-pre-wrap break-all text-xs text-git-added">
               {message}
             </p>
           )}
+
           <ErrorDialog>{error}</ErrorDialog>
+
           {rejectedPush && (
             <RejectedPushNotice
               rejected={rejectedPush}

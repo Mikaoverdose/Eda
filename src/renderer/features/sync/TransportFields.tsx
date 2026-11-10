@@ -1,8 +1,7 @@
 import { errorMessage } from "@shared/errors";
 import { t, type MessageKey } from "@shared/i18n";
 import type { TransportCredentials } from "@shared/integrations/remotes";
-import type { OperationRecord } from "@shared/operations";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Button,
   CodeBlock,
@@ -11,6 +10,8 @@ import {
   Field,
   Input,
 } from "../../components/ui/index";
+
+import { useOperationRecords } from "../../hooks/useOperationRecords";
 
 interface CredentialFieldsProps {
   value: TransportCredentials;
@@ -23,10 +24,11 @@ export function CredentialFields({
   onChange,
   disabled,
   shortLabels = false,
-}: CredentialFieldsProps & { shortLabels?: boolean }) {
+  usernameLabel = t("transportFields.username"),
+}: CredentialFieldsProps & { shortLabels?: boolean; usernameLabel?: string }) {
   return (
     <>
-      <Field label={t("transportFields.username")}>
+      <Field label={usernameLabel}>
         {(field) => (
           <Input
             {...field}
@@ -41,6 +43,7 @@ export function CredentialFields({
           />
         )}
       </Field>
+
       <Field label={t("transportFields.accessToken")}>
         {(field) => (
           <Input
@@ -83,43 +86,26 @@ export function TransferProgress({
   repositoryId?: string;
   kindKey: MessageKey;
 }) {
-  const [record, setRecord] = useState<OperationRecord | null>(null);
+  const { records } = useOperationRecords();
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const result = await window.eda.operations.list();
-
-      if (alive && result.ok)
-        setRecord(
-          result.value.find(
-            (item) =>
-              item.kindKey === kindKey &&
-              (!repositoryId || item.repositoryId === repositoryId) &&
-              item.cancellable,
-          ) ?? null,
-        );
-    };
-
-    void load();
-
-    const unsubscribe = window.eda.events.onOperationsChanged(() => void load());
-
-    return () => {
-      alive = false;
-      unsubscribe();
-    };
-  }, [repositoryId, kindKey]);
+  const record = records.find(
+    (item) =>
+      item.kindKey === kindKey &&
+      (!repositoryId || item.repositoryId === repositoryId) &&
+      item.cancellable,
+  );
 
   return (
     <div role="status" className="space-y-2 text-xs text-text-secondary">
       <p>{record?.message ?? t("transportFields.preparingOperation")}</p>
+
       {record?.output && (
         <CodeBlock label={t("transportFields.transferOutput")} wrap className="max-h-32">
           {record.output}
         </CodeBlock>
       )}
+
       {record && (
         <Button
           size="sm"
@@ -132,6 +118,7 @@ export function TransferProgress({
           {t("common.cancelOperation")}
         </Button>
       )}
+
       {error && <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>}
     </div>
   );

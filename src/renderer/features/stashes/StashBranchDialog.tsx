@@ -21,6 +21,7 @@ export function StashBranchDialog({
   const [preview, setPreview] = useState<StashBranchPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const review = async () => {
     setBusy(true);
     setError(null);
@@ -60,9 +61,8 @@ export function StashBranchDialog({
     <Dialog
       title={t("stashBranchDialog.createBranchFromStash")}
       description={t("stashBranchDialog.startANewBranchAtTheStashS")}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <ReviewActions
           busy={busy}
@@ -79,6 +79,7 @@ export function StashBranchDialog({
       <div className="space-y-3 text-xs">
         <label className="block">
           {t("stashBranchDialog.newBranchName")}
+
           <Input
             aria-label={t("stashBranchDialog.stashBranchName")}
             value={name}
@@ -89,7 +90,9 @@ export function StashBranchDialog({
             }}
           />
         </label>
+
         <p>{t("stashBranchDialog.aCleanWorktreeAndIndexAreRequiredIgnored")}</p>
+
         {preview && (
           <>
             <p>
@@ -101,6 +104,7 @@ export function StashBranchDialog({
                 }}
               />
             </p>
+
             <p>
               <Localized
                 id="stashBranchDialog.createAtStashBase"
@@ -110,9 +114,11 @@ export function StashBranchDialog({
                 }}
               />
             </p>
+
             <p>{t("stashBranchDialog.ifApplicationNeedsAttentionTheNewBranchAnd")}</p>
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

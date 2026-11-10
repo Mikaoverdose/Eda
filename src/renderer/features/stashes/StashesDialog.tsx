@@ -69,9 +69,8 @@ export function StashesDialog({
       wide
       title={t("stashesDialog.stashes")}
       description={t("stashesDialog.stashesAreSharedByThisRepositorySWorktrees")}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
         <Button disabled={busy} onClick={onClose}>
           {t("common.close")}
@@ -82,6 +81,7 @@ export function StashesDialog({
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <label>
             {t("stashesDialog.stashScope")}
+
             <Select
               aria-label={t("stashesDialog.stashScope")}
               value={scope}
@@ -94,6 +94,7 @@ export function StashesDialog({
               <option value="staged">{t("stashesDialog.stagedChangesOnly")}</option>
             </Select>
           </label>
+
           {scope !== "staged" && (
             <Checkbox
               checked={keepIndex}
@@ -104,9 +105,11 @@ export function StashesDialog({
             </Checkbox>
           )}
         </div>
+
         {scope === "selected" && (
           <fieldset className="max-h-40 overflow-auto rounded border border-border-subtle p-2 text-xs">
             <legend>{t("stashesDialog.pathsToStash")}</legend>
+
             {eligiblePaths.slice(0, 256).map((change) => (
               <label key={change.path} className="flex items-center gap-2 py-1">
                 <CheckboxControl
@@ -121,6 +124,7 @@ export function StashesDialog({
                     )
                   }
                 />
+
                 <span className="break-all">
                   {change.originalPath && (
                     <>
@@ -132,11 +136,14 @@ export function StashesDialog({
                       />{" "}
                     </>
                   )}
+
                   {change.path}
                 </span>
               </label>
             ))}
+
             {!eligiblePaths.length && <p>{t("stashesDialog.noEligibleChangedPaths")}</p>}
+
             {eligiblePaths.length > 256 && (
               <p>
                 {t("stashesDialog.showingTheFirst256ChangedPathsStashABatchBeforeSelectingMore")}
@@ -144,6 +151,7 @@ export function StashesDialog({
             )}
           </fieldset>
         )}
+
         <div className="grid gap-2 md:grid-cols-[1fr_auto_auto]">
           <Input
             aria-label={t("stashesDialog.stashName")}
@@ -152,6 +160,7 @@ export function StashesDialog({
             onChange={(event) => setName(event.target.value)}
             disabled={busy}
           />
+
           <Select
             aria-label={t("stashesDialog.stashContents")}
             value={scope === "staged" ? "tracked" : contents}
@@ -163,6 +172,7 @@ export function StashesDialog({
             <option value="untracked">{t("stashesDialog.includeUntrackedFiles")}</option>
             <option value="all">{t("stashesDialog.includeUntrackedAndIgnoredFiles")}</option>
           </Select>
+
           <Button
             disabled={
               busy ||
@@ -175,11 +185,13 @@ export function StashesDialog({
             {t("stashesDialog.createStash")}
           </Button>
         </div>
+
         {contents === "all" && scope !== "staged" && (
           <p className="text-xs text-git-modified">
             {t("stashesDialog.ignoredFilesWillAlsoBeSavedAndRemoved")}
           </p>
         )}
+
         <div className="flex gap-2">
           <Select
             aria-label={t("stashesDialog.savedStash")}
@@ -193,30 +205,36 @@ export function StashesDialog({
                 ? t("stashesDialog.chooseAStashToInspect")
                 : t("stashesDialog.noSavedStashes")}
             </option>
+
             {list.entries.map((entry) => (
               <option key={entry.selector} value={entry.selector}>
                 {entry.selector}, {entry.message}
               </option>
             ))}
           </Select>
+
           <Button disabled={busy} onClick={() => void load()}>
             {t("common.refresh")}
           </Button>
         </div>
+
         {list.truncated && (
           <p className="text-xs text-git-modified">
             {t("stashesDialog.showingTheNewest200EntriesOlderEntriesRemainInGit")}
           </p>
         )}
+
         {inspection && (
           <>
             <p className="text-xs text-text-tertiary">
               {formatDateTime(inspection.entry.timestamp * 1000)} ,{" "}
               <code>{inspection.entry.oid}</code>
             </p>
+
             <Button disabled={busy} onClick={() => setRenameDialog(true)}>
               {t("stashesDialog.rename")}
             </Button>
+
             <Select
               aria-label={t("stashesDialog.stashDiff")}
               value={area}
@@ -227,6 +245,7 @@ export function StashesDialog({
               <option value="staged">{t("stashesDialog.stagedChangesAtStashTime")}</option>
               <option value="untracked">{t("stashesDialog.untrackedIgnoredFiles")}</option>
             </Select>
+
             <div className="flex h-80 min-h-0 flex-col overflow-hidden rounded border border-border-default">
               {diff?.files.length ? (
                 <DiffContent
@@ -241,6 +260,7 @@ export function StashesDialog({
                 </p>
               )}
             </div>
+
             <div className="flex items-center gap-2 text-xs">
               <Select
                 aria-label={t("stashesDialog.stashFileToRestore")}
@@ -252,12 +272,14 @@ export function StashesDialog({
                 {!restorePaths.length && (
                   <option value="">{t("stashesDialog.noChangedFilesInThisVersion")}</option>
                 )}
+
                 {restorePaths.map((path) => (
                   <option key={path} value={path}>
                     {path}
                   </option>
                 ))}
               </Select>
+
               <Button
                 disabled={busy || !selectedRestorePath}
                 onClick={() => setRestoreDialog(true)}
@@ -265,6 +287,7 @@ export function StashesDialog({
                 {t("stashesDialog.restoreFile")}
               </Button>
             </div>
+
             <div className="flex items-center justify-between gap-3 text-xs">
               <Checkbox
                 checked={restoreIndex}
@@ -273,6 +296,7 @@ export function StashesDialog({
               >
                 {t("stashesDialog.restoreStagedChanges")}
               </Checkbox>
+
               <Button disabled={busy} onClick={() => void apply(false)}>
                 {t("stashesDialog.applyStash")}
               </Button>
@@ -283,6 +307,7 @@ export function StashesDialog({
                 {t("stashesDialog.createBranch")}
               </Button>
             </div>
+
             <div className="flex items-center justify-between gap-3 text-xs">
               <Checkbox
                 checked={confirmed}
@@ -291,22 +316,27 @@ export function StashesDialog({
               >
                 {t("stashesDialog.removeThisStashFromGitSStashList")}
               </Checkbox>
+
               <Button disabled={busy || !confirmed} onClick={() => void run("drop")}>
                 {t("stashesDialog.dropSelectedStash")}
               </Button>
             </div>
+
             <p className="text-xs text-text-tertiary">
               {t("stashesDialog.applyKeepsTheSavedStashPopRemovesIt")}
             </p>
           </>
         )}
+
         {notice && (
           <p role="status" className="text-xs text-text-secondary">
             {notice}
           </p>
         )}
+
         <ErrorDialog>{error}</ErrorDialog>
       </div>
+
       {restoreDialog && inspection && (
         <StashFileRestoreDialog
           repositoryId={repositoryId}
@@ -316,6 +346,7 @@ export function StashesDialog({
           onClose={() => setRestoreDialog(false)}
           onRestored={() => {
             setRestoreDialog(false);
+
             setNotice(
               t("stashesDialog.restoredTheIndexAndStashWereRetainedA", {
                 selectedRestorePath: selectedRestorePath,
@@ -324,6 +355,7 @@ export function StashesDialog({
           }}
         />
       )}
+
       {renameDialog && inspection && (
         <StashRenameDialog
           repositoryId={repositoryId}
@@ -331,15 +363,18 @@ export function StashesDialog({
           onClose={() => setRenameDialog(false)}
           onRenamed={(keptOriginal) => {
             setRenameDialog(false);
+
             setNotice(
               keptOriginal
                 ? t("stashesDialog.savedTheRenamedStashTheOriginalEntryWas")
                 : t("stashesDialog.renamedStashAndMovedItToTheTopOfTheList"),
             );
+
             void load();
           }}
         />
       )}
+
       {branchDialog && inspection && (
         <StashBranchDialog
           repositoryId={repositoryId}
@@ -347,6 +382,7 @@ export function StashesDialog({
           onClose={() => setBranchDialog(false)}
           onCreated={(name, applied) => {
             setBranchDialog(false);
+
             setNotice(
               applied
                 ? t("stashesDialog.createdAndRestoredTheStashedWorkTheStashWasKept", { name: name })

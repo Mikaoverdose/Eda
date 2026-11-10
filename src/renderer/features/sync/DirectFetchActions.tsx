@@ -1,10 +1,11 @@
-import { CredentialFields } from "./TransportFields";
+import type { TransportCredentials } from "@shared/integrations/remotes";
+import { HttpsAuthenticationDialog } from "./HttpsAuthenticationDialog";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { ChevronDown, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
-import { openSettings } from "../../commands/open-settings";
-import { Button, Dialog, ErrorDialog, MenuItem, PopoverSurface } from "../../components/ui/index";
+import { openSettings } from "../../stores/shell-store";
+import { Button, ErrorDialog, MenuItem, AnchoredPopover } from "../../components/ui/index";
 import { GitHubSignInDialog } from "../connections/GitHubSignInDialog";
 import { useDirectFetch } from "./hooks/useDirectFetch";
 
@@ -20,24 +21,26 @@ export function DirectFetchActions({
   const action = useDirectFetch(repositoryId);
   const [menu, setMenu] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [auth, setAuth] = useState({ username: "", password: "" });
-  const scope = useRef<HTMLDivElement>(null);
-  const fetch = async (remote?: string | null, credentials?: typeof auth) => {
+  const trigger = useRef<HTMLButtonElement>(null);
+
+  const fetch = async (remote?: string | null, credentials?: TransportCredentials) => {
     onBusyChange(true);
+
     try {
       await action.fetch(remote, credentials);
     } finally {
       onBusyChange(false);
     }
   };
+
   const closeAuth = () => {
     action.setAuthentication(null);
     action.setError(null);
-    setAuth({ username: "", password: "" });
   };
+
   return (
     <>
-      <div ref={scope} className="relative flex items-center">
+      <div className="relative flex items-center">
         <Button
           variant="ghost"
           size="sm"
@@ -54,9 +57,11 @@ export function DirectFetchActions({
         >
           {t("directFetchActions.fetch")}
         </Button>
+
         <Button
           variant="ghost"
           size="icon-xs"
+          ref={trigger}
           disabled={disabled || action.busy}
           aria-label={t("directFetchActions.fetchOptions")}
           aria-haspopup="menu"
@@ -64,6 +69,7 @@ export function DirectFetchActions({
           icon={<ChevronDown size={12} />}
           onClick={() => {
             setMenu(!menu);
+
             if (!menu)
               void window.eda.remotes.inspect(repositoryId).then((result) => {
                 if (result.ok) action.setRemotes(result.value.remotes);
@@ -71,13 +77,15 @@ export function DirectFetchActions({
               });
           }}
         />
+
         {menu && (
-          <PopoverSurface
+          <AnchoredPopover
             role="menu"
             aria-label={t("directFetchActions.fetchOptions")}
-            interactionRef={scope}
+            anchorRef={trigger}
+            placement="bottom-start"
             onClose={() => setMenu(false)}
-            className="absolute left-0 top-full mt-2 w-56 p-1"
+            className="w-56 p-1"
           >
             {action.remotes.map((remote) => (
               <MenuItem
@@ -90,6 +98,7 @@ export function DirectFetchActions({
                 {t("directFetchActions.fetchRemote", { name: remote.name })}
               </MenuItem>
             ))}
+
             <MenuItem
               onClick={() => {
                 setMenu(false);
@@ -98,6 +107,7 @@ export function DirectFetchActions({
             >
               {t("directFetchActions.fetchAllRemotes")}
             </MenuItem>
+
             <MenuItem
               onClick={() => {
                 setMenu(false);
@@ -106,6 +116,7 @@ export function DirectFetchActions({
             >
               {t("directFetchActions.fetchSettings")}
             </MenuItem>
+
             <MenuItem
               onClick={() => {
                 setMenu(false);
@@ -114,43 +125,29 @@ export function DirectFetchActions({
             >
               {t("directFetchActions.manageRemotes")}
             </MenuItem>
-          </PopoverSurface>
+          </AnchoredPopover>
         )}
       </div>
+
       <span role="status" className="sr-only">
         {action.busy ? t("directFetchActions.fetching") : (action.error ?? action.message)}
       </span>
+
       {action.authentication && (
-        <Dialog
+        <HttpsAuthenticationDialog
+          key={action.authentication}
           title={t("directFetchActions.hTtpsAuthentication")}
           description={t("directFetchActions.signInToFetchCredentialsAreUsedForThisActionOnly", {
             authentication: action.authentication,
           })}
+          submitLabel={t("directFetchActions.retryFetch")}
+          busy={action.busy}
+          error={action.error}
           onClose={closeAuth}
-        >
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!auth.username.trim() || !auth.password || action.busy) return;
-              const credentials = auth;
-              const remote = action.authentication!;
-              setAuth({ username: "", password: "" });
-              void fetch(remote, credentials);
-            }}
-          >
-            {action.error && (
-              <p role="alert" className="text-xs text-git-modified">
-                {action.error}
-              </p>
-            )}
-            <CredentialFields value={auth} onChange={setAuth} disabled={action.busy} />
-            <Button type="submit" disabled={!auth.username.trim() || !auth.password || action.busy}>
-              {t("directFetchActions.retryFetch")}
-            </Button>
-          </form>
-        </Dialog>
+          onSubmit={(credentials) => void fetch(action.authentication, credentials)}
+        />
       )}
+
       {action.githubAuthentication && (
         <GitHubSignInDialog
           accessDenied={action.githubAccessDenied}
@@ -160,6 +157,7 @@ export function DirectFetchActions({
           }}
         />
       )}
+
       {showError && !action.authentication && !action.githubAuthentication && (
         <ErrorDialog
           onDismiss={() => {

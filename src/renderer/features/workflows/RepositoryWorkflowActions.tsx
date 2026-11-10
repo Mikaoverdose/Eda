@@ -4,13 +4,25 @@ import { replayActionLabel, workflowLabel } from "@shared/i18n/labels";
 import type { RebaseAction } from "@shared/workflows/rebase";
 import type { ReplayAction, ReplayKind } from "@shared/workflows/replay";
 import type { WorkflowState } from "@shared/workflows/workflow";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ErrorDialog, TextButton } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
-import { MergeAbortDialog } from "./MergeAbortDialog";
-import { MergeContinueDialog } from "./MergeContinueDialog";
-import { RebaseDialog } from "./RebaseDialog";
-import { ReplayDialog } from "./ReplayDialog";
+
+const MergeAbortDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.MergeAbortDialog })),
+);
+
+const MergeContinueDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.MergeContinueDialog })),
+);
+
+const RebaseDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.RebaseDialog })),
+);
+
+const ReplayDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.ReplayDialog })),
+);
 
 export function RepositoryWorkflowActions({
   repositoryId,
@@ -24,10 +36,12 @@ export function RepositoryWorkflowActions({
   conflicts: number;
 }) {
   const [rebaseAction, setRebaseAction] = useState<RebaseAction | null>(null);
+
   const [replayAction, setReplayAction] = useState<{
     kind: ReplayKind;
     action: ReplayAction;
   } | null>(null);
+
   const [mergeFor, setMergeFor] = useState<string | null>(null);
   const [abortFor, setAbortFor] = useState<string | null>(null);
   const [stashError, setStashError] = useState<string | null>(null);
@@ -42,6 +56,7 @@ export function RepositoryWorkflowActions({
               <span className="text-xs text-text-secondary">
                 {t("workflows.repositoryWorkflowActions.pausedForEditingStageChangesThenAmend")}
               </span>
+
               <TextButton
                 disabled={writing}
                 className="text-xs text-accent-text"
@@ -51,6 +66,7 @@ export function RepositoryWorkflowActions({
               </TextButton>
             </>
           )}
+
           <TextButton
             disabled={writing || conflicts > 0}
             onClick={() => setRebaseAction("continue")}
@@ -58,6 +74,7 @@ export function RepositoryWorkflowActions({
           >
             {t("workflows.repositoryWorkflowActions.continueRebase")}
           </TextButton>
+
           <TextButton
             disabled={writing || workflow.rebaseEdit}
             onClick={() => setRebaseAction("skip")}
@@ -72,6 +89,7 @@ export function RepositoryWorkflowActions({
           >
             {t("workflows.repositoryWorkflowActions.skipCommit")}
           </TextButton>
+
           <TextButton
             disabled={writing}
             onClick={() => setRebaseAction("abort")}
@@ -81,6 +99,7 @@ export function RepositoryWorkflowActions({
           </TextButton>
         </>
       )}
+
       {workflow && (
         <span
           role="status"
@@ -93,6 +112,7 @@ export function RepositoryWorkflowActions({
           })}
         </span>
       )}
+
       {(workflow?.kind === "cherry-pick" || workflow?.kind === "revert") &&
         (["continue", "skip", "abort"] as const).map((action) => (
           <TextButton
@@ -104,6 +124,7 @@ export function RepositoryWorkflowActions({
             {replayActionLabel(workflow!.kind as ReplayKind, action)}...
           </TextButton>
         ))}
+
       {(workflow?.kind === "merge" ||
         workflow?.kind === "squash" ||
         workflow?.kind === "stash") && (
@@ -117,6 +138,7 @@ export function RepositoryWorkflowActions({
             : t("workflows.repositoryWorkflowActions.abortMerge")}
         </TextButton>
       )}
+
       {workflow?.kind === "stash" && (
         <TextButton
           disabled={writing || finishingStash || conflicts > 0}
@@ -140,7 +162,9 @@ export function RepositoryWorkflowActions({
           {t("workflows.repositoryWorkflowActions.finishStashApplication")}
         </TextButton>
       )}
+
       {stashError && <ErrorDialog>{stashError}</ErrorDialog>}
+
       {(workflow?.kind === "merge" || workflow?.kind === "squash") && (
         <TextButton
           className="text-accent-text disabled:opacity-50"
@@ -155,36 +179,48 @@ export function RepositoryWorkflowActions({
           {t("workflows.repositoryWorkflowActions.continueMerge")}
         </TextButton>
       )}
+
       {rebaseAction && (
-        <RebaseDialog
-          key={repositoryId}
-          repositoryId={repositoryId}
-          action={rebaseAction}
-          onClose={() => setRebaseAction(null)}
-        />
+        <Suspense fallback={null}>
+          <RebaseDialog
+            key={repositoryId}
+            repositoryId={repositoryId}
+            action={rebaseAction}
+            onClose={() => setRebaseAction(null)}
+          />
+        </Suspense>
       )}
+
       {replayAction && (
-        <ReplayDialog
-          repositoryId={repositoryId}
-          kind={replayAction.kind}
-          action={replayAction.action}
-          onClose={() => setReplayAction(null)}
-        />
+        <Suspense fallback={null}>
+          <ReplayDialog
+            repositoryId={repositoryId}
+            kind={replayAction.kind}
+            action={replayAction.action}
+            onClose={() => setReplayAction(null)}
+          />
+        </Suspense>
       )}
+
       {mergeFor === repositoryId && (
-        <MergeContinueDialog
-          key={repositoryId}
-          repositoryId={repositoryId}
-          onClose={() => setMergeFor(null)}
-        />
+        <Suspense fallback={null}>
+          <MergeContinueDialog
+            key={repositoryId}
+            repositoryId={repositoryId}
+            onClose={() => setMergeFor(null)}
+          />
+        </Suspense>
       )}
+
       {abortFor === repositoryId && (
-        <MergeAbortDialog
-          kind={workflow?.kind === "stash" ? "stash" : "merge"}
-          key={repositoryId}
-          repositoryId={repositoryId}
-          onClose={() => setAbortFor(null)}
-        />
+        <Suspense fallback={null}>
+          <MergeAbortDialog
+            kind={workflow?.kind === "stash" ? "stash" : "merge"}
+            key={repositoryId}
+            repositoryId={repositoryId}
+            onClose={() => setAbortFor(null)}
+          />
+        </Suspense>
       )}
     </>
   );

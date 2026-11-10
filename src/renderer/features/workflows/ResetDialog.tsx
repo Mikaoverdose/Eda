@@ -30,6 +30,7 @@ export function ResetDialog({
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const prepare = async () => {
     setBusy(true);
     setReview(null);
@@ -74,9 +75,8 @@ export function ResetDialog({
     <Dialog
       title={t("resetDialog.resetToCommit")}
       wide
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       description={t("resetDialog.moveTheCurrentBranchOrDetachedHeadTo")}
       footer={
         result ? (
@@ -99,6 +99,7 @@ export function ResetDialog({
         {result ? (
           <>
             <p role="status">{t("resetDialog.resetCompleted")}</p>
+
             {result.publishedCommits > 0 && (
               <p role="note">
                 {t("resetDialog.thisResetRemovedPublishedCommitsFromTheCurrent", {
@@ -106,12 +107,14 @@ export function ResetDialog({
                 })}
               </p>
             )}
+
             <p>
               <Localized id="resetDialog.head" values={{ code: <code>{result.head}</code> }} />
             </p>
             {result.snapshotId && (
               <p>{t("resetDialog.savedWorkingIndexCopiesAreAvailableInRecoverLocalFiles")}</p>
             )}
+
             <Disclosure title={t("resetDialog.recoveryDetails")}>
               <p>
                 <Localized
@@ -119,6 +122,7 @@ export function ResetDialog({
                   values={{ code: <code>{result.recoveryRef}</code> }}
                 />
               </p>
+
               <p>{t("resetDialog.completedResetRecoveryRecordsAreRetainedFor30Days")}</p>
             </Disclosure>
           </>
@@ -126,6 +130,7 @@ export function ResetDialog({
           <>
             <label className="flex items-center gap-2">
               {t("resetDialog.resetMode")}
+
               <Select
                 aria-label={t("resetDialog.resetMode")}
                 value={mode}
@@ -138,6 +143,7 @@ export function ResetDialog({
                 <option value="hard">{t("resetDialog.hardResetIndexAndWorkingFiles")}</option>
               </Select>
             </label>
+
             <DefinitionList
               items={[
                 {
@@ -167,6 +173,7 @@ export function ResetDialog({
                 },
               ]}
             />
+
             {review && (
               <>
                 <p>
@@ -178,12 +185,14 @@ export function ResetDialog({
                     }}
                   />
                 </p>
+
                 <p>
                   <Localized
                     id="resetDialog.target"
                     values={{ code: <code>{review.target}</code> }}
                   />
                 </p>
+
                 <p>
                   {t("resetDialog.indexPathsChangeWorkingPathsMayBeReplacedRecoveryCopiesBytes", {
                     length: review.indexPaths.length,
@@ -191,11 +200,13 @@ export function ResetDialog({
                     recoveryBytes: review.recoveryBytes.toLocaleString(getLocale()),
                   })}
                 </p>
+
                 <ul className="max-h-48 overflow-auto font-mono">
                   {[...new Set([...review.indexPaths, ...review.workingPaths])].map((path) => (
                     <li key={path}>{path}</li>
                   ))}
                 </ul>
+
                 {review.publishedCommits > 0 && (
                   <p role="note" className="text-git-modified">
                     {t("resetDialog.thisResetRemovesCommitsReachableFromLocallyKnown", {
@@ -203,7 +214,9 @@ export function ResetDialog({
                     })}
                   </p>
                 )}
+
                 <p>{t("resetDialog.thePreviousHeadAndIndexTreeAreSaved")}</p>
+
                 <Checkbox
                   checked={confirmed}
                   disabled={busy}
@@ -217,6 +230,7 @@ export function ResetDialog({
             )}
           </>
         )}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>

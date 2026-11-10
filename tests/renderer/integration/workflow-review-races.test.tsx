@@ -3,15 +3,17 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ok } from "@shared/errors";
 import { StashFileRestoreDialog } from "@renderer/features/stashes/StashFileRestoreDialog";
+import { MergeStartDialog } from "@renderer/features/workflows/MergeStartDialog";
 import { MergeAbortDialog } from "@renderer/features/workflows/MergeAbortDialog";
 import { ReplayDialog } from "@renderer/features/workflows/ReplayDialog";
 import { IdentityDialog } from "@renderer/features/profiles/IdentityDialog";
 import { useAppStore } from "@renderer/stores/app-store";
 
-it.each(["stash", "merge", "replay"])(
+it.each(["stash", "merge", "merge-start", "replay"])(
   "ignores stale %s previews after the review target changes",
   async (kind) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
     const preview = (id: string) => ({
       token: id,
       path: id,
@@ -26,11 +28,14 @@ it.each(["stash", "merge", "replay"])(
       kind: "revert" as const,
       action: "abort" as const,
       head: id,
-      branch: null,
+      branch: "main",
+      prediction: { state: "clean", paths: [], totalPaths: 0 },
       author: "Eda",
       email: "eda@example.com",
     });
+
     let finish!: (result: ReturnType<typeof ok<ReturnType<typeof preview>>>) => void;
+
     const prepare = vi
       .fn()
       .mockImplementationOnce(
@@ -40,16 +45,20 @@ it.each(["stash", "merge", "replay"])(
           }),
       )
       .mockResolvedValueOnce(ok(preview("new-target")));
+
     vi.stubGlobal("eda", {
       stashes: { prepareFile: prepare },
-      workflows: { prepareAbort: prepare },
+      workflows: { prepareAbort: prepare, prepareStart: prepare },
       replay: { prepare },
     });
+
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+
     const render = (id: string) => {
       const props = { repositoryId: id, onClose: vi.fn() };
+
       return kind === "stash" ? (
         <StashFileRestoreDialog
           {...props}
@@ -58,12 +67,15 @@ it.each(["stash", "merge", "replay"])(
           path={id}
           onRestored={vi.fn()}
         />
+      ) : kind === "merge-start" ? (
+        <MergeStartDialog {...props} source={id} />
       ) : kind === "merge" ? (
         <MergeAbortDialog {...props} />
       ) : (
         <ReplayDialog {...props} kind="revert" action="abort" />
       );
     };
+
     try {
       await act(async () => root.render(render("old-target")));
       await act(async () => root.render(render("new-target")));
@@ -82,15 +94,18 @@ it.each(["stash", "merge", "replay"])(
 it("allows retry after profile saving rejects and retains the input", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const app = useAppStore.getState();
+
   const updateIdentity = vi
     .fn()
     .mockRejectedValueOnce(new Error("Transport unavailable"))
     .mockResolvedValueOnce(true);
+
   const onClose = vi.fn();
   useAppStore.setState({ updateIdentity, error: null });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   try {
     await act(async () =>
       root.render(
@@ -110,23 +125,29 @@ it("allows retry after profile saving rejects and retains the input", async () =
         />,
       ),
     );
+
     const save = () =>
       [...document.querySelectorAll("button")].find(
         (button) => button.textContent === "Save profile",
       )!;
+
     await act(async () => save().click());
     expect(document.body.textContent).toContain("Something went wrong. Please try again.");
     expect(save().disabled).toBe(false);
     expect(onClose).not.toHaveBeenCalled();
+
     const dismiss = [...document.querySelectorAll("button")].find(
       (button) => button.textContent === "Dismiss",
     )!;
+
     await act(async () => dismiss.click());
     await act(async () => save().click());
+
     expect(updateIdentity).toHaveBeenLastCalledWith(
       "profile",
       expect.objectContaining({ name: "Work", gitEmail: "eda@example.com" }),
     );
+
     expect(onClose).toHaveBeenCalledOnce();
   } finally {
     await act(async () => root.unmount());
@@ -140,14 +161,17 @@ it.each(["repository", "initial commit"])(
   "resets replay selection when the %s changes",
   async (change) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
     const prepare = vi.fn(async () => ({
       ok: false,
       error: errorFixture({ message: "Preview unavailable" }),
     }));
+
     vi.stubGlobal("eda", { replay: { prepare } });
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+
     try {
       await act(async () =>
         root.render(
@@ -160,6 +184,7 @@ it.each(["repository", "initial commit"])(
           />,
         ),
       );
+
       await act(async () =>
         root.render(
           <ReplayDialog
@@ -171,6 +196,7 @@ it.each(["repository", "initial commit"])(
           />,
         ),
       );
+
       expect(prepare).toHaveBeenLastCalledWith(
         change === "repository" ? "second" : "first",
         "cherry-pick",
@@ -178,6 +204,7 @@ it.each(["repository", "initial commit"])(
         change === "repository" ? [] : ["new-commit"],
         undefined,
       );
+
       expect(document.body.textContent).not.toContain("old-commit");
     } finally {
       await act(async () => root.unmount());
@@ -189,11 +216,13 @@ it.each(["repository", "initial commit"])(
 
 it("invalidates a merge abort review when its workflow kind changes", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
   let finish!: (
     result: ReturnType<
       typeof ok<{ token: string; originalHead: string; paths: string[]; bytes: number }>
     >,
   ) => void;
+
   const prepareAbort = vi
     .fn()
     .mockImplementationOnce(
@@ -203,21 +232,27 @@ it("invalidates a merge abort review when its workflow kind changes", async () =
         }),
     )
     .mockResolvedValueOnce(ok({ token: "stash", originalHead: "stash-head", paths: [], bytes: 0 }));
+
   vi.stubGlobal("eda", { workflows: { prepareAbort } });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   try {
     await act(async () =>
       root.render(<MergeAbortDialog repositoryId="repo" kind="merge" onClose={vi.fn()} />),
     );
+
     await act(async () =>
       root.render(<MergeAbortDialog repositoryId="repo" kind="stash" onClose={vi.fn()} />),
     );
+
     expect(prepareAbort).toHaveBeenCalledTimes(2);
+
     await act(async () =>
       finish(ok({ token: "merge", originalHead: "old-merge", paths: [], bytes: 0 })),
     );
+
     expect(document.body.textContent).toContain("stash-head");
     expect(document.body.textContent).not.toContain("old-merge");
   } finally {

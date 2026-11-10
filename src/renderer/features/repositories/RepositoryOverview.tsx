@@ -1,16 +1,26 @@
 import { t } from "@shared/i18n";
-import { RepositorySyncActions } from "../sync/RepositorySyncActions";
-import { Skeleton } from "../../components/ui/feedback/Skeleton";
-import { RepositoryWorkflowActions } from "../workflows/RepositoryWorkflowActions";
-import { ArrowDown, ArrowUp, GitBranch, CircleAlert } from "lucide-react";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { categorizeChanges, useRepositoryStore } from "../../stores/repository-store";
-import { BranchMenu } from "../references/BranchMenu";
+import { ArrowDown, ArrowUp, CircleAlert, GitBranch } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
+import { Skeleton } from "../../components/ui/feedback/Skeleton";
 import { RefreshButton, TextButton } from "../../components/ui/index";
-import { useState } from "react";
-import { RemotesDialog } from "../sync/RemotesDialog";
-import { ConflictDialog } from "../changes/ConflictDialog";
-import { StashesDialog } from "../stashes/StashesDialog";
+import { categorizeChanges } from "../../repository/working-changes";
+import { useRepositoryStore } from "../../stores/repository-store";
+import { BranchMenu } from "../references/BranchMenu";
+import { RepositorySyncActions } from "../sync/RepositorySyncActions";
+import { RepositoryWorkflowActions } from "../workflows/RepositoryWorkflowActions";
+
+const RemotesDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.RemotesDialog })),
+);
+
+const ConflictDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.ConflictDialog })),
+);
+
+const StashesDialog = lazy(() =>
+  import("../repository-dialogs").then((module) => ({ default: module.StashesDialog })),
+);
 
 export function RepositoryOverview({
   repository,
@@ -43,6 +53,7 @@ export function RepositoryOverview({
             {repository.name}
           </h1>
           <span className="text-text-tertiary">/</span>
+
           {pending ? (
             <Skeleton className="w-24" />
           ) : branch?.head ? (
@@ -53,12 +64,14 @@ export function RepositoryOverview({
               {t("repositoryOverview.detachedHead", { oid: branch?.oid?.slice(0, 7) })}
             </span>
           )}
+
           {!pending && branch?.unborn && (
             <span className="text-xs text-text-tertiary">
               {t("repositoryOverview.noCommitsYet")}
             </span>
           )}
         </div>
+
         <div className="flex min-w-0 items-center gap-2 text-xs text-text-tertiary">
           {pending ? (
             <Skeleton className="w-32" />
@@ -67,6 +80,7 @@ export function RepositoryOverview({
               <span title={branch.upstream} className="max-w-48 truncate">
                 {t("repositoryOverview.tracking", { upstream: branch.upstream })}
               </span>
+
               <span
                 title={t("repositoryOverview.commitsAheadOfTheLocallyKnownUpstream")}
                 className="flex shrink-0 items-center gap-1"
@@ -74,6 +88,7 @@ export function RepositoryOverview({
                 <ArrowUp size={12} />
                 {branch.ahead}
               </span>
+
               <span
                 title={t("repositoryOverview.commitsBehindTheLocallyKnownUpstream")}
                 className="flex shrink-0 items-center gap-1"
@@ -91,7 +106,9 @@ export function RepositoryOverview({
           )}
         </div>
       </div>
+
       <RepositorySyncActions />
+
       <div
         aria-label={t("repositoryOverview.repositoryActions")}
         className="flex min-w-0 flex-1 items-center justify-end gap-4 text-xs"
@@ -103,17 +120,20 @@ export function RepositoryOverview({
         >
           {t("repositoryOverview.stashes")}
         </TextButton>
+
         <TextButton
           className="text-text-secondary hover:text-text-primary"
           onClick={() => setRemotesFor(repository.id)}
         >
           {t("repositoryOverview.remotes")}
         </TextButton>
+
         {onOpenCommit && (
           <TextButton className="text-accent-text" onClick={onOpenCommit}>
             {t("repositoryOverview.commitDraft")}
           </TextButton>
         )}
+
         {!pending && (
           <RepositoryWorkflowActions
             repositoryId={repository.id}
@@ -122,6 +142,7 @@ export function RepositoryOverview({
             conflicts={conflicts}
           />
         )}
+
         {!pending && (
           <>
             {conflicts > 0 && (
@@ -132,6 +153,7 @@ export function RepositoryOverview({
                 {t("repositoryOverview.resolveConflicts", { conflicts: conflicts })}
               </TextButton>
             )}
+
             {truncated && (
               <CircleAlert
                 size={14}
@@ -141,6 +163,7 @@ export function RepositoryOverview({
             )}
           </>
         )}
+
         <RefreshButton
           label={t("repositoryOverview.refreshRepository")}
           disabled={pending || writing}
@@ -162,26 +185,35 @@ export function RepositoryOverview({
           }}
         />
       </div>
+
       {remotesFor === repository.id && (
-        <RemotesDialog
-          key={repository.id}
-          repositoryId={repository.id}
-          onClose={() => setRemotesFor(null)}
-        />
+        <Suspense fallback={null}>
+          <RemotesDialog
+            key={repository.id}
+            repositoryId={repository.id}
+            onClose={() => setRemotesFor(null)}
+          />
+        </Suspense>
       )}
+
       {conflictsFor === repository.id && (
-        <ConflictDialog
-          key={repository.id}
-          repositoryId={repository.id}
-          onClose={() => setConflictsFor(null)}
-        />
+        <Suspense fallback={null}>
+          <ConflictDialog
+            key={repository.id}
+            repositoryId={repository.id}
+            onClose={() => setConflictsFor(null)}
+          />
+        </Suspense>
       )}
+
       {stashesFor === repository.id && (
-        <StashesDialog
-          key={repository.id}
-          repositoryId={repository.id}
-          onClose={() => setStashesFor(null)}
-        />
+        <Suspense fallback={null}>
+          <StashesDialog
+            key={repository.id}
+            repositoryId={repository.id}
+            onClose={() => setStashesFor(null)}
+          />
+        </Suspense>
       )}
     </header>
   );

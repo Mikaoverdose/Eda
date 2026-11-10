@@ -3,7 +3,7 @@ import { t } from "@shared/i18n";
 import { MAX_STASH_NAME_LENGTH, type StashInspection } from "@shared/workflows/stashes";
 import { useState } from "react";
 
-import { Button, Dialog, ErrorDialog, Input } from "../../components/ui/index";
+import { DialogActions, Dialog, ErrorDialog, Input } from "../../components/ui/index";
 
 export function StashRenameDialog({
   repositoryId,
@@ -19,6 +19,7 @@ export function StashRenameDialog({
   const [name, setName] = useState(inspection.entry.message);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const rename = async () => {
     setBusy(true);
     setError(null);
@@ -38,27 +39,22 @@ export function StashRenameDialog({
       description={t(
         "stashRenameDialog.saveTheSameContentsUnderANewDescriptionThenRemoveTheOldEntry",
       )}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
+      busy={busy}
+      onClose={onClose}
       footer={
-        <>
-          <Button variant="quiet" disabled={busy} onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy || !name.trim() || name.trim() === inspection.entry.message}
-            onClick={() => void rename()}
-          >
-            {t("stashRenameDialog.renameStash")}
-          </Button>
-        </>
+        <DialogActions
+          onClose={onClose}
+          onConfirm={() => void rename()}
+          confirmLabel={t("stashRenameDialog.renameStash")}
+          busy={busy}
+          confirmDisabled={!name.trim() || name.trim() === inspection.entry.message}
+        />
       }
     >
       <div className="space-y-3 text-xs">
         <label className="block">
           {t("stashRenameDialog.newDescription")}
+
           <Input
             aria-label={t("stashRenameDialog.newStashDescription")}
             value={name}
@@ -67,6 +63,7 @@ export function StashRenameDialog({
             onChange={(event) => setName(event.target.value)}
           />
         </label>
+
         <p>{t("stashRenameDialog.theRenamedStashMovesToTheTopOf")}</p>
         <p>{t("stashRenameDialog.ifRemovingTheOldEntryFailsBothEntries")}</p>
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
