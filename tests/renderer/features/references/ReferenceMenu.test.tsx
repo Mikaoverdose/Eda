@@ -5,6 +5,8 @@ import { ok, err } from "@shared/errors";
 import type { BranchSummary } from "@shared/repository/repository-write";
 import { emptySession } from "@shared/identity/profile-session";
 import { ReferenceMenu } from "@renderer/features/references/ReferenceMenu";
+import { useTagReferences } from "@renderer/features/references/hooks/useTagReferences";
+import { ReferenceRow } from "@renderer/features/references/ReferenceRow";
 import { ReferenceSidebar } from "@renderer/features/references/ReferenceSidebar";
 import { useAppStore } from "@renderer/stores/app-store";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
@@ -859,3 +861,35 @@ it("shows no deletion action after a tag disappears from both locations", async 
   expect(deleteTag).not.toHaveBeenCalled();
   expect(push).not.toHaveBeenCalled();
 });
+
+it.each(["rejected", "reported"])(
+  "clears stale local-only status after a %s remote refresh failure and recovers on retry",
+  async (failure) => {
+    const tags = [{ name: "v1", oid: local.oid }];
+
+    function References({ revision }: { revision: number }) {
+      const references = useTagReferences("repo", "profile", tags, revision, false);
+      return <ReferenceRow item={references[0]!} selected={false} onActions={() => {}} />;
+    }
+
+    remoteTags.mockResolvedValue(ok([]));
+    await act(async () => root.render(<References revision={0} />));
+    expect(container.textContent).toBe("v1Local");
+
+    if (failure === "rejected") inspect.mockRejectedValueOnce(new Error("offline"));
+    else
+      inspect.mockResolvedValueOnce(
+        err(errorFixture({ kind: "network-failed", message: "offline" })),
+      );
+
+    await act(async () => root.render(<References revision={1} />));
+    expect(container.textContent).toBe("v1");
+    expect(container.querySelector("button")?.title).toContain("Remote tag status is unavailable");
+
+    remoteTags.mockResolvedValue(ok([{ name: "v1", oid: local.oid }]));
+    await act(async () => root.render(<References revision={2} />));
+    expect(container.textContent).toBe("v1");
+    expect(container.querySelector("button")?.title).toContain("Remote tag: upstream");
+    expect(container.querySelector("button")?.title).not.toContain("unavailable");
+  },
+);

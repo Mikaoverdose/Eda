@@ -44,6 +44,7 @@ export function ReferenceRow({
               remotes: tag.remotes.map((remote) => remote.name).join(", "),
             })
           : "",
+        tag.remoteStatusUnavailable ? t("referenceSidebar.remoteTagStatusUnavailable") : "",
         tag.unknownRemotes.length
           ? t("referenceSidebar.remoteTagUnavailable", {
               remotes: tag.unknownRemotes.join(", "),

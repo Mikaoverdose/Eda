@@ -2455,6 +2455,7 @@
   "referenceSidebar.localLocation": "Local",
   "referenceSidebar.localTagIndicator": "Local tag",
   "referenceSidebar.remoteTagIndicator": "Remote tag: {remotes}",
+  "referenceSidebar.remoteTagStatusUnavailable": "Remote tag status is unavailable.",
   "referenceSidebar.remoteTagUnavailable": "Remote status unavailable: {remotes}",
   "referenceMenu.loadingTagTargets": "Loading tag targets...",
   "referenceMenu.localTagActions": "Checkout and signature verification use the local copy. Local and remote tags with the same name may differ.",
