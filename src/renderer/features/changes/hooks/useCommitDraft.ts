@@ -1,7 +1,8 @@
 import { categorizeChanges } from "../../../repository/working-changes";
 import { emptyDraft } from "@shared/identity/profile-session";
 import { matchCommitPrefix } from "@shared/preferences/commit-prefix";
-import { useState, type KeyboardEvent } from "react";
+import { errorMessage } from "@shared/errors";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useAppStore } from "../../../stores/app-store";
 import { usePreferencesStore } from "../../../stores/preferences-store";
 import { useRepositoryStore } from "../../../stores/repository-store";
@@ -21,6 +22,19 @@ export function useCommitDraft(pending: boolean) {
   const snapshot = useSessionStore((state) => state.snapshot);
   const transitioning = useSessionStore((state) => state.transitioning);
   const selectedId = useAppStore((state) => state.selectedRepositoryId);
+  const [amendLoading, setAmendLoading] = useState(false);
+  const [amendError, setAmendError] = useState<string | null>(null);
+  const amendRequest = useRef(0);
+  const context = snapshot?.context;
+
+  useEffect(() => {
+    setAmendLoading(false);
+    setAmendError(null);
+    return () => {
+      amendRequest.current++;
+    };
+  }, [repositoryId, selectedId, context?.profileId, context?.generation, context?.windowId]);
+
   const draft = (selectedId && snapshot?.drafts[selectedId]) || emptyDraft();
   const { message, amend } = draft;
   const firstBreak = message.indexOf("\n");
@@ -47,15 +61,63 @@ export function useCommitDraft(pending: boolean) {
       useSessionStore.getState().setDraft(repositoryId, { ...draft, message });
   };
 
-  const setAmend = (amend: boolean) => {
-    if (!pending && repositoryId)
-      useSessionStore.getState().setDraft(repositoryId, { ...draft, amend });
+  const setAmend = async (amend: boolean) => {
+    if (pending || !repositoryId || transitioning || snapshot?.recovery) return;
+    const oid = status?.branch.oid;
+    if (amend && !oid) return;
+
+    const request = ++amendRequest.current;
+    const generation = useRepositoryStore.getState().generation;
+    const session = useSessionStore.getState();
+    session.setDraft(repositoryId, { ...draft, amend });
+    const revisionKey = `${context?.profileId}:${repositoryId}`;
+    const revision = useSessionStore.getState().draftRevisions[revisionKey];
+    setAmendError(null);
+    setAmendLoading(amend);
+    if (!amend || !oid) return;
+
+    try {
+      const result = await window.eda.repository.inspectCommit(repositoryId, oid);
+      const current = useSessionStore.getState();
+      const repository = useRepositoryStore.getState();
+      const latest = current.snapshot?.drafts[repositoryId];
+
+      if (
+        amendRequest.current !== request ||
+        current.transitioning ||
+        current.snapshot?.context.profileId !== context?.profileId ||
+        current.snapshot?.context.generation !== context?.generation ||
+        current.snapshot?.context.windowId !== context?.windowId ||
+        useAppStore.getState().selectedRepositoryId !== repositoryId ||
+        repository.repositoryId !== repositoryId ||
+        repository.generation !== generation ||
+        repository.status?.branch.oid !== oid ||
+        current.draftRevisions[revisionKey] !== revision ||
+        !latest?.amend ||
+        latest.message !== message
+      )
+        return;
+
+      if (result.ok) {
+        const { subject, body } = result.value.commit;
+        current.setDraft(repositoryId, {
+          ...latest,
+          message: body ? `${subject}\n\n${body}` : subject,
+        });
+      } else {
+        current.setDraft(repositoryId, { ...latest, amend: false });
+        setAmendError(errorMessage(result.error));
+      }
+    } finally {
+      if (amendRequest.current === request) setAmendLoading(false);
+    }
   };
 
   const staged = categorizeChanges(status?.changes ?? []).staged.length;
 
   const canCommit =
     !pending &&
+    !amendLoading &&
     subject.trim().length > 0 &&
     (staged > 0 || amend) &&
     !writing &&
@@ -134,6 +196,8 @@ export function useCommitDraft(pending: boolean) {
     description,
     setMessage,
     setAmend,
+    amendLoading,
+    amendError,
     staged,
     canCommit,
     submit,

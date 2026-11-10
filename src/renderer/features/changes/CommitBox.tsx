@@ -72,6 +72,8 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
     description,
     setMessage,
     setAmend,
+    amendLoading,
+    amendError,
     staged,
     canCommit,
     submit,
@@ -178,21 +180,13 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
           <Checkbox
             className="flex items-center gap-1.5 text-xs text-text-secondary"
             checked={amend}
-            disabled={pending || !!snapshot?.recovery || transitioning}
-            onChange={(event) => setAmend(event.target.checked)}
+            disabled={pending || !!snapshot?.recovery || transitioning || !status?.branch.oid}
+            onChange={(event) => void setAmend(event.target.checked)}
           >
             {t("commitBox.amendThePreviousCommit")}
           </Checkbox>
 
-          {amend && (
-            <p className="text-xs text-git-modified">
-              {t("commitBox.amendReplacesTheLatestCommitIdIfThat", {
-                value1: preview?.sharedRefs.length
-                  ? t("commitBox.headIsContainedIn", { sharedRefs: preview.sharedRefs.join(", ") })
-                  : t("commitBox.remoteTrackingRefsDoNotProveWhetherThisCommitHasBeenShared"),
-              })}
-            </p>
-          )}
+          {amendError && <ErrorDialog>{amendError}</ErrorDialog>}
 
           <Disclosure title={t("commitBox.commitOptions")} className="text-xs">
             <div className="mt-1.5 space-y-1.5">
@@ -376,7 +370,7 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
               variant="primary"
               size="sm"
               disabled={!canCommit}
-              busy={writing}
+              busy={writing || amendLoading}
               title={t("commitBox.commitCtrlEnter")}
               onClick={() => void submit()}
             >
