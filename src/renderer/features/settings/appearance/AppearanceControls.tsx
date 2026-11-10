@@ -25,11 +25,12 @@ export function AppearanceControls({
   const zoom = useScopedSetting("uiZoom", owner);
   const motion = useScopedSetting("reducedMotion", owner);
   const reading = zoom.reading || motion.reading;
+  const unavailable = zoom.unavailable || motion.unavailable;
   const workspace = owner === "profile";
 
   useEffect(() => {
-    if (preview && !reading) previewMotion(motion.resolved.value);
-  }, [preview, reading, motion.resolved.value]);
+    if (preview && !unavailable) previewMotion(motion.resolved.value);
+  }, [preview, unavailable, motion.resolved.value]);
 
   useEffect(() => {
     if (!preview) return;
@@ -73,7 +74,7 @@ export function AppearanceControls({
     <>
       <fieldset
         disabled={workspace && !activeId}
-        inert={saving || reading}
+        inert={saving || unavailable}
         aria-busy={saving || reading}
         className="flex min-w-0 flex-col gap-5 border-t border-border-subtle pt-6"
       >

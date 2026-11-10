@@ -18,8 +18,8 @@ export function AccentSettings({
   const hue = accent.resolved.value;
 
   useEffect(() => {
-    if (preview && !accent.reading) previewAccent(hue);
-  }, [preview, accent.reading, hue]);
+    if (preview && !accent.unavailable) previewAccent(hue);
+  }, [preview, accent.unavailable, hue]);
 
   useEffect(() => {
     if (!preview) return;
@@ -28,7 +28,7 @@ export function AccentSettings({
 
   return (
     <fieldset
-      inert={saving || accent.reading}
+      inert={saving || accent.unavailable}
       aria-busy={saving || accent.reading}
       className="space-y-4 border-t border-border-subtle pt-6"
     >

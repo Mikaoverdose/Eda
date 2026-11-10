@@ -19,7 +19,7 @@ export function LanguageSettings() {
         id={id}
         value={language.resolved.value}
         onValueChange={(value) => void language.set(value)}
-        disabled={language.reading || saving}
+        disabled={language.unavailable || saving}
         surface="base"
       >
         <option value="system">{t("settings.language.system")}</option>

@@ -25,7 +25,7 @@ export function FetchSettings({ repositoryId }: { repositoryId?: string }) {
         <Select
           aria-label={t("settings.fetchSettings.backgroundFetchInterval")}
           className="w-full"
-          disabled={saving || busy || interval.reading || inherited.reading}
+          disabled={saving || busy || interval.unavailable || inherited.unavailable}
           value={repositoryId && interval.following ? "inherit" : String(interval.resolved.value)}
           onValueChange={(value) => {
             setBusy(true);
@@ -91,13 +91,13 @@ function FetchCheckbox({
   const saving = usePreferencesStore((state) => state.saving);
   const [checked, setChecked] = useState(setting.resolved.value);
   useEffect(() => {
-    if (!setting.reading) setChecked(setting.resolved.value);
-  }, [setting.reading, setting.resolved.value]);
+    if (!setting.unavailable) setChecked(setting.resolved.value);
+  }, [setting.unavailable, setting.resolved.value]);
   return (
     <Checkbox
       className="flex w-full"
       checked={checked}
-      disabled={saving || setting.reading}
+      disabled={saving || setting.unavailable}
       onChange={(event) => {
         const previous = checked;
         setChecked(event.target.checked);

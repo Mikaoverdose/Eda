@@ -47,6 +47,7 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
   const appearance = useScopedSetting("theme", owner);
   const gitSync = useScopedSetting("syncGlobalGitConfig", owner);
   const reading = appearance.reading || gitSync.reading;
+  const unavailable = appearance.unavailable || gitSync.unavailable;
   const [following, setFollowing] = useState(false);
 
   const scope: SettingScope =
@@ -55,16 +56,16 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
       : { kind: "application" };
 
   useEffect(() => {
-    if (!appearance.reading) setTheme(appearance.resolved);
-  }, [appearance.reading, appearance.resolved]);
+    if (!appearance.unavailable) setTheme(appearance.resolved);
+  }, [appearance.unavailable, appearance.resolved]);
 
   useEffect(() => {
-    if (!gitSync.reading) setSync(gitSync.resolved);
-  }, [gitSync.reading, gitSync.resolved]);
+    if (!gitSync.unavailable) setSync(gitSync.resolved);
+  }, [gitSync.unavailable, gitSync.resolved]);
 
   useEffect(() => {
-    if (preview && !reading) previewAppearance(theme.value);
-  }, [preview, reading, theme]);
+    if (preview && !unavailable) previewAppearance(theme.value);
+  }, [preview, unavailable, theme]);
 
   useEffect(() => {
     if (!preview) return;
@@ -96,7 +97,7 @@ function ScopedPreferencesContent({ owner, section, preview = false }: ScopedPre
 
   return (
     <fieldset
-      inert={loading || reading || saving || following}
+      inert={loading || unavailable || saving || following}
       aria-busy={loading || reading || saving || following}
       className="flex min-w-0 flex-col gap-6"
     >

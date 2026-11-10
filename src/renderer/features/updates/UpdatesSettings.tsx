@@ -307,7 +307,7 @@ export function UpdatesSettings() {
           aria-label={t("settings.updatesSettings.checkForUpdatesAutomatically")}
           aria-describedby={automaticDescription}
           checked={automatic.resolved.value}
-          disabled={automatic.reading}
+          disabled={automatic.unavailable}
           onChange={(event) => void automatic.set(event.currentTarget.checked)}
         >
           <span className="min-w-0 space-y-1">
@@ -332,7 +332,7 @@ export function UpdatesSettings() {
           aria-label={t("settings.updatesSettings.includePrereleaseUpdates")}
           aria-describedby={prereleaseDescription}
           checked={prereleases.resolved.value}
-          disabled={prereleases.reading || updateInProgress}
+          disabled={prereleases.unavailable || updateInProgress}
           onChange={(event) => void prereleases.set(event.currentTarget.checked)}
         >
           <span className="min-w-0 space-y-1">

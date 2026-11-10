@@ -60,7 +60,7 @@ export function RepositoryCommitIdentity() {
           });
         }}
       >
-        <fieldset disabled={setting.reading || saving} className="space-y-3">
+        <fieldset disabled={setting.unavailable || saving} className="space-y-3">
           <Field label={t("settings.repositoryCommitIdentity.commitAuthorName")}>
             {(props) => (
               <Input {...props} name="name" defaultValue={identity.name} required maxLength={128} />

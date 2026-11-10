@@ -26,17 +26,26 @@ export function useScopedSetting<K extends SettingKey>(
     owner !== "application" ? profileId : null,
     repositoryId,
   ]);
-  const [result, setResult] = useState<{ contextKey: string; value: ResolvedSetting<K> } | null>(
-    null,
-  );
-  const resolved = result?.contextKey === contextKey ? result.value : builtInSetting(key);
+  const [result, setResult] = useState<{
+    contextKey: string;
+    value: ResolvedSetting<K> | null;
+  } | null>(null);
+  const resolved =
+    result?.contextKey === contextKey ? (result.value ?? builtInSetting(key)) : builtInSetting(key);
   const [reading, setReading] = useState(true);
-  const scope: SettingScope =
-    owner === "repository" && profileId && repositoryId
-      ? { kind: "repository", profileId, repositoryId }
-      : owner === "profile" && profileId
-        ? { kind: "profile", profileId }
-        : { kind: "application" };
+  let scope: SettingScope = { kind: "application" };
+
+  if (owner === "repository" && profileId && repositoryId)
+    scope = { kind: "repository", profileId, repositoryId };
+  else if (owner === "profile" && profileId) scope = { kind: "profile", profileId };
+
+  const unavailable =
+    reading ||
+    switching !== null ||
+    result?.contextKey !== contextKey ||
+    !result.value ||
+    (owner !== "application" && !profileId) ||
+    (owner === "repository" && !repositoryId);
 
   useEffect(() => {
     if (switching !== null) return;
@@ -54,13 +63,13 @@ export function useScopedSetting<K extends SettingKey>(
         if (cancelled) return;
         if (result.ok) setResult({ contextKey, value: result.value });
         else {
-          setResult(null);
+          setResult({ contextKey, value: null });
           usePreferencesStore.setState({ error: result.error });
         }
       })
       .catch(() => {
         if (cancelled) return;
-        setResult(null);
+        setResult({ contextKey, value: null });
         usePreferencesStore.setState({
           error: new GitError({
             kind: "unknown",
@@ -79,16 +88,17 @@ export function useScopedSetting<K extends SettingKey>(
   }, [key, owner, profileId, repositoryId, values, contextKey, switching]);
 
   const valid = () =>
-    owner === "application" ||
-    (!!profileId &&
-      useAppStore.getState().activeIdentity?.id === profileId &&
-      (owner !== "repository" ||
-        (!!repositoryId && useAppStore.getState().selectedRepositoryId === repositoryId)));
+    !unavailable &&
+    (owner === "application" ||
+      (!!profileId &&
+        useAppStore.getState().activeIdentity?.id === profileId &&
+        (owner !== "repository" ||
+          (!!repositoryId && useAppStore.getState().selectedRepositoryId === repositoryId))));
 
   return {
     resolved,
-    reading:
-      reading || result?.contextKey !== contextKey || (owner !== "application" && !profileId),
+    reading: reading || result?.contextKey !== contextKey,
+    unavailable,
     following: owner !== "application" && resolved.source.kind !== owner,
     set: (value: SettingValues[K]) =>
       valid() ? usePreferencesStore.getState().set(key, scope, value) : Promise.resolve(false),

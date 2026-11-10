@@ -15,7 +15,7 @@ export function SshAgentSettings() {
       <p className="text-xs text-text-secondary">
         {t("settings.sshAgentSettings.chooseHowEdaKeepsPassphraseProtectedSshKeysUnlocked")}
       </p>
-      <fieldset disabled={agent.reading || saving}>
+      <fieldset disabled={agent.unavailable || saving}>
         <div
           role="radiogroup"
           aria-label={t("settings.sshAgentSettings.sshAgent")}

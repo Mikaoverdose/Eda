@@ -43,7 +43,11 @@ it("retains the confirmed value on refresh but clears it across profile changes 
   const root = createRoot(container);
   function Example() {
     const setting = useScopedSetting("uiZoom", "profile");
-    return <output data-reading={setting.reading}>{setting.resolved.value}</output>;
+    return (
+      <output data-reading={setting.reading} data-unavailable={setting.unavailable}>
+        {setting.resolved.value}
+      </output>
+    );
   }
   try {
     await act(async () => root.render(<Example />));
@@ -57,7 +61,8 @@ it("retains the confirmed value on refresh but clears it across profile changes 
     expect(container.querySelector("output")?.dataset["reading"]).toBe("true");
     await act(async () => reject(new Error("offline")));
     expect(container.textContent).toBe(String(builtInSetting("uiZoom").value));
-    expect(container.querySelector("output")?.dataset["reading"]).toBe("true");
+    expect(container.querySelector("output")?.dataset["reading"]).toBe("false");
+    expect(container.querySelector("output")?.dataset["unavailable"]).toBe("true");
   } finally {
     await act(async () => root.unmount());
     profile.id = "first";
@@ -76,7 +81,8 @@ it("keeps scoped preferences disabled and reports a rejected read", async () => 
   const root = createRoot(container);
   try {
     await act(async () => root.render(<ScopedPreferences owner="profile" section="appearance" />));
-    expect(container.querySelector("fieldset")?.getAttribute("aria-busy")).toBe("true");
+    expect(container.querySelector("fieldset")?.getAttribute("aria-busy")).toBe("false");
+    expect(container.querySelector("fieldset")?.hasAttribute("inert")).toBe(true);
     expect(usePreferencesStore.getState().error?.message).toBe(
       "Could not read application preferences.",
     );

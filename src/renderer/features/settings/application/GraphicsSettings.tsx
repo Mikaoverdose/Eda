@@ -47,7 +47,7 @@ export function GraphicsSettings() {
   }, []);
 
   const pendingRestart =
-    status && !setting.reading && setting.resolved.value !== status.enabledAtStartup;
+    status && !setting.unavailable && setting.resolved.value !== status.enabledAtStartup;
 
   return (
     <div className="space-y-3 border-t border-border-subtle pt-5">
@@ -59,7 +59,7 @@ export function GraphicsSettings() {
       </div>
       <Checkbox
         checked={setting.resolved.value}
-        disabled={setting.reading}
+        disabled={setting.unavailable}
         aria-busy={saving}
         onChange={(event) => void setting.set(event.currentTarget.checked)}
       >

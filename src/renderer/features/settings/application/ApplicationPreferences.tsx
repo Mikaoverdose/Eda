@@ -73,7 +73,7 @@ export function ApplicationPreferences({
 
   return (
     <fieldset
-      inert={saving || choosing || editor.reading}
+      inert={saving || choosing || editor.unavailable}
       aria-busy={saving || choosing || editor.reading}
       className="flex flex-col gap-5"
     >

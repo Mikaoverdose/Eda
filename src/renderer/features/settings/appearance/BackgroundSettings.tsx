@@ -65,8 +65,8 @@ export function BackgroundSettings({
   };
 
   useEffect(() => {
-    if (preview && !background.reading) previewBackground(value);
-  }, [preview, background.reading, value]);
+    if (preview && !background.unavailable) previewBackground(value);
+  }, [preview, background.unavailable, value]);
 
   useEffect(() => {
     if (!preview) return;
@@ -76,7 +76,7 @@ export function BackgroundSettings({
   return (
     <div className="space-y-6 border-t border-border-subtle pt-6">
       <fieldset
-        inert={background.reading || saving}
+        inert={background.unavailable || saving}
         aria-busy={background.reading || saving}
         className="min-w-0 space-y-4"
       >
@@ -85,12 +85,14 @@ export function BackgroundSettings({
             <h2 className="text-sm font-medium">
               {t("settings.backgroundSettings.backgroundImage")}
             </h2>
+
             <p className="mt-1 text-xs text-text-secondary">
               {t(
                 "settings.backgroundSettings.addAPersonalBackdropLowerStrengthKeepsTextEasierToRead",
               )}
             </p>
           </div>
+
           {workspace && (
             <Select
               aria-label={t("settings.backgroundSettings.backgroundImageSource")}
@@ -100,10 +102,12 @@ export function BackgroundSettings({
               }
             >
               <option value="global">{t("common.followGlobal")}</option>
+
               <option value="custom">{t("settings.backgroundSettings.customize")}</option>
             </Select>
           )}
         </div>
+
         <fieldset disabled={background.following} className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center gap-4">
             {value.image && (
@@ -113,6 +117,7 @@ export function BackgroundSettings({
                 className="block h-auto max-h-28 w-auto max-w-48 shrink-0 rounded-md border border-border-subtle"
               />
             )}
+
             <div className="min-w-0 flex-1 space-y-3">
               <div className="flex flex-wrap gap-2">
                 <AsyncButton
@@ -132,6 +137,7 @@ export function BackgroundSettings({
                     ? t("settings.backgroundSettings.changeImage")
                     : t("settings.backgroundSettings.chooseImage")}
                 </AsyncButton>
+
                 {value.image && (
                   <Button size="sm" onClick={() => void background.set({ ...value, image: "" })}>
                     {t("settings.backgroundSettings.removeImage")}
@@ -140,6 +146,7 @@ export function BackgroundSettings({
               </div>
             </div>
           </div>
+
           {value.image && (
             <div className="grid gap-5 sm:grid-cols-2">
               <BackgroundImageControls
@@ -154,9 +161,10 @@ export function BackgroundSettings({
           )}
         </fieldset>
       </fieldset>
+
       <fieldset
         disabled={!supported}
-        inert={transparency.reading || saving}
+        inert={transparency.unavailable || saving}
         aria-busy={transparency.reading || saving}
         className="min-w-0 space-y-4 border-t border-border-subtle pt-6"
       >
@@ -165,6 +173,7 @@ export function BackgroundSettings({
             <h2 className="text-sm font-medium">
               {t("settings.backgroundSettings.windowTransparency")}
             </h2>
+
             <p className="mt-1 text-xs text-text-secondary">
               {supported
                 ? t(
@@ -173,6 +182,7 @@ export function BackgroundSettings({
                 : t("settings.backgroundSettings.linuxWindowTransparencyIsNotAvailableInEdaYet")}
             </p>
           </div>
+
           {workspace && (
             <Select
               aria-label={t("settings.backgroundSettings.windowTransparencySource")}
@@ -182,10 +192,12 @@ export function BackgroundSettings({
               }
             >
               <option value="global">{t("common.followGlobal")}</option>
+
               <option value="custom">{t("settings.backgroundSettings.customize")}</option>
             </Select>
           )}
         </div>
+
         <fieldset disabled={transparency.following} className="min-w-0 space-y-4">
           <Checkbox
             checked={windowValue.enabled}
@@ -195,6 +207,7 @@ export function BackgroundSettings({
           >
             {t("settings.backgroundSettings.enableTransparency")}
           </Checkbox>
+
           {windowValue.enabled && (
             <RangeField
               label={t("settings.backgroundSettings.windowOpacity")}

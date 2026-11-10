@@ -173,7 +173,7 @@ export function MergeToolSettings({
       </p>
       <Select
         id={id}
-        disabled={busy || setting.reading}
+        disabled={busy || setting.unavailable}
         value={setting.following ? "global" : config.executable || "builtin"}
         onValueChange={(value) => void choose(value)}
         surface="base"
@@ -199,7 +199,11 @@ export function MergeToolSettings({
         open={advanced}
         onToggle={(event) => setAdvanced(event.currentTarget.open)}
       >
-        <fieldset disabled={busy || setting.reading} aria-busy={busy} className="mt-3 space-y-3">
+        <fieldset
+          disabled={busy || setting.unavailable}
+          aria-busy={busy}
+          className="mt-3 space-y-3"
+        >
           <label className="block text-xs">
             {t("settings.mergeToolSettings.executablePath")}
             <Input
