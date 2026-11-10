@@ -1,8 +1,10 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { expect } from "playwright/test";
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,7 +19,7 @@ await writeFile(
   "[user]\nname = Fixture\nemail = fixture@example.invalid\n[commit]\ngpgsign = false\n",
 );
 const env = {
-  ...process.env,
+  ...fixtureEnvironment(root),
   HOME: root,
   USERPROFILE: root,
   GIT_CONFIG_GLOBAL: config,

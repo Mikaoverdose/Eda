@@ -6,8 +6,8 @@ export function simulatedGitConfig(profile: Identity, matched: boolean): GitConf
   const values = {
     ...profileGitConfig(profile),
     ...(!matched && {
-      "user.name": `${profile.gitName} (${t("settings.stateSimulations.differentIdentity")})`,
-      "user.email": `simulation+${profile.gitEmail}`,
+      "user.name": `Example (${t("settings.stateSimulations.differentIdentity")})`,
+      "user.email": "simulation@example.invalid",
     }),
   };
 

@@ -1,6 +1,8 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { expect } from "playwright/test";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -26,7 +28,11 @@ try {
       `--user-data-dir=${fixtureRoot}`,
       ...(process.platform === "linux" ? ["--ozone-platform=x11", "--disable-gpu"] : []),
     ],
-    env: { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: "1" },
+    env: {
+      ...fixtureEnvironment(fixtureRoot),
+      GIT_CONFIG_GLOBAL: config,
+      GIT_CONFIG_NOSYSTEM: "1",
+    },
   });
   const page = await app.firstWindow();
   const errors: string[] = [];
@@ -388,9 +394,7 @@ try {
 
   const gitDetails = page.getByRole("dialog", { name: "Review global Git settings", exact: true });
 
-  await gitDetails
-    .getByRole("cell", { name: "simulation+fixture@example.test", exact: true })
-    .waitFor();
+  await gitDetails.getByRole("cell", { name: "simulation@example.invalid", exact: true }).waitFor();
 
   await gitDetails.getByRole("button", { name: "Apply profile globally", exact: true }).click();
   await gitDetails.waitFor({ state: "detached" });

@@ -102,7 +102,7 @@ export function GalleryActions({
 
           <PreviewRow label={t("settings.componentGallery.compactActions")}>
             <ExternalLinkButton
-              href="https://eda.kirameki.cafe"
+              href="https://example.com"
               onClick={(event) => {
                 event.preventDefault();
 

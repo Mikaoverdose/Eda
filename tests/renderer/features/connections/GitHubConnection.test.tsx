@@ -47,7 +47,7 @@ beforeEach(() => {
       login: "work-user",
       name: "Work User",
       bio: "Building useful things.",
-      location: "Bangkok",
+      location: "Example City",
       avatarDataUrl: "data:image/png;base64,AQID",
     }),
   );
@@ -113,7 +113,7 @@ it("opens GitHub with the displayed verification code, honors polling intervals,
   expect(container.textContent).toContain("@work-user");
   expect(container.textContent).toContain("Work User");
   expect(container.textContent).toContain("Building useful things.");
-  expect(container.textContent).toContain("Bangkok");
+  expect(container.textContent).toContain("Example City");
 
   expect(container.querySelector(".profile-avatar img")?.getAttribute("src")).toBe(
     "data:image/png;base64,AQID",

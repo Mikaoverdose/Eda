@@ -1,6 +1,8 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,7 +13,7 @@ const config = join(root, "gitconfig");
 await writeFile(config, "[user]\nname = Fixture\nemail = fixture@example.com\n");
 
 const env = {
-  ...process.env,
+  ...fixtureEnvironment(root),
   HOME: root,
   USERPROFILE: root,
   GIT_CONFIG_GLOBAL: config,

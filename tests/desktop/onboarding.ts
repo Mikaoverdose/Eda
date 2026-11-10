@@ -1,8 +1,10 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { expect } from "playwright/test";
 import assert from "node:assert/strict";
 import { accentComponents } from "../../src/shared/preferences/accent.ts";
 import { defaultCommitPrefixes } from "../../src/shared/preferences/commit-prefix.ts";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { type ElectronApplication, type Page } from "playwright";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -39,7 +41,7 @@ async function launch() {
   app = await electron.launch({
     args: ["dist/main/index.js", `--user-data-dir=${root}`],
     env: {
-      ...process.env,
+      ...fixtureEnvironment(root),
       HOME: root,
       USERPROFILE: root,
       GIT_CONFIG_GLOBAL: config,

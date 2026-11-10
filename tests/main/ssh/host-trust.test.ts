@@ -146,7 +146,7 @@ describe("host trust during real SSH connections", () => {
       [key, hostKey, wrongHostKey].map(async (path) => {
         const generated = await raw.run({
           executable: "ssh-keygen",
-          args: ["-q", "-t", "ed25519", "-f", path, "-N", ""],
+          args: ["-q", "-t", "ed25519", "-f", path, "-N", "", "-C", "fixture@example.test"],
           env,
         });
         expect(generated.exitCode).toBe(0);

@@ -1,7 +1,7 @@
 import { checkReleaseFeed } from "@main/application/release-feed";
 import { updateError } from "@main/application/update-service";
 
-const base = "https://eda.kirameki.cafe/api/updates/v1/stable/osx/arm64/";
+const base = "https://updates.example.test/api/updates/v1/stable/osx/arm64/";
 const asset = (Version: string, Type = "Full") => ({
   PackageId: "Eda",
   Version,

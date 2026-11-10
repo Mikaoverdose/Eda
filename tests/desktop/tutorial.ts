@@ -1,5 +1,6 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import assert from "node:assert/strict";
-import { _electron as electron } from "playwright";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -7,7 +8,11 @@ const root = await mkdtemp(join(tmpdir(), "eda-tour-"));
 const errors: string[] = [];
 const app = await electron.launch({
   args: ["dist/main/index.js", "--no-sandbox", `--user-data-dir=${root}`],
-  env: { ...process.env, GIT_CONFIG_GLOBAL: `${root}/gitconfig`, GIT_CONFIG_NOSYSTEM: "1" },
+  env: {
+    ...fixtureEnvironment(root),
+    GIT_CONFIG_GLOBAL: `${root}/gitconfig`,
+    GIT_CONFIG_NOSYSTEM: "1",
+  },
 });
 const page = await app.firstWindow();
 page.on("pageerror", (e) => errors.push(e.message));
@@ -66,7 +71,8 @@ try {
   assert.equal(presentation.image, expectedBackground);
   assert.equal(presentation.strength, "0.75");
   assert.equal(presentation.canvas, "rgba(0, 0, 0, 0)");
-  assert.ok(presentation.profile?.includes("Tour test"));
+  assert.ok(presentation.profile?.includes("Explorer"));
+  assert.ok(!presentation.profile?.includes("Tour test"));
   await frame.getByRole("button", { name: "Activity", exact: true }).waitFor();
   await page.evaluate(() =>
     document.documentElement.style.setProperty("--background-strength", "0.55"),
@@ -174,6 +180,7 @@ try {
   await frame.getByRole("heading", { name: "Your way around Eda" }).waitFor();
   await frame.getByRole("button", { name: "Skip tour", exact: true }).click();
   await page.locator("iframe").waitFor({ state: "detached" });
+
   assert.deepEqual(errors, []);
   console.log("Tutorial desktop checks passed.");
 } catch (e) {

@@ -1,9 +1,11 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import { chooseSelect } from "./select-control.ts";
 import type { ProfileSession } from "../../src/shared/identity/profile-session.ts";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { type ElectronApplication, type Page } from "playwright";
 import { expect } from "playwright/test";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
@@ -26,7 +28,7 @@ await writeFile(
 );
 
 const env = {
-  ...process.env,
+  ...fixtureEnvironment(root),
   HOME: root,
   USERPROFILE: root,
   GIT_CONFIG_GLOBAL: config,

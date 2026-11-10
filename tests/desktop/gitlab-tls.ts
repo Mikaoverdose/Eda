@@ -1,3 +1,5 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -6,7 +8,7 @@ import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { expect } from "playwright/test";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import { trustFixture } from "./helpers/trust.ts";
@@ -28,7 +30,7 @@ async function launch() {
   app = await electron.launch({
     args: [bootstrap, `--user-data-dir=${root}`],
     env: {
-      ...process.env,
+      ...fixtureEnvironment(root),
       HOME: root,
       USERPROFILE: root,
       GIT_CONFIG_GLOBAL: config,
@@ -138,7 +140,7 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
         login: "avery",
         name: "Avery Lin",
         bio: "Building thoughtful tools.",
-        location: "Bangkok",
+        location: "Example",
         avatarDataUrl: null,
       },
     }));
@@ -188,7 +190,7 @@ import(${JSON.stringify(pathToFileURL(resolve("dist/main/index.js")).href)});
   await capture("overview");
   const github = page.getByRole("region", { name: "GitHub connection", exact: true });
   await expect(github.getByText("Building thoughtful tools.", { exact: true })).toBeVisible();
-  await expect(github.getByText("Bangkok", { exact: true })).toBeVisible();
+  await expect(github.getByText("Example", { exact: true })).toBeVisible();
   await expect(github.getByText("Connected", { exact: true })).toHaveCount(0);
 
   assertSmoothResize(

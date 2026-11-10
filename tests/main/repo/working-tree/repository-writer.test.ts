@@ -111,7 +111,11 @@ describe("pre-commit identity verification", () => {
     const { repo, writer, identities, identity } = await setup();
     const key = join(repo.home, "signing-key");
 
-    execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key], { stdio: "pipe" });
+    execFileSync(
+      "ssh-keygen",
+      ["-q", "-t", "ed25519", "-N", "", "-f", key, "-C", "fixture@example.test"],
+      { stdio: "pipe" },
+    );
     identities.configureSigning(identity.id, { format: "ssh", keyRef: key, signCommits: true });
     await repo.writeFile("signed.txt", "signed");
     await writer.stage("r1", ["signed.txt"]);

@@ -1,4 +1,5 @@
 export const MAINTAINER_GITHUB_LOGIN = "YuzuZensai";
+export const MAINTAINER_EMAIL = ["yuzu", "kirameki.cafe"].join("@");
 
 export interface GitHubAccount {
   id: string;

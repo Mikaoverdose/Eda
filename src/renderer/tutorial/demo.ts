@@ -94,7 +94,7 @@ const ok = <T>(value: T) => ({ ok: true as const, value });
 
 export function createDemo() {
   let platform: EdaApi["app"]["platform"] = "linux";
-  let avatar = { dataUrl: null as string | null, expiresAt: Number.MAX_SAFE_INTEGER };
+  const avatar = { dataUrl: null, expiresAt: Number.MAX_SAFE_INTEGER };
   let preferences: Partial<{ [K in SettingKey]: ResolvedSetting<K> }> = {};
   let diffMode: ResolvedSetting<"diffMode"> | undefined;
   let status = initialStatus();
@@ -237,11 +237,9 @@ export function createDemo() {
     api,
     setPresentation(next: {
       platform: EdaApi["app"]["platform"];
-      avatar?: typeof avatar;
       preferences?: typeof preferences;
     }) {
       platform = next.platform;
-      if (next.avatar) avatar = next.avatar;
       if (next.preferences) preferences = structuredClone(next.preferences);
       return diffMode;
     },

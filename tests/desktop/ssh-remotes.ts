@@ -1,9 +1,11 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import { expect } from "playwright/test";
 import { chooseSelect } from "./select-control.ts";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import ssh2 from "ssh2";
 import { existsSync } from "node:fs";
 import { execFileSync, spawn } from "node:child_process";
@@ -21,7 +23,7 @@ const wrongKey = join(root, "wrong-key");
 const hostKey = join(root, "host-key");
 const gpgHome = join(root, "gnupg");
 const env = {
-  ...process.env,
+  ...fixtureEnvironment(root),
   PATH: process.env["PATH"] ?? "",
   GNUPGHOME: gpgHome,
   HOME: root,

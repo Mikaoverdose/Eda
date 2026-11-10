@@ -104,7 +104,7 @@ it("accepts Windows network paths while rejecting drive-relative paths", () => {
 describe("requireEmail", () => {
   it("accepts ordinary addresses", () => {
     expect(requireEmail("dev@example.com")).toBe("dev@example.com");
-    expect(requireEmail("a.b+tag@sub.example.co.uk")).toBe("a.b+tag@sub.example.co.uk");
+    expect(requireEmail("a.b+tag@sub.example.org")).toBe("a.b+tag@sub.example.org");
   });
 
   it("rejects addresses without a domain dot or with whitespace", () => {

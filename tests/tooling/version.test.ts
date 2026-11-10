@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -12,7 +13,11 @@ function fixture(t: TestContext) {
   writeFileSync(join(root, "package.json"), JSON.stringify({ version: "0.0.1" }));
 
   const git = (...args: string[]) =>
-    execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: "pipe" }).trim();
+    execFileSync("git", ["-C", root, ...args], {
+      env: fixtureEnvironment(root),
+      encoding: "utf8",
+      stdio: "pipe",
+    }).trim();
   const commit = () => {
     git("add", ".");
     git(

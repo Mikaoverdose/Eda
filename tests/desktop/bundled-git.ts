@@ -1,7 +1,9 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { expect } from "playwright/test";
 import { trustFixture } from "./helpers/trust.ts";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -10,7 +12,7 @@ import type { Result } from "../../src/shared/errors.ts";
 const root = await mkdtemp(join(tmpdir(), "eda-bundled-gate-"));
 const packaged = process.argv.includes("--packaged");
 const env = Object.fromEntries(
-  Object.entries(process.env).filter(
+  Object.entries(fixtureEnvironment(root)).filter(
     (entry): entry is [string, string] =>
       entry[0].toLowerCase() !== "path" && entry[1] !== undefined,
   ),

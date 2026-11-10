@@ -95,7 +95,17 @@ it("unlocks a disposable encrypted key for real Git signing and stops only its o
   });
   const generated = await runner.run({
     executable: "ssh-keygen",
-    args: ["-q", "-t", "ed25519", "-f", key, "-N", "disposable-test-passphrase"],
+    args: [
+      "-q",
+      "-t",
+      "ed25519",
+      "-f",
+      key,
+      "-N",
+      "disposable-test-passphrase",
+      "-C",
+      "fixture@example.test",
+    ],
     env,
   });
   expect(generated.exitCode).toBe(0);

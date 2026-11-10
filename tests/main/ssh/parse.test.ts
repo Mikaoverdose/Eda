@@ -14,7 +14,7 @@ describe("parseKeyLine", () => {
   it("parses an ed25519 fingerprint line", () => {
     expect(parseKeyLine(fx.fingerprintEd25519)).toEqual({
       bits: 256,
-      fingerprint: "SHA256:HW9RqUZzUcV77QKLbkDAI5pzoivy7Oz/wm0oiGIBj4Y",
+      fingerprint: "SHA256:RXm/ruZ0eTzRXKwi1AQEDynB0VgHQ2ac9KPSFdf/YnA",
       comment: "test@eda.invalid",
       type: "ED25519",
     });
@@ -28,7 +28,7 @@ describe("parseKeyLine", () => {
 
   it("parses an MD5 fingerprint without mistaking it for a comment", () => {
     const parsed = parseKeyLine(fx.fingerprintMd5);
-    expect(parsed?.fingerprint).toBe("MD5:76:6d:06:2b:15:77:9b:2d:bd:81:e9:6c:d1:7f:02:5d");
+    expect(parsed?.fingerprint).toBe("MD5:d6:9a:30:45:17:cf:91:c4:27:94:f3:22:92:a3:00:0e");
     expect(parsed?.comment).toBe("test@eda.invalid");
   });
 

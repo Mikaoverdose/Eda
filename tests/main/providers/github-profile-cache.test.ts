@@ -2,10 +2,10 @@ import { GitHubProfileCache } from "@main/providers/github-profile-cache";
 
 const user = {
   id: 7,
-  login: "YuzuZensai",
-  name: "Yuzu",
+  login: "fixture-maintainer",
+  name: "Fixture Maintainer",
   bio: "Hello\nGitHub",
-  location: "Japan / Thailand",
+  location: "Example City",
   email: "private@example.test",
   avatar_url: "https://avatars.githubusercontent.com/u/7?v=4",
   access_token: "never-cache-this",
@@ -27,7 +27,9 @@ it("deduplicates public profile lookups in memory and retains cached details whe
   const account = { login: user.login };
 
   expect(await Promise.all([cache.get(account), cache.get(account)])).toEqual([details, details]);
-  expect(request).toHaveBeenCalledExactlyOnceWith("https://api.github.com/users/YuzuZensai");
+  expect(request).toHaveBeenCalledExactlyOnceWith(
+    "https://api.github.com/users/fixture-maintainer",
+  );
 
   expect(await cache.get(account)).toEqual(details);
   expect(request).toHaveBeenCalledOnce();

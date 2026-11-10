@@ -5,14 +5,20 @@ import { builtInSetting, type SettingKey } from "@shared/preferences/settings";
 import { usePreferencesStore } from "@renderer/stores/preferences-store";
 import { useSimulationStore } from "@renderer/stores/simulation-store";
 
+vi.mock("@shared/integrations/github", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  MAINTAINER_GITHUB_LOGIN: "fixture-maintainer",
+  MAINTAINER_EMAIL: "maintainer@example.test",
+}));
+
 it.each([
   null,
   {
     id: "7",
-    login: "YuzuZensai",
-    name: "Yuzu",
+    login: "fixture-maintainer",
+    name: "Fixture Maintainer",
     bio: "A cached bio",
-    location: "Japan / Thailand",
+    location: "Example City",
     avatarDataUrl: null,
   },
 ])(
@@ -128,7 +134,9 @@ it.each([
       );
       expect(container.textContent).toContain("Local changes (dirty)");
       expect(container.textContent).toContain(publicProfile ? "Homebrew" : "Development");
-      expect(container.querySelector(".profile-avatar")?.textContent).toBe("Y");
+      expect(container.querySelector(".profile-avatar")?.textContent).toBe(
+        publicProfile ? "FM" : "Y",
+      );
       expect(container.querySelector("img")).toBeNull();
       expect(github.maintainerProfile).toHaveBeenCalledOnce();
 
@@ -143,11 +151,11 @@ it.each([
 
       expect(email.title).toBe("Copy maintainer email");
       expect(email.querySelector("svg")).not.toBeNull();
-      expect(container.textContent).toContain("yuzu@kirameki.cafe");
+      expect(container.textContent).toContain("maintainer@example.test");
 
       await act(async () => email.click());
 
-      expect(copyText).toHaveBeenCalledWith("yuzu@kirameki.cafe");
+      expect(copyText).toHaveBeenCalledWith("maintainer@example.test");
 
       const copy = container.querySelector<HTMLButtonElement>('[aria-label="Copy Eda version"]')!;
 

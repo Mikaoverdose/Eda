@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from "./fixture-environment";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,6 +40,7 @@ export async function createTempRepo(
   );
 
   const sandboxEnv: Record<string, string> = {
+    ...fixtureEnvironment(home, {}),
     HOME: home,
     USERPROFILE: home,
     GIT_CONFIG_GLOBAL: globalConfig,

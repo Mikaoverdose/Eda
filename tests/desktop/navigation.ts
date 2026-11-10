@@ -1,7 +1,9 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -30,6 +32,7 @@ declare global {
 
 const root = await mkdtemp(join(tmpdir(), "eda-navigation-gate-"));
 const config = join(root, "gitconfig");
+const fixtureEnv = fixtureEnvironment(root);
 
 await writeFile(config, "[user]\nname = Fixture\nemail = fixture@example.com\n");
 
@@ -39,7 +42,7 @@ try {
   app = await electron.launch({
     args: ["dist/main/index.js", "--no-sandbox", `--user-data-dir=${root}`],
     env: {
-      ...process.env,
+      ...fixtureEnvironment(root),
       HOME: root,
       USERPROFILE: root,
       GIT_CONFIG_GLOBAL: config,
@@ -109,9 +112,9 @@ try {
   const repositoryPath = join(root, "navigation-repository");
 
   await mkdir(repositoryPath);
-  execFileSync("git", ["init", "-b", "main", repositoryPath], { stdio: "pipe" });
+  execFileSync("git", ["init", "-b", "main", repositoryPath], { env: fixtureEnv, stdio: "pipe" });
   await writeFile(join(repositoryPath, "file.txt"), "initial\n");
-  execFileSync("git", ["-C", repositoryPath, "add", "."], { stdio: "pipe" });
+  execFileSync("git", ["-C", repositoryPath, "add", "."], { env: fixtureEnv, stdio: "pipe" });
   execFileSync(
     "git",
     [
@@ -127,7 +130,7 @@ try {
       "-m",
       "Navigation fixture",
     ],
-    { stdio: "pipe" },
+    { env: fixtureEnv, stdio: "pipe" },
   );
   await writeFile(join(repositoryPath, "file.txt"), "working change\n");
 

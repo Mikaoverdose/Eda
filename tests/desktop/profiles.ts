@@ -1,8 +1,10 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { execFileSync } from "node:child_process";
 import {
   mkdtemp,
@@ -27,7 +29,7 @@ await writeFile(
 );
 
 const fixtureEnv = {
-  ...process.env,
+  ...fixtureEnvironment(root),
   HOME: root,
   USERPROFILE: root,
   GIT_CONFIG_GLOBAL: config,
@@ -67,10 +69,14 @@ for (const name of ["alpha", "beta", "gamma"] as const) {
 const keys = { work: join(root, "work-key"), home: join(root, "home-key") };
 
 for (const path of Object.values(keys))
-  execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", path], {
-    env: fixtureEnv,
-    stdio: "pipe",
-  });
+  execFileSync(
+    "ssh-keygen",
+    ["-q", "-t", "ed25519", "-N", "", "-f", path, "-C", "fixture@example.test"],
+    {
+      env: fixtureEnv,
+      stdio: "pipe",
+    },
+  );
 
 const errors: string[] = [];
 let app: ElectronApplication | undefined;
@@ -78,7 +84,7 @@ const launch = async () => {
   const running = await electron.launch({
     args: ["dist/main/index.js", `--user-data-dir=${root}`],
     env: {
-      ...process.env,
+      ...fixtureEnvironment(root),
       HOME: root,
       USERPROFILE: root,
       GIT_CONFIG_GLOBAL: config,

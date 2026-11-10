@@ -120,7 +120,7 @@ describe("GitHub device OAuth", () => {
         login: "renamed-user",
         name: "Work User",
         bio: "Hello\nGitHub",
-        location: "Bangkok",
+        location: "Example City",
         html_url: "https://evil.invalid",
         avatar_url: "https://evil.invalid/avatar",
         email: "private@example.com",
@@ -135,7 +135,7 @@ describe("GitHub device OAuth", () => {
       login: "renamed-user",
       name: "Work User",
       bio: "Hello GitHub",
-      location: "Bangkok",
+      location: "Example City",
       avatarUrl: "https://evil.invalid/avatar",
     });
 

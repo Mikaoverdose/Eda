@@ -231,11 +231,11 @@ function setup() {
     github: {
       maintainerProfile: vi.fn(async () => ({
         id: "7",
-        login: "YuzuZensai",
+        login: "fixture-maintainer",
         avatarUrl: "https://avatars.githubusercontent.com/u/7?v=4",
-        name: "Yuzu",
+        name: "Fixture Maintainer",
         bio: "Public bio",
-        location: "Japan / Thailand",
+        location: "Example City",
       })),
       status: vi.fn(() => ({ secureStorage: true, account: null })),
       profile: vi.fn(async () => ({
@@ -330,10 +330,10 @@ describe("IPC registration", () => {
       ok: true,
       value: {
         id: "7",
-        login: "YuzuZensai",
-        name: "Yuzu",
+        login: "fixture-maintainer",
+        name: "Fixture Maintainer",
         bio: "Public bio",
-        location: "Japan / Thailand",
+        location: "Example City",
         avatarDataUrl: "data:image/png;base64,AQID",
       },
     });

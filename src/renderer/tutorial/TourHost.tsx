@@ -1,6 +1,5 @@
 import { t } from "@shared/i18n";
 import { useEffect, useRef, useState } from "react";
-import { useAppStore } from "../stores/app-store";
 import { usePreferencesStore } from "../stores/preferences-store";
 
 export function TourHost({ onClose }: { onClose: () => void }) {
@@ -10,31 +9,8 @@ export function TourHost({ onClose }: { onClose: () => void }) {
     const opener = document.activeElement;
     let ready = false;
     let disposed = false;
-    let avatarEmail: string | undefined;
-    let avatar: { dataUrl: string | null; expiresAt: number } | undefined;
     const sendAppearance = () => {
       if (!ready || disposed) return;
-      const profile = useAppStore.getState().activeIdentity;
-      if (profile && profile.gitEmail !== avatarEmail) {
-        avatar = undefined;
-        avatarEmail = profile.gitEmail;
-        const email = avatarEmail;
-        void window.eda.avatars
-          .get(email)
-          .then((result) => {
-            if (disposed || email !== avatarEmail) return;
-            avatar = result.ok
-              ? result.value
-              : { dataUrl: null, expiresAt: Number.MAX_SAFE_INTEGER };
-            sendAppearance();
-          })
-          .catch(() => {
-            if (disposed || email !== avatarEmail) return;
-            avatar = { dataUrl: null, expiresAt: Number.MAX_SAFE_INTEGER };
-            sendAppearance();
-          });
-      }
-      if (profile && !avatar) return;
       frame.current?.contentWindow?.postMessage(
         {
           type: "eda:tour-appearance",
@@ -42,8 +18,6 @@ export function TourHost({ onClose }: { onClose: () => void }) {
           attributes: { ...document.documentElement.dataset },
           preferences: usePreferencesStore.getState().values,
           platform: window.eda.app.platform,
-          profile,
-          avatar,
         },
         "*",
       );

@@ -201,7 +201,7 @@ it("never supplies tokens to other profiles, hosts, self-hosted GitLab, SSH, or 
   ).toBeUndefined();
 
   for (const url of [
-    "https://gitlab.company.com/team/repo.git",
+    "https://gitlab.company.test/team/repo.git",
     "https://gitlab.com.evil.test/team/repo",
     "https://gitlab.com@evil.test/team/repo",
     "http://gitlab.com/team/repo",

@@ -1,5 +1,7 @@
+import { electron } from "../helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../helpers/fixture-environment.ts";
 import { trustFixture } from "./helpers/trust.ts";
-import { _electron as electron, type Page, type Locator } from "playwright";
+import { type Page, type Locator } from "playwright";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,11 +12,11 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 3;
 const MAX_MOUNTED_ROWS = 80;
 const userData = await mkdtemp(join(tmpdir(), "eda-large-gate-"));
-let generatedRepository;
-const repository =
-  process.env["EDA_LARGE_REPO"] ?? (generatedRepository = await createSyntheticRepository());
+const generatedRepository = await createSyntheticRepository();
+const repository = generatedRepository;
 const commitCount = Number(
   execFileSync("git", ["-C", repository, "rev-list", "--count", "--all"], {
+    env: fixtureEnvironment(userData),
     encoding: "utf8",
   }).trim(),
 );
@@ -32,7 +34,7 @@ await writeFile(gitConfigGlobal, "");
 const app = await electron.launch({
   args: ["dist/main/index.js", "--no-sandbox", `--user-data-dir=${userData}`],
   env: {
-    ...process.env,
+    ...fixtureEnvironment(userData),
     HOME: userData,
     USERPROFILE: userData,
     GIT_CONFIG_GLOBAL: gitConfigGlobal,
@@ -174,7 +176,8 @@ try {
 async function createSyntheticRepository() {
   const path = await mkdtemp(join(tmpdir(), "eda-history-"));
 
-  execFileSync("git", ["init", "-q", "-b", "main", path]);
+  const env = fixtureEnvironment(path);
+  execFileSync("git", ["init", "-q", "-b", "main", path], { env });
 
   const records = [];
 
@@ -186,11 +189,13 @@ async function createSyntheticRepository() {
   }
 
   execFileSync("git", ["-C", path, "fast-import", "--quiet"], {
+    env,
     input: records.join(""),
     maxBuffer: 1024 * 1024,
   });
 
   const tips = execFileSync("git", ["-C", path, "rev-list", "--max-count=10000", "HEAD"], {
+    env,
     encoding: "utf8",
   })
     .trim()

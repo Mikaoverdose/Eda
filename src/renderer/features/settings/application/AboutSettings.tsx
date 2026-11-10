@@ -1,6 +1,10 @@
 import { PACKAGE_MANAGER_NAMES, type InstallationInfo } from "@shared/application";
 import { t, type MessageKey } from "@shared/i18n";
-import { MAINTAINER_GITHUB_LOGIN, type GitHubAccountProfile } from "@shared/integrations/github";
+import {
+  MAINTAINER_EMAIL,
+  MAINTAINER_GITHUB_LOGIN,
+  type GitHubAccountProfile,
+} from "@shared/integrations/github";
 import { UPDATE_DOWNLOAD_PAGE } from "@shared/updates";
 import { ExternalLink, Heart, Mail, Star } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -18,9 +22,7 @@ import { ProviderIcon } from "../../connections/ProviderIcon";
 import { UpdatesSettings } from "../../updates/UpdatesSettings";
 
 const maintainer = MAINTAINER_GITHUB_LOGIN;
-const emailUser = "yuzu";
-const emailBase = "kirameki.cafe";
-const maintainerEmail = [emailUser, emailBase].join("@");
+const maintainerEmail = MAINTAINER_EMAIL;
 const repositoryUrl = `https://github.com/${maintainer}/Eda`;
 const installationKeys = {
   development: "settings.aboutSettings.installationDevelopment",

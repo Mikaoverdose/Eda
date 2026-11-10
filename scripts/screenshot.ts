@@ -1,9 +1,11 @@
+import { electron } from "../tests/helpers/fixture-electron.ts";
+import { fixtureEnvironment } from "../tests/helpers/fixture-environment.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { type ElectronApplication, type Page } from "playwright";
 
 const project = fileURLToPath(new URL("..", import.meta.url));
 const output = join(project, "screenshots");
@@ -33,7 +35,7 @@ try {
       ...(process.platform === "linux" ? ["--ozone-platform=x11", "--disable-gpu"] : []),
     ],
     env: {
-      ...process.env,
+      ...fixtureEnvironment(userData),
       HOME: userData,
       USERPROFILE: userData,
       GIT_CONFIG_GLOBAL: join(userData, "gitconfig"),

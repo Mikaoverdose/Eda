@@ -30,16 +30,10 @@ export async function initializeDemo() {
     const diffMode = demo.setPresentation({
       platform: event.data.platform,
       preferences: event.data.preferences,
-      ...(event.data.avatar ? { avatar: event.data.avatar } : {}),
     });
     usePreferencesStore.setState({
       values: { ...event.data.preferences, diffMode: diffMode ?? event.data.preferences.diffMode },
     });
-    if (event.data.profile) {
-      const { name, gitName, gitEmail, hue, avatarPath } = event.data.profile;
-      const profile = { ...demoIdentity, name, gitName, gitEmail, hue, avatarPath };
-      useAppStore.setState({ activeIdentity: profile, identities: [profile] });
-    }
     for (const key of Object.keys(document.documentElement.dataset))
       delete document.documentElement.dataset[key];
     for (const [key, value] of Object.entries(event.data.attributes)) {

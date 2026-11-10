@@ -1,28 +1,29 @@
-/** Captured with OpenSSH 10.4p1 and OpenSSL 3.6.3 under LC_ALL=C on Linux. */
+// Synthetic OpenSSH 10.4p1 output: the Ed25519 blob uses 32 bytes of 0x01
+// with computed fingerprints; the RSA digest uses 32 bytes of 0x02.
 
 export const SSH_FIXTURE_VERSION = "OpenSSH_10.4p1";
 
 export const sshFixtures = {
   fingerprintEd25519:
-    "256 SHA256:HW9RqUZzUcV77QKLbkDAI5pzoivy7Oz/wm0oiGIBj4Y test@eda.invalid (ED25519)",
+    "256 SHA256:RXm/ruZ0eTzRXKwi1AQEDynB0VgHQ2ac9KPSFdf/YnA test@eda.invalid (ED25519)",
 
-  fingerprintRsa: "2048 SHA256:kazDdgkK3LRagZCETT1fOqkAigmdb/k+mPatTcwwaBY rsa@eda.invalid (RSA)",
+  fingerprintRsa: "2048 SHA256:AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI rsa@eda.invalid (RSA)",
 
   fingerprintMd5:
-    "256 MD5:76:6d:06:2b:15:77:9b:2d:bd:81:e9:6c:d1:7f:02:5d test@eda.invalid (ED25519)",
+    "256 MD5:d6:9a:30:45:17:cf:91:c4:27:94:f3:22:92:a3:00:0e test@eda.invalid (ED25519)",
 
   publicKeyEd25519:
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICeMzDKk+JCgEuImVtTsfzBq31hOEHotEBLM5xbIADgx test@eda.invalid",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB test@eda.invalid",
 
   publicKeyWithSpacedComment:
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICeMzDKk+JCgEuImVtTsfzBq31hOEHotEBLM5xbIADgx Eda work laptop",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB Eda work laptop",
 
   agentOneKey:
-    "256 SHA256:HW9RqUZzUcV77QKLbkDAI5pzoivy7Oz/wm0oiGIBj4Y test@eda.invalid (ED25519)\n",
+    "256 SHA256:RXm/ruZ0eTzRXKwi1AQEDynB0VgHQ2ac9KPSFdf/YnA test@eda.invalid (ED25519)\n",
 
   agentTwoKeys:
-    "256 SHA256:HW9RqUZzUcV77QKLbkDAI5pzoivy7Oz/wm0oiGIBj4Y work@eda.invalid (ED25519)\n" +
-    "2048 SHA256:kazDdgkK3LRagZCETT1fOqkAigmdb/k+mPatTcwwaBY personal@eda.invalid (RSA)\n",
+    "256 SHA256:RXm/ruZ0eTzRXKwi1AQEDynB0VgHQ2ac9KPSFdf/YnA work@eda.invalid (ED25519)\n" +
+    "2048 SHA256:AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI personal@eda.invalid (RSA)\n",
 
   agentEmpty: "The agent has no identities.\n",
 
@@ -33,7 +34,7 @@ export const sshFixtures = {
   probeEncrypted: 'Load key "k3": incorrect passphrase supplied to decrypt private key\n',
 
   probeUnencrypted:
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICeMzDKk+JCgEuImVtTsfzBq31hOEHotEBLM5xbIADgx\n",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB\n",
 
   probeUnreadable: 'Load key "k3": Permission denied\n',
 

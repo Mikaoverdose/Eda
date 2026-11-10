@@ -462,7 +462,7 @@ describe("SshService discovery", () => {
     const keys = await new SshService(runner, home).discoverKeys();
 
     expect(keys).toHaveLength(1);
-    expect(keys[0]?.fingerprint).toBe("SHA256:HW9RqUZzUcV77QKLbkDAI5pzoivy7Oz/wm0oiGIBj4Y");
+    expect(keys[0]?.fingerprint).toBe("SHA256:RXm/ruZ0eTzRXKwi1AQEDynB0VgHQ2ac9KPSFdf/YnA");
     expect(keys[0]?.encrypted).toBe(false);
     expect(keys[0]?.publicKey).toBe(fx.publicKeyEd25519);
     expect(JSON.stringify(keys[0])).not.toContain("BEGIN OPENSSH PRIVATE KEY");

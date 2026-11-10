@@ -97,7 +97,7 @@ describe("assertAllowedRemoteUrl", () => {
     "ssh://git@[::1]:2222/example-org/Eda.git",
     "file:///home/dev/repos/eda",
     "git@github.com:example-org/Eda.git",
-    "dev@build-01.internal:/srv/git/repo",
+    "dev@build-01.test:/srv/git/repo",
   ])("accepts %s", (url) => {
     expect(() => assertAllowedRemoteUrl(url, "clone")).not.toThrow();
   });

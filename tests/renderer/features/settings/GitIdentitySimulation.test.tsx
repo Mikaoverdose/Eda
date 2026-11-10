@@ -126,8 +126,8 @@ it("uses the actual warning and comparison dialog while simulating repair withou
 
   const dialog = document.querySelector('[role="dialog"]')!;
 
-  expect(dialog.textContent).toContain("Work Author (different identity)");
-  expect(dialog.textContent).toContain("simulation+work@example.com");
+  expect(dialog.textContent).toContain("Example (different identity)");
+  expect(dialog.textContent).toContain("simulation@example.invalid");
   expect(dialog.textContent).toContain("work@example.com");
   expect(dialog.textContent).toContain("your Git configuration stays unchanged");
 
@@ -173,7 +173,7 @@ it("simulates repair failure, follows the active profile, and cancels queued sim
   await click("Review global Git settings");
 
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-    "simulation+home@example.com",
+    "simulation@example.invalid",
   );
 
   await act(async () => {
