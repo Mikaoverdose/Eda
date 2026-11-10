@@ -1,6 +1,5 @@
 import { t } from "@shared/i18n";
 import { watch, type FSWatcher } from "node:fs";
-import { isIgnoredWatchPath } from "./watch-filter";
 
 const DEFAULT_DEBOUNCE_MS = 150;
 
@@ -33,11 +32,13 @@ export class RepositoryWatcher {
     const entry: Entry = { watcher };
 
     this.entries.set(repositoryId, entry);
+
     watcher.on("error", () => {
       if (this.entries.get(repositoryId) !== entry) return;
       this.unwatch(repositoryId);
       this.poll(repositoryId);
     });
+
     watcher.on("change", (_event, name) => {
       if (this.entries.get(repositoryId) !== entry) return;
       if (name != null && isIgnoredWatchPath(name.toString())) return;
@@ -63,6 +64,7 @@ export class RepositoryWatcher {
 
     poll.unref();
     this.entries.set(repositoryId, { poll });
+
     this.onChange(
       repositoryId,
       t("main.repositoryWatcher.fileWatchingIsUnavailableEdaRefreshesEveryFive"),
@@ -82,4 +84,28 @@ export class RepositoryWatcher {
       this.onChange(repositoryId);
     }, this.debounceMs);
   }
+}
+
+const IGNORED_GIT_ENTRIES = new Set([
+  "COMMIT_EDITMSG",
+  "FETCH_HEAD",
+  "ORIG_HEAD",
+  "MERGE_MSG",
+  "SQUASH_MSG",
+  "TAG_EDITMSG",
+]);
+
+export function isIgnoredWatchPath(relativePath: string): boolean {
+  const path = relativePath.replaceAll("\\", "/");
+  const segments = path.split("/");
+
+  if (segments[0] !== ".git") return false;
+  if (path.endsWith(".lock")) return true;
+
+  const entry = segments[1];
+
+  if (entry === undefined) return true;
+  if (entry === "objects" || entry === "logs") return true;
+
+  return IGNORED_GIT_ENTRIES.has(entry);
 }

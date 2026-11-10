@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isIgnoredWatchPath } from "@main/repo/lifecycle/watch-filter";
+import { isIgnoredWatchPath } from "@main/repo/lifecycle/repository-watcher";
 
 describe("isIgnoredWatchPath", () => {
   it("ignores loose objects and packfiles, which churn on every write", () => {

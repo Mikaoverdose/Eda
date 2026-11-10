@@ -1,8 +1,9 @@
+import { readRegularFile } from "../filesystem/read-regular-file";
 import { errorText, type ErrorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { isMergeTool, type MergeTool } from "@shared/integrations/merge-tool";
-import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { OperationManager } from "../operations/operation-manager";
@@ -103,25 +104,15 @@ export class ExternalMergeTool {
           }),
         );
 
-      const info = await lstat(paths.result);
-
-      if (!info.isFile() || info.isSymbolicLink())
-        throw fail(errorText("main.git.externalMergeTool.theMergeToolMustSaveARegularResultFile"));
-
-      const handle = await open(paths.result, "r");
-      let bytes: Buffer;
-
-      try {
-        const buffer = Buffer.alloc(4 * 1024 * 1024 + 1);
-        const result = await handle.read(buffer, 0, buffer.length, 0);
-        if (result.bytesRead > 4 * 1024 * 1024)
-          throw fail(
-            errorText("main.git.externalMergeTool.theMergeResultExceedsThe4MiBEditorLimit"),
-          );
-        bytes = buffer.subarray(0, result.bytesRead);
-      } finally {
-        await handle.close();
-      }
+      const { bytes } = await readRegularFile(paths.result, 4 * 1024 * 1024, (reason) =>
+        fail(
+          errorText(
+            reason === "size"
+              ? "main.git.externalMergeTool.theMergeResultExceedsThe4MiBEditorLimit"
+              : "main.git.externalMergeTool.theMergeToolMustSaveARegularResultFile",
+          ),
+        ),
+      );
 
       if (bytes.includes(0))
         throw fail(

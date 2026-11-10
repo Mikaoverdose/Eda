@@ -43,22 +43,22 @@ export class StashService {
     trees: Record<StashArea, string | null>;
     paths: Record<StashArea, string[]>;
   }>();
-  private readonly filePreviews = new Map<
-    string,
-    {
-      preview: StashFilePreview;
-      stashToken: string;
-      source: string;
-      head: string | undefined;
-      branch: string | undefined;
-      snapshot: Awaited<ReturnType<DiscardService["prepareOperation"]>>;
-    }
-  >();
+
+  private readonly filePreviews = new PreviewStore<{
+    preview: StashFilePreview;
+    stashToken: string;
+    source: string;
+    head: string | undefined;
+    branch: string | undefined;
+    snapshot: Awaited<ReturnType<DiscardService["prepareOperation"]>>;
+  }>();
+
   private readonly recovery: DiscardService;
-  private readonly branchPreviews = new Map<
-    string,
-    { preview: StashBranchPreview; stashToken: string }
-  >();
+
+  private readonly branchPreviews = new PreviewStore<{
+    preview: StashBranchPreview;
+    stashToken: string;
+  }>();
 
   constructor(
     private readonly git: GitService,
@@ -114,6 +114,7 @@ export class StashService {
   async list(repositoryId: string): Promise<StashList> {
     const repository = this.repositories.resolveActiveRepository(repositoryId);
     const { entries } = await this.read(repository.path);
+
     return {
       entries: entries.slice(0, MAX_STASH_ENTRIES),
       truncated: entries.length > MAX_STASH_ENTRIES,
@@ -300,6 +301,7 @@ export class StashService {
       this.git.compareDiff(repository.path, parents[0]!, parents[1]!),
       parents[2] ? this.git.commitDiff(repository.path, parents[2]) : null,
     ]);
+
     const token = randomUUID();
 
     this.previews.set(token, {
@@ -381,6 +383,7 @@ export class StashService {
             maxStdoutBytes: 64 * 1024,
           },
         );
+
         const entry = result.stdout
           ? /^(100644|100755) blob (\S+)\t([^\0]+)\0$/.exec(result.stdout)
           : null;
@@ -427,9 +430,6 @@ export class StashService {
           branch: status.branch.head,
           snapshot,
         });
-
-        while (this.filePreviews.size > 8)
-          this.filePreviews.delete(this.filePreviews.keys().next().value!);
 
         return preview;
       },
@@ -549,9 +549,6 @@ export class StashService {
 
         this.branchPreviews.set(preview.token, { preview, stashToken: token });
 
-        while (this.branchPreviews.size > 8)
-          this.branchPreviews.delete(this.branchPreviews.keys().next().value!);
-
         return preview;
       },
     );
@@ -577,6 +574,7 @@ export class StashService {
               "main.stashService.theCurrentBranchChangedAfterReviewReviewTheNewBranchAgain",
             ),
           );
+
         if ((await this.read(root)).fingerprint !== stash.fingerprint)
           throw invalid(errorText("main.stashService.theStashListChangedInspectItAgain"));
 
@@ -663,6 +661,7 @@ export class StashService {
             cwd: root,
             operation: t("operations.dropAppliedStash"),
           });
+
           return { applied: true, kept: false };
         } catch {
           return { applied: true, kept: true };
@@ -697,6 +696,7 @@ export class StashService {
               "main.stashService.theStashListChangedAfterReviewInspectItAgainBeforeRenaming",
             ),
           );
+
         if (name === preview.entry.message) return { keptOriginal: false };
 
         const metadata = (
@@ -752,6 +752,7 @@ export class StashService {
           );
 
         this.previews.delete(token);
+
         await this.git.exec(["stash", "store", "--message", name, oid], {
           cwd: root,
           operation: t("operations.saveRenamedStash"),
@@ -770,6 +771,7 @@ export class StashService {
           after.entries.length !== Math.min(before.entries.length + 1, 201) ||
           expected.some((entry, index) => {
             const actual = after.entries[index + 1];
+
             return (
               actual?.oid !== entry.oid ||
               actual.message !== entry.message ||
@@ -785,6 +787,7 @@ export class StashService {
             cwd: root,
             operation: t("operations.removeOriginalStashDescription"),
           });
+
           return { keptOriginal: false };
         } catch {
           return { keptOriginal: true };
@@ -817,6 +820,7 @@ export class StashService {
           );
 
         this.previews.delete(token);
+
         await this.git.exec(["stash", "drop", preview.entry.selector], {
           cwd: root,
           operation: t("operations.dropReviewedStash"),
