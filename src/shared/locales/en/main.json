@@ -970,5 +970,16 @@
   "main.providerRepositories.operation": "Browse connected repositories",
   "main.providerRepositories.loadFailed": "Could not load repositories. Check your connection and account access, then try again.",
   "main.providerRepositories.invalidResponse": "The provider returned an invalid repository list. Try again.",
-  "main.providerRepositories.signInRequired": "Reconnect this account in Settings → Integrations, then try again."
+  "main.providerRepositories.signInRequired": "Reconnect this account in Settings → Integrations, then try again.",
+  "main.providers.gitlabSelfHosted.invalidUrl": "Enter an HTTPS GitLab instance URL, including its port or base path if needed. Use browser sign-in for GitLab.com.",
+  "main.providers.gitlabSelfHosted.invalidToken": "GitLab rejected the personal access token. Check the token, its expiry, and the instance URL.",
+  "main.providers.gitlabSelfHosted.invalidResponse": "The GitLab instance returned an invalid response. Check the instance URL and try again.",
+  "main.providers.gitlabSelfHosted.accessRequired": "The token needs permission to read your account and list projects. For a legacy token, enable read_api. For a fine-grained token, allow account and project read access.",
+  "main.providers.gitlabSelfHosted.reconnectRequired": "Reconnect this GitLab instance with a valid personal access token in Integrations settings.",
+  "main.providers.gitlabSelfHosted.networkFailed": "Could not reach the GitLab instance. Check its URL, your network, and whether its HTTPS certificate is trusted.",
+  "main.providers.gitlabSelfHosted.storageUnavailable": "Unlock your OS keychain and restart Eda before saving a GitLab personal access token.",
+  "main.providers.gitlabSelfHosted.cancelled": "The GitLab connection changed or was cancelled. Try again.",
+  "main.providers.gitlabSelfHosted.overlappingInstance": "This URL overlaps another GitLab instance connected to this profile. Disconnect that instance before changing its base path.",
+  "main.providers.gitlabSelfHosted.rateLimited": "GitLab is limiting requests. Wait a moment and try again.",
+  "main.providers.gitlabSelfHosted.connectFirst": "Connect this GitLab instance in Integrations settings first."
 }

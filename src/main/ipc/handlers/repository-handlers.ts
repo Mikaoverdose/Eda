@@ -36,12 +36,15 @@ export function registerRepositoryHandlers(services: Services): void {
       throw invalidRequest(errorText("main.repositoryHandlers.chooseAReferenceKind"));
 
     let name = requireString(rawName, t("fields.referenceName"), 255);
+
     const result = await git.exec(["remote"], {
       cwd: repository.path,
       operation: t("operations.readRemoteNames"),
       maxStdoutBytes: 64 * 1024,
     });
+
     const names = result.stdout.trim().split("\n").filter(Boolean);
+
     const remote =
       kind === "remote-branch"
         ? names.sort((a, b) => b.length - a.length).find((remote) => name.startsWith(`${remote}/`))
@@ -54,7 +57,11 @@ export function registerRepositoryHandlers(services: Services): void {
 
     const url = await git.readConfig(`remote.${remote}.url`, { cwd: repository.path });
 
-    return ok(url ? referenceLink(url, kind, name) : null);
+    const instances = services.gitlabSelfHosted
+      .status(repository.identityId)
+      .accounts.map((account) => account.baseUrl);
+
+    return ok(url ? referenceLink(url, kind, name, instances) : null);
   });
 
   handle(IPC_CHANNELS.repositoryPreviewCommit, async (_e, id) =>
@@ -68,6 +75,7 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryIgnoredFiles, async (_event, rawId) => {
     const repository = repositories.resolveActiveRepository(requireId(rawId));
+
     const result = await git.exec(
       ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
       {
@@ -76,6 +84,7 @@ export function registerRepositoryHandlers(services: Services): void {
         maxStdoutBytes: 4 * 1024 * 1024,
       },
     );
+
     const paths = result.stdout.split("\0").filter(Boolean);
 
     return ok({ paths: paths.slice(0, 5000), truncated: paths.length > 5000 });
@@ -92,6 +101,7 @@ export function registerRepositoryHandlers(services: Services): void {
       : isAbsolute(configured)
         ? configured
         : resolve(repository.path, configured);
+
     const info = await stat(path);
 
     if (!info.isFile() || info.size > 100_000)
@@ -127,10 +137,12 @@ export function registerRepositoryHandlers(services: Services): void {
       );
 
       const window = BrowserWindow.fromWebContents(event.sender);
+
       const options = {
         title: t("main.repositoryHandlers.saveRecoveredFileCopy"),
         defaultPath: `${basename(path)}.recovered`,
       };
+
       const destination = await (window
         ? dialog.showSaveDialog(window, options)
         : dialog.showSaveDialog(options));
@@ -194,6 +206,7 @@ export function registerRepositoryHandlers(services: Services): void {
       requireString(path, t("fields.filePath")),
       ignoreKind(kind),
     );
+
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
@@ -217,6 +230,7 @@ export function registerRepositoryHandlers(services: Services): void {
       requireString(metadata["name"], t("fields.repositoryName")),
       metadata["favourite"],
     );
+
     broadcast(IPC_EVENTS.repositoriesChanged);
 
     return ok(undefined);
@@ -237,9 +251,11 @@ export function registerRepositoryHandlers(services: Services): void {
   handle(IPC_CHANNELS.repositoryWatch, async (_e, rawId) => {
     watcher.closeAll();
     if (rawId === null) return ok(undefined);
+
     const repository = repositories.resolveActiveRepository(
       requireId(rawId, t("fields.repositoryId")),
     );
+
     watcher.watch(repository.id, repository.path);
     return ok(undefined);
   });
@@ -256,6 +272,7 @@ export function registerRepositoryHandlers(services: Services): void {
       throw invalidRequest(
         errorText("main.repositoryHandlers.chooseAuthorSigningOrBothLocalCommitSettings"),
       );
+
     const id = requireId(rawId);
     await services.writer.clearLocalCommitConfig(id, group);
     broadcast(IPC_EVENTS.repositoryChanged, id);
@@ -305,6 +322,7 @@ export function registerRepositoryHandlers(services: Services): void {
         rawOptions,
         t("main.repositoryHandlers.initialRepositoryOptions"),
       );
+
       const ignore = input["ignore"];
       const license = input["license"];
 
@@ -340,10 +358,12 @@ export function registerRepositoryHandlers(services: Services): void {
     const repository = repositories.resolveActiveRepository(
       requireId(rawId, t("fields.repositoryId")),
     );
+
     const [status, capabilities] = await Promise.all([
       git.status(repository.path),
       repositoryCapabilities(git, repository.path),
     ]);
+
     const workflow = await services.workflows.observe(repository.path, status);
 
     return ok({ ...status, capabilities, workflow });
@@ -351,10 +371,13 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryHistory, async (_e, raw) => {
     const input = requireRecord(raw, t("main.repositoryHandlers.historyRequest"));
+
     const repository = repositories.resolveActiveRepository(
       requireId(input["repositoryId"], t("fields.repositoryId")),
     );
+
     const offset = optionalInteger(input["offset"], t("fields.historyOffset"), 0, 1_000_000);
+
     const limit = optionalInteger(
       input["limit"],
       t("fields.historyLimit"),
@@ -382,6 +405,7 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryInspectCommit, async (_e, id, oid) => {
     const repository = repositories.resolveActiveRepository(requireId(id));
+
     return ok(
       await git.inspectCommit(repository.path, requireString(oid, t("fields.commitObjectId"), 64)),
     );
@@ -389,9 +413,11 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryWorkingDiff, async (_e, raw) => {
     const input = requireRecord(raw, t("main.repositoryHandlers.workingDiffRequest"));
+
     const repository = repositories.resolveActiveRepository(
       requireId(input["repositoryId"], t("fields.repositoryId")),
     );
+
     const area = input["area"];
 
     if (area !== "staged" && area !== "unstaged")
@@ -409,6 +435,7 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryCommitDiff, async (_e, raw) => {
     const input = requireRecord(raw, t("main.repositoryHandlers.commitDiffRequest"));
+
     const repository = repositories.resolveActiveRepository(
       requireId(input["repositoryId"], t("fields.repositoryId")),
     );
@@ -426,9 +453,11 @@ export function registerRepositoryHandlers(services: Services): void {
 
   handle(IPC_CHANNELS.repositoryImagePreview, async (_e, raw) => {
     const input = requireRecord(raw, t("main.repositoryHandlers.imagePreviewRequest"));
+
     const repository = repositories.resolveActiveRepository(
       requireId(input["repositoryId"], t("fields.repositoryId")),
     );
+
     const kind = input["kind"];
 
     if (kind !== "working" && kind !== "staged" && kind !== "commit")
@@ -462,6 +491,7 @@ export function registerRepositoryHandlers(services: Services): void {
   });
 
   const writer = services.writer;
+
   const parsePartial = (raw: unknown): PartialStageRequest => {
     const input = requireRecord(raw, t("main.repositoryHandlers.partialStaging"));
     const area = input["area"];
@@ -475,6 +505,7 @@ export function registerRepositoryHandlers(services: Services): void {
         throw invalidRequest(errorText("main.repositoryHandlers.missingSelectionIndex"));
       return value;
     };
+
     const array = (raw: unknown): unknown[] => {
       if (raw === undefined) return [];
       if (!Array.isArray(raw) || raw.length > 12_000)
@@ -513,6 +544,7 @@ export function registerRepositoryHandlers(services: Services): void {
     const input = requireRecord(raw, label);
     return { input, repositoryId: requireId(input["repositoryId"], t("fields.repositoryId")) };
   };
+
   const optionalPaths = (raw: unknown) =>
     raw === undefined ? undefined : requireStringArray(raw, t("fields.paths"), 256);
 
@@ -521,6 +553,7 @@ export function registerRepositoryHandlers(services: Services): void {
       raw,
       t("main.repositoryHandlers.stageRequest"),
     );
+
     await writer.stage(repositoryId, optionalPaths(input["paths"]));
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
@@ -531,6 +564,7 @@ export function registerRepositoryHandlers(services: Services): void {
       raw,
       t("main.repositoryHandlers.unstageRequest"),
     );
+
     await writer.unstage(repositoryId, optionalPaths(input["paths"]));
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
@@ -541,6 +575,7 @@ export function registerRepositoryHandlers(services: Services): void {
       raw,
       t("main.repositoryHandlers.commitRequest"),
     );
+
     const message = requireString(input["message"], t("fields.commitMessage"), 100_000);
     const options = { amend: input["amend"] === true, signOff: input["signOff"] === true };
     const stagePaths = optionalPaths(input["stagePaths"]);
@@ -575,6 +610,7 @@ export function registerRepositoryHandlers(services: Services): void {
         }),
       },
     );
+
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
@@ -585,10 +621,12 @@ export function registerRepositoryHandlers(services: Services): void {
       raw,
       t("main.repositoryHandlers.branchRequest"),
     );
+
     await writer.checkoutBranch(
       repositoryId,
       requireString(input["name"], t("fields.branchName"), 255),
     );
+
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
@@ -598,6 +636,7 @@ export function registerRepositoryHandlers(services: Services): void {
       raw,
       t("main.repositoryHandlers.branchRequest"),
     );
+
     await writer.deleteBranch(
       repositoryId,
       requireString(input["name"], t("fields.branchName"), 255),
@@ -605,6 +644,7 @@ export function registerRepositoryHandlers(services: Services): void {
         force: input["force"] === true,
       },
     );
+
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
     return ok(undefined);
   });
@@ -620,6 +660,7 @@ export function registerRepositoryHandlers(services: Services): void {
       requireString(input["from"], t("fields.branchName"), 255),
       requireString(input["to"], t("fields.branchName"), 255),
     );
+
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);
@@ -630,6 +671,7 @@ export function registerRepositoryHandlers(services: Services): void {
       raw,
       t("main.repositoryHandlers.tagVerification"),
     );
+
     return ok(
       await writer.verifyTag(repositoryId, requireString(input["name"], t("fields.tagName"), 255)),
     );
@@ -651,6 +693,7 @@ export function registerRepositoryHandlers(services: Services): void {
         target: requireString(input["target"], t("fields.target"), 64),
       }),
     });
+
     broadcast(IPC_EVENTS.repositoryChanged, repositoryId);
 
     return ok(undefined);

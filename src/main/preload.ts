@@ -9,6 +9,26 @@ const api: EdaApi = {
     download: () => ipcRenderer.invoke(IPC_CHANNELS.updatesDownload),
     install: () => ipcRenderer.invoke(IPC_CHANNELS.updatesInstall),
   },
+  gitlabSelfHosted: {
+    status: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedStatus, profileId),
+    connect: (profileId, baseUrl, token, ignoreTlsErrors) =>
+      ipcRenderer.invoke(
+        IPC_CHANNELS.gitlabSelfHostedConnect,
+        profileId,
+        baseUrl,
+        token,
+        ignoreTlsErrors,
+      ),
+    cancel: (profileId) => ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedCancel, profileId),
+    disconnect: (profileId, baseUrl) =>
+      ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedDisconnect, profileId, baseUrl),
+    openTokenSettings: (profileId, baseUrl, form) =>
+      ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedOpenTokenSettings, profileId, baseUrl, form),
+    openProfile: (profileId, baseUrl) =>
+      ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedOpenProfile, profileId, baseUrl),
+    repositories: (profileId, baseUrl, page) =>
+      ipcRenderer.invoke(IPC_CHANNELS.gitlabSelfHostedRepositories, profileId, baseUrl, page),
+  },
   gitlab: {
     repositories: (profileId, page) =>
       ipcRenderer.invoke(IPC_CHANNELS.gitlabRepositories, profileId, page),
@@ -303,6 +323,7 @@ function subscribe<C extends IpcEvent>(
 ): () => void {
   const listener = (_event: unknown, ...args: unknown[]) => handler(...(args as IpcEventArgs[C]));
   ipcRenderer.on(channel, listener);
+
   return () => {
     ipcRenderer.removeListener(channel, listener);
   };

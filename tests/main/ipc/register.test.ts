@@ -185,6 +185,17 @@ function setup() {
       install: vi.fn(),
     },
     resetData: vi.fn(async () => {}),
+    gitlabSelfHosted: {
+      status: vi.fn(() => ({ secureStorage: true, accounts: [] })),
+      connect: vi.fn(async () => ({ secureStorage: true, accounts: [] })),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      repositories: vi.fn(async () => ({ repositories: [], nextPage: null })),
+      tokenSettingsUrl: vi.fn(
+        () => "https://git.company.test/-/user_settings/personal_access_tokens?name=Eda",
+      ),
+      profileUrl: vi.fn(() => "https://git.company.test/work-user"),
+    },
     gitlab: {
       profile: vi.fn(async () => ({
         id: "7",
@@ -735,4 +746,51 @@ it("loads GitLab provider avatars for the active profile without exposing remote
     "7",
     "https://gitlab.com/uploads/-/system/user/avatar/7/photo.png",
   );
+});
+
+it("guards self-hosted GitLab credentials and browser actions with active profile ownership", async () => {
+  const { gitlabSelfHosted } = setup();
+  const baseUrl = "https://git.company.test";
+  expect(
+    await invoke(IPC_CHANNELS.gitlabSelfHostedConnect, repositoryId, baseUrl, "private-token"),
+  ).toMatchObject({ ok: false });
+  expect(gitlabSelfHosted.connect).not.toHaveBeenCalled();
+  expect(
+    await invoke(IPC_CHANNELS.gitlabSelfHostedConnect, profile.id, baseUrl, "private-token"),
+  ).toMatchObject({ ok: true });
+  expect(gitlabSelfHosted.connect).toHaveBeenCalledWith(
+    profile.id,
+    baseUrl,
+    "private-token",
+    false,
+  );
+  await invoke(IPC_CHANNELS.gitlabSelfHostedConnect, profile.id, baseUrl, "private-token", true);
+  expect(gitlabSelfHosted.connect).toHaveBeenCalledWith(profile.id, baseUrl, "private-token", true);
+  expect(
+    await invoke(
+      IPC_CHANNELS.gitlabSelfHostedConnect,
+      profile.id,
+      baseUrl,
+      "private-token",
+      "true",
+    ),
+  ).toMatchObject({ ok: false });
+  for (const form of ["legacy", "granular", "older"]) {
+    await invoke(IPC_CHANNELS.gitlabSelfHostedOpenTokenSettings, profile.id, baseUrl, form);
+    expect(gitlabSelfHosted.tokenSettingsUrl).toHaveBeenCalledWith(baseUrl, form);
+  }
+  expect(
+    await invoke(IPC_CHANNELS.gitlabSelfHostedOpenTokenSettings, profile.id, baseUrl, "false"),
+  ).toMatchObject({ ok: false });
+  await invoke(IPC_CHANNELS.gitlabSelfHostedRepositories, profile.id, baseUrl, 2);
+  expect(gitlabSelfHosted.repositories).toHaveBeenCalledWith(profile.id, baseUrl, 2);
+  expect(
+    await invoke(IPC_CHANNELS.gitlabSelfHostedRepositories, profile.id, baseUrl, -1),
+  ).toMatchObject({ ok: false });
+  expect(await invoke(IPC_CHANNELS.gitlabSelfHostedCancel, repositoryId)).toMatchObject({
+    ok: false,
+  });
+  expect(gitlabSelfHosted.cancel).not.toHaveBeenCalled();
+  await invoke(IPC_CHANNELS.gitlabSelfHostedCancel, profile.id);
+  expect(gitlabSelfHosted.cancel).toHaveBeenCalledWith(profile.id);
 });

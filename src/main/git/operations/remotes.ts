@@ -38,6 +38,7 @@ export class GitRemotes {
       cwd: path,
       operation: t("operations.listRemotes"),
     });
+
     const names = stdout.trim().split("\n").filter(Boolean);
 
     if (names.length > 100)
@@ -61,10 +62,12 @@ export class GitRemotes {
 
   async urls(path: string, name: string, push: boolean): Promise<string[]> {
     remoteName(name);
+
     const { stdout } = await this.git.exec(
       ["remote", "get-url", ...(push ? ["--push"] : []), "--all", name],
       { cwd: path, operation: t("operations.readRemoteDestination") },
     );
+
     return stdout.trim().split("\n").filter(Boolean);
   }
 
@@ -147,6 +150,7 @@ export function transportOptions(
   url: string,
   identity: Pick<Identity, "name" | "sshKeyPath">,
   credentials?: TransportCredentials,
+  ignoreTlsErrors = false,
 ): Pick<GitExecOptions, "env" | "identityName" | "redactValues"> {
   remoteUrl(url);
 
@@ -160,6 +164,7 @@ export function transportOptions(
     GIT_SSH_COMMAND: `${identity.sshKeyPath ? buildSshCommand(identity.sshKeyPath) : "ssh"} ${SSH_HOST_TRUST_OPTIONS.join(" ")}`,
     EDA_SSH_HOST_TRUST: "1",
   };
+
   const config: [string, string][] = [
     ["credential.helper", ""],
     ["core.askPass", ""],
@@ -171,6 +176,7 @@ export function transportOptions(
 
   if (url.startsWith("https://")) {
     config.push(["http.extraHeader", ""], [`http.${url.replace(/\/$/, "")}/.extraHeader`, ""]);
+    if (ignoreTlsErrors) config.push([`http.${url.replace(/\/$/, "")}/.sslVerify`, "false"]);
   }
 
   if (credentials) {
@@ -195,6 +201,7 @@ export function transportOptions(
       `http.${url.replace(/\/$/, "")}/.extraHeader`,
       t("main.git.remotes.authorizationBasic", { encoded: encoded }),
     ]);
+
     redactValues.push(credentials.password, encoded);
   }
 
@@ -202,6 +209,7 @@ export function transportOptions(
     overrides[`GIT_CONFIG_KEY_${index}`] = key;
     overrides[`GIT_CONFIG_VALUE_${index}`] = value;
   });
+
   overrides["GIT_CONFIG_COUNT"] = String(config.length);
 
   return {

@@ -109,6 +109,28 @@ export const gitlabAccounts = sqliteTable(
   ],
 );
 
+export const gitlabSelfHostedAccounts = sqliteTable(
+  "gitlab_self_hosted_accounts",
+  {
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    baseUrl: text("base_url").notNull(),
+    ignoreTlsErrors: integer("ignore_tls_errors", { mode: "boolean" }).notNull().default(false),
+    accountId: text("account_id").notNull(),
+    login: text("login").notNull(),
+    credentialRef: text("credential_ref").notNull(),
+    state: text("state", { enum: ["connected", "expired", "revoked"] }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.baseUrl] }),
+    check(
+      "gitlab_self_hosted_accounts_state",
+      sql`${table.state} IN ('connected', 'expired', 'revoked')`,
+    ),
+  ],
+);
+
 export const settingOverrides = sqliteTable(
   "setting_overrides",
   {

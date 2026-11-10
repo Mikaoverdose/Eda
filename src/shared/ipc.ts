@@ -1,4 +1,5 @@
 import type { ProviderRepositoryPage } from "./integrations/provider-repositories";
+import type { GitLabSelfHostedStatus, GitLabTokenForm } from "./integrations/gitlab-self-hosted";
 import type {
   GitLabStatus,
   GitLabSignIn,
@@ -133,17 +134,20 @@ import type {
 
 export interface EdaApi {
   avatars: { get(email: string): Promise<Result<AvatarImage>> };
+
   backgroundFetch: {
     inspect(id: string): Promise<Result<BackgroundFetchState>>;
     configure(id: string, minutes: number | null): Promise<Result<void>>;
     retry(id: string, remote: string): Promise<Result<void>>;
   };
+
   pull: {
     preference(id: string): Promise<Result<ResolvedSetting<"pullStrategy">>>;
     setPreference(id: string, strategy: PullStrategy | null): Promise<Result<void>>;
     prepare(request: PullRequest): Promise<Result<PullPreview>>;
     execute(id: string, token: string): Promise<Result<string>>;
   };
+
   rebase: {
     prepare(
       repositoryId: string,
@@ -158,6 +162,7 @@ export interface EdaApi {
       message?: string,
     ): Promise<Result<RebaseResult>>;
   };
+
   replay: {
     prepare(
       repositoryId: string,
@@ -168,10 +173,12 @@ export interface EdaApi {
     ): Promise<Result<ReplayReview>>;
     execute(repositoryId: string, token: string): Promise<Result<ReplayResult>>;
   };
+
   reset: {
     prepare(repositoryId: string, target: string, mode: ResetMode): Promise<Result<ResetReview>>;
     execute(repositoryId: string, token: string): Promise<Result<ResetResult>>;
   };
+
   historyRecovery: {
     resumeIndex(
       id: string,
@@ -206,6 +213,7 @@ export interface EdaApi {
     inspect(id: string, oid: string): Promise<Result<RecoveryInspection>>;
     restore(id: string, token: string, name: string): Promise<Result<string>>;
   };
+
   stashes: {
     prepareBranch(
       repositoryId: string,
@@ -241,6 +249,7 @@ export interface EdaApi {
       name: string,
     ): Promise<Result<{ keptOriginal: boolean }>>;
   };
+
   workflows: {
     finishStash(repositoryId: string, token: string): Promise<Result<void>>;
     prepareStart(
@@ -254,6 +263,7 @@ export interface EdaApi {
     prepareMerge(repositoryId: string): Promise<Result<MergeContinuation>>;
     continueMerge(repositoryId: string, id: string, message: string): Promise<Result<string>>;
   };
+
   conflicts: {
     external(
       repositoryId: string,
@@ -262,6 +272,7 @@ export interface EdaApi {
     inspect(repositoryId: string, path: string): Promise<Result<ConflictPreview>>;
     resolve(request: ResolveConflictRequest): Promise<Result<void>>;
   };
+
   remotes: {
     inspect(id: string): Promise<Result<RemoteState>>;
     listTags(request: RemoteTagsRequest): Promise<Result<RemoteTagSummary[]>>;
@@ -272,11 +283,13 @@ export interface EdaApi {
     push(id: string, token: string, credentials?: TransportCredentials): Promise<Result<string>>;
     clone(request: CloneRequest): Promise<Result<RepositorySummary>>;
   };
+
   operations: {
     list(): Promise<Result<OperationRecord[]>>;
     cancel(id: string): Promise<Result<void>>;
     retry(id: string): Promise<Result<void>>;
   };
+
   github: {
     repositories(profileId: string, page?: number): Promise<Result<ProviderRepositoryPage>>;
     maintainerProfile(): Promise<Result<GitHubAccountProfile | null>>;
@@ -289,6 +302,30 @@ export interface EdaApi {
     openVerification(profileId: string, id: string): Promise<Result<void>>;
     disconnect(profileId: string): Promise<Result<void>>;
   };
+
+  gitlabSelfHosted: {
+    status(profileId: string): Promise<Result<GitLabSelfHostedStatus>>;
+    connect(
+      profileId: string,
+      baseUrl: string,
+      token: string,
+      ignoreTlsErrors?: boolean,
+    ): Promise<Result<GitLabSelfHostedStatus>>;
+    cancel(profileId: string): Promise<Result<void>>;
+    disconnect(profileId: string, baseUrl: string): Promise<Result<void>>;
+    openTokenSettings(
+      profileId: string,
+      baseUrl: string,
+      form?: GitLabTokenForm,
+    ): Promise<Result<void>>;
+    openProfile(profileId: string, baseUrl: string): Promise<Result<void>>;
+    repositories(
+      profileId: string,
+      baseUrl: string,
+      page?: number,
+    ): Promise<Result<ProviderRepositoryPage>>;
+  };
+
   gitlab: {
     repositories(profileId: string, page?: number): Promise<Result<ProviderRepositoryPage>>;
     profile(profileId: string): Promise<Result<GitLabAccountProfile | null>>;
@@ -300,6 +337,7 @@ export interface EdaApi {
     openProfile(profileId: string): Promise<Result<void>>;
     disconnect(profileId: string): Promise<Result<void>>;
   };
+
   app: {
     readonly version: BuildInfo;
     installation(): Promise<Result<InstallationInfo>>;
@@ -477,6 +515,13 @@ export const IPC_CHANNELS = {
   updatesCheck: "updates:check",
   updatesDownload: "updates:download",
   updatesInstall: "updates:install",
+  gitlabSelfHostedStatus: "gitlab-self-hosted:status",
+  gitlabSelfHostedConnect: "gitlab-self-hosted:connect",
+  gitlabSelfHostedCancel: "gitlab-self-hosted:cancel",
+  gitlabSelfHostedDisconnect: "gitlab-self-hosted:disconnect",
+  gitlabSelfHostedOpenTokenSettings: "gitlab-self-hosted:open-token-settings",
+  gitlabSelfHostedOpenProfile: "gitlab-self-hosted:open-profile",
+  gitlabSelfHostedRepositories: "gitlab-self-hosted:repositories",
   gitlabProfile: "gitlab:profile",
   gitlabRepositories: "gitlab:repositories",
   gitlabStatus: "gitlab:status",
@@ -684,6 +729,7 @@ type EventSubscriptions = {
 };
 
 export type IpcEvent = (typeof IPC_EVENTS)[keyof typeof IPC_EVENTS];
+
 export type IpcEventArgs = {
   [K in IpcEvent]: Parameters<Parameters<EventSubscriptions[K]>[0]>;
 };

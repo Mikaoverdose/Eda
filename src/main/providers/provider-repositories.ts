@@ -3,6 +3,10 @@ import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { isGitHubHttps } from "@shared/integrations/github";
 import { isGitLabHttps } from "@shared/integrations/gitlab";
+import {
+  isGitLabInstanceHttps,
+  normalizeGitLabInstanceUrl,
+} from "@shared/integrations/gitlab-self-hosted";
 import type {
   ProviderRepository,
   ProviderRepositoryPage,
@@ -15,6 +19,7 @@ export async function listProviderRepositories(
   provider: RepositoryProvider,
   accessToken: string,
   page: number,
+  gitlabInstance?: { baseUrl: string; signal?: AbortSignal },
 ): Promise<ProviderRepositoryPage> {
   const fail = (
     kind: "auth-failed" | "network-failed" | "invalid-input",
@@ -29,21 +34,32 @@ export async function listProviderRepositories(
   if (!Number.isSafeInteger(page) || page < 1 || page > 10000)
     throw fail("invalid-input", "invalidResponse");
 
+  if (
+    gitlabInstance &&
+    (provider !== "gitlab" ||
+      normalizeGitLabInstanceUrl(gitlabInstance.baseUrl) !== gitlabInstance.baseUrl)
+  )
+    throw fail("invalid-input", "invalidResponse");
+
   const url =
     provider === "github"
       ? `https://api.github.com/user/repos?sort=updated&direction=desc&per_page=50&page=${page}`
-      : `https://gitlab.com/api/v4/projects?membership=true&order_by=last_activity_at&sort=desc&per_page=50&page=${page}`;
+      : `${gitlabInstance?.baseUrl ?? "https://gitlab.com"}/api/v4/projects?membership=true&order_by=last_activity_at&sort=desc&per_page=50&page=${page}`;
 
   try {
     const response = await fetch(url, {
       redirect: "error",
       credentials: "omit",
       cache: "no-store",
-      signal: AbortSignal.timeout(15000),
+      signal: gitlabInstance?.signal
+        ? AbortSignal.any([gitlabInstance.signal, AbortSignal.timeout(15000)])
+        : AbortSignal.timeout(15000),
       headers: {
         Accept: "application/json",
         "User-Agent": "Eda",
-        Authorization: `Bearer ${accessToken}`,
+        ...(gitlabInstance
+          ? { "PRIVATE-TOKEN": accessToken }
+          : { Authorization: `Bearer ${accessToken}` }),
       },
     });
 
@@ -86,7 +102,12 @@ export async function listProviderRepositories(
 
       const fullName = provider === "github" ? item["full_name"] : item["path_with_namespace"];
       const cloneUrl = provider === "github" ? item["clone_url"] : item["http_url_to_repo"];
-      const validUrl = provider === "github" ? isGitHubHttps : isGitLabHttps;
+      const validUrl =
+        provider === "github"
+          ? isGitHubHttps
+          : gitlabInstance
+            ? (remote: string) => isGitLabInstanceHttps(remote, gitlabInstance.baseUrl)
+            : isGitLabHttps;
 
       if (
         !Number.isSafeInteger(item["id"]) ||

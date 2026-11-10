@@ -56,5 +56,7 @@
   "fields.value": "value",
   "fields.windowId": "window id",
   "fields.workflowToken": "workflow token",
-  "fields.repositoryPage": "repository page"
+  "fields.repositoryPage": "repository page",
+  "fields.gitLabInstanceUrl": "GitLab instance URL",
+  "fields.personalAccessToken": "Personal access token"
 }

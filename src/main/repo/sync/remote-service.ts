@@ -13,6 +13,7 @@ import type {
   RemoteState,
   RemoteTagsRequest,
   RemoteTagSummary,
+  TransportCredentials,
 } from "@shared/integrations/remotes";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, realpath } from "node:fs/promises";
@@ -31,6 +32,7 @@ import type { IdentityManager } from "../../identity/identity-manager";
 import type { OperationManager } from "../../operations/operation-manager";
 import type { FetchHistoryRepository } from "../../persistence/fetch-history-repository";
 import type { IdentityRepository } from "../../persistence/identity-repository";
+import type { GitLabSelfHostedAuth } from "../../providers/gitlab-self-hosted-auth";
 import type { GitLabAuth } from "../../providers/gitlab-auth";
 import type { GitHubAuth } from "../../providers/github-auth";
 import { PreviewStore } from "../preview-store";
@@ -58,6 +60,7 @@ export class RemoteService {
     private readonly fetchHistory: FetchHistoryRepository,
     private readonly github?: Pick<GitHubAuth, "forFetch">,
     private readonly gitlab?: Pick<GitLabAuth, "forFetch">,
+    private readonly gitlabSelfHosted?: Pick<GitLabSelfHostedAuth, "forFetch" | "ignoresTlsErrors">,
   ) {
     this.remotes = new GitRemotes(git);
   }
@@ -88,6 +91,15 @@ export class RemoteService {
     });
   }
 
+  private transport(url: string, identity: Identity, credentials?: TransportCredentials) {
+    return transportOptions(
+      url,
+      identity,
+      credentials,
+      this.gitlabSelfHosted?.ignoresTlsErrors(identity.id, url) ?? false,
+    );
+  }
+
   async inspect(id: string): Promise<RemoteState> {
     const { path } = this.repositories.resolveActiveRepository(id);
     const [remotes, branches, states] = await Promise.all([
@@ -115,13 +127,14 @@ export class RemoteService {
     const credentials =
       request.credentials ??
       (await this.github?.forFetch(identity.id, url)) ??
-      (await this.gitlab?.forFetch(identity.id, url));
+      (await this.gitlab?.forFetch(identity.id, url)) ??
+      (await this.gitlabSelfHosted?.forFetch(identity.id, url));
     const result = await this.git
       .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--tags", "--", url], {
         cwd: path,
         operation: t("main.remoteService.inspectRemoteTags"),
         maxStdoutBytes: 4 * 1024 * 1024,
-        ...transportOptions(url, identity, credentials),
+        ...this.transport(url, identity, credentials),
       })
       .catch((error: unknown) => {
         throw this.githubFailure(error, url, !!request.credentials);
@@ -230,7 +243,8 @@ export class RemoteService {
         const credentials =
           request.credentials ??
           (await this.github?.forFetch(identity.id, url)) ??
-          (await this.gitlab?.forFetch(identity.id, url));
+          (await this.gitlab?.forFetch(identity.id, url)) ??
+          (await this.gitlabSelfHosted?.forFetch(identity.id, url));
         const result = await this.git.exec(
           [
             "fetch",
@@ -247,7 +261,7 @@ export class RemoteService {
           {
             cwd: path,
             operation: t("operations.fetch", { name: name }),
-            ...transportOptions(url, identity, credentials),
+            ...this.transport(url, identity, credentials),
           },
         );
 
@@ -311,12 +325,13 @@ export class RemoteService {
         const credentials =
           request.credentials ??
           (await this.github?.forFetch(identity.id, url)) ??
-          (await this.gitlab?.forFetch(identity.id, url));
+          (await this.gitlab?.forFetch(identity.id, url)) ??
+          (await this.gitlabSelfHosted?.forFetch(identity.id, url));
         const result = await this.git
           .exec(["ls-remote", "--upload-pack=git-upload-pack", "--refs", "--", url, destination], {
             cwd: path,
             operation: t("operations.inspectRemoteBranch"),
-            ...transportOptions(url, identity, credentials),
+            ...this.transport(url, identity, credentials),
           })
           .catch((error: unknown) => {
             throw this.githubFailure(error, url, !!request.credentials);
@@ -433,12 +448,13 @@ export class RemoteService {
             {
               cwd: path,
               operation: t("operations.pushBranch"),
-              ...transportOptions(
+              ...this.transport(
                 url,
                 identity,
                 credentials ??
                   (await this.github?.forFetch(identity.id, url)) ??
-                  (await this.gitlab?.forFetch(identity.id, url)),
+                  (await this.gitlab?.forFetch(identity.id, url)) ??
+                  (await this.gitlabSelfHosted?.forFetch(identity.id, url)),
               ),
             },
           )
@@ -462,7 +478,7 @@ export class RemoteService {
 
     remoteUrl(request.url);
 
-    const transport = transportOptions(request.url, captured, request.credentials);
+    transportOptions(request.url, captured, request.credentials);
 
     if (
       !isAbsolute(request.parent) ||
@@ -490,11 +506,10 @@ export class RemoteService {
             request.credentials ??
             (request.url.startsWith("https://")
               ? ((await this.github?.forFetch(captured.id, request.url)) ??
-                (await this.gitlab?.forFetch(captured.id, request.url)))
+                (await this.gitlab?.forFetch(captured.id, request.url)) ??
+                (await this.gitlabSelfHosted?.forFetch(captured.id, request.url)))
               : undefined);
-          const authenticatedTransport = credentials
-            ? transportOptions(request.url, captured, credentials)
-            : transport;
+          const authenticatedTransport = this.transport(request.url, captured, credentials);
 
           this.operations.started(t("main.remoteService.preparingCloneDestination"));
 

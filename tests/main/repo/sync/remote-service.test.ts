@@ -23,6 +23,7 @@ import { ProfileSessionRepository } from "@main/persistence/profile-session-repo
 import { BackgroundFetchService } from "@main/repo/sync/background-fetch-service";
 import type { Database } from "@main/persistence/types";
 import type { GitLabAuth } from "@main/providers/gitlab-auth";
+import type { GitLabSelfHostedAuth } from "@main/providers/gitlab-self-hosted-auth";
 import { isGitLabHttps } from "@shared/integrations/gitlab";
 import type { GitHubAuth } from "@main/providers/github-auth";
 import { isGitHubHttps } from "@shared/integrations/github";
@@ -35,7 +36,11 @@ afterEach(async () => {
   for (const repo of fixtures.splice(0)) await repo.cleanup();
 });
 
-async function setup(github?: Pick<GitHubAuth, "forFetch">, gitlab?: Pick<GitLabAuth, "forFetch">) {
+async function setup(
+  github?: Pick<GitHubAuth, "forFetch">,
+  gitlab?: Pick<GitLabAuth, "forFetch">,
+  gitlabSelfHosted?: Pick<GitLabSelfHostedAuth, "forFetch" | "ignoresTlsErrors">,
+) {
   const server = await createTempRepo({ bare: true });
 
   fixtures.push(server);
@@ -78,6 +83,7 @@ async function setup(github?: Pick<GitHubAuth, "forFetch">, gitlab?: Pick<GitLab
     new FetchHistoryRepository(db),
     github,
     gitlab,
+    gitlabSelfHosted,
   );
 
   const client = await service.clone({
@@ -1290,3 +1296,79 @@ it.each([false, true])(
     }
   },
 );
+
+it("uses a self-hosted PAT for clone, fetch, remote tags, push preview and execution, with manual overrides", async () => {
+  const saved = { username: "oauth2", password: "self-hosted-private-token" };
+  const override = { username: "manual", password: "manual-private-token" };
+  const gitlab = { forFetch: vi.fn(async () => undefined) };
+  const selfHosted = {
+    forFetch: vi.fn(async () => saved),
+    ignoresTlsErrors: vi.fn(() => true),
+  };
+  const ctx = await setup(undefined, gitlab, selfHosted);
+  const url = "https://git.company.test/gitlab/team/subgroup/private.git";
+  await ctx.run(["remote", "set-url", "origin", url]);
+  const execute = ctx.source.git.exec.bind(ctx.source.git);
+  const transports: string[] = [];
+  let expected = saved;
+  const spy = vi.spyOn(ctx.source.git, "exec").mockImplementation(async (args, options) => {
+    const operation = ["clone", "fetch", "ls-remote", "push"].find((name) => args.includes(name));
+    if (!operation) return execute(args, options);
+    transports.push(operation);
+    const overrides = options.env?.overrides ?? {};
+    const config = Object.entries(overrides).filter(([key]) => key.startsWith("GIT_CONFIG_KEY_"));
+    const header = config.find(
+      ([key, value]) =>
+        value === `http.${url}/.extraHeader` &&
+        overrides[key.replace("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")] ===
+          `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
+    );
+    expect(header).toBeDefined();
+    expect(Object.values(overrides)).toContain(
+      `Authorization: Basic ${Buffer.from(`${expected.username}:${expected.password}`).toString("base64")}`,
+    );
+    expect(Object.values(overrides)).toContain("http.followRedirects");
+    const tls = config.find(([, value]) => value === `http.${url}/.sslVerify`);
+    expect(tls).toBeDefined();
+    expect(overrides[tls![0].replace("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")]).toBe("false");
+    expect(overrides["GIT_SSL_NO_VERIFY"]).toBeUndefined();
+    expect(options.redactValues).toContain(expected.password);
+    const local = [...args];
+    local[local.indexOf("--") + 1] = ctx.server.path;
+    return execute(local, { ...options, env: { overrides: { GIT_ALLOW_PROTOCOL: "file" } } });
+  });
+  try {
+    const cloned = await ctx.service.clone({
+      profileId: ctx.profile.id,
+      url,
+      parent: ctx.source.home,
+      name: "self hosted clone",
+    });
+    expect(await readFile(join(cloned.path, "file.txt"), "utf8")).toBe("initial\n");
+    const request = { repositoryId: ctx.client.id, remote: "origin", prune: false, tags: false };
+    await ctx.service.fetch(request);
+    await ctx.service.listTags({ repositoryId: ctx.client.id, remote: "origin" });
+    const preview = await ctx.service.preparePush({
+      repositoryId: ctx.client.id,
+      remote: "origin",
+      branch: "main",
+      destination: "self-hosted-push",
+      mode: "normal",
+      setUpstream: false,
+    });
+    await ctx.service.push(ctx.client.id, preview.token);
+    expect(transports).toEqual(["clone", "fetch", "ls-remote", "ls-remote", "push"]);
+    expect(selfHosted.forFetch).toHaveBeenCalledWith(ctx.profile.id, url);
+    selfHosted.forFetch.mockClear();
+    gitlab.forFetch.mockClear();
+    expected = override;
+    await ctx.service.fetch({ ...request, credentials: override });
+    expect(selfHosted.forFetch).not.toHaveBeenCalled();
+    expect(gitlab.forFetch).not.toHaveBeenCalled();
+    const activity = JSON.stringify(ctx.operations.list(ctx.profile.id));
+    expect(activity).not.toContain(saved.password);
+    expect(activity).not.toContain(override.password);
+  } finally {
+    spy.mockRestore();
+  }
+});

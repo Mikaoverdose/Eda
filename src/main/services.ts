@@ -15,6 +15,7 @@ import { clearDatabase } from "./application/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
 import { UpdateService } from "./application/update-service";
 import { AvatarCache } from "./avatars/avatar-cache";
+import { createGitLabInsecureFetch } from "./providers/gitlab-insecure-fetch";
 import { CredentialService } from "./credentials/credential-service";
 import {
   bundledGitBinary,
@@ -38,6 +39,7 @@ import { ContentRecoveryRepository } from "./persistence/content-recovery-reposi
 import { openDatabase } from "./persistence/database";
 import { FetchHistoryRepository } from "./persistence/fetch-history-repository";
 import { GitLabAccountRepository } from "./persistence/gitlab-account-repository";
+import { GitLabSelfHostedAccountRepository } from "./persistence/gitlab-self-hosted-account-repository";
 import { GitHubAccountRepository } from "./persistence/github-account-repository";
 import { IdentityRepository } from "./persistence/identity-repository";
 import { OperationRepository } from "./persistence/operation-repository";
@@ -46,6 +48,7 @@ import { SettingsRepository } from "./persistence/settings-repository";
 import type { Database } from "./persistence/types";
 import { WorkflowJournal } from "./persistence/workflow-journal";
 import { GitLabAuth } from "./providers/gitlab-auth";
+import { GitLabSelfHostedAuth } from "./providers/gitlab-self-hosted-auth";
 import { GitHubAuth } from "./providers/github-auth";
 import { HistoryRecoveryService } from "./repo/history/history-recovery-service";
 import { HistoryReversalService } from "./repo/history/history-reversal-service";
@@ -71,6 +74,7 @@ export interface Services {
   resetData(): Promise<void>;
   github: GitHubAuth;
   gitlab: GitLabAuth;
+  gitlabSelfHosted: GitLabSelfHostedAuth;
   avatars: AvatarCache;
   backgroundFetch: BackgroundFetchService;
   pull: PullService;
@@ -167,9 +171,16 @@ export async function createServices(): Promise<Services> {
     const gitlab = new GitLabAuth(new GitLabAccountRepository(db), secrets, (url, options) =>
       net.fetch(url instanceof URL ? url.href : url, options),
     );
+    const gitlabSelfHosted = new GitLabSelfHostedAuth(
+      new GitLabSelfHostedAccountRepository(db),
+      secrets,
+      (url, options) => net.fetch(url instanceof URL ? url.href : url, options),
+      createGitLabInsecureFetch,
+    );
     identity.onChange(() => {
       github.cancelAll();
       gitlab.cancelAll();
+      gitlabSelfHosted.cancelAll();
     });
     const recovery = new ContentRecoveryRepository(db);
     const journal = new WorkflowJournal(db);
@@ -208,6 +219,7 @@ export async function createServices(): Promise<Services> {
       new FetchHistoryRepository(db),
       github,
       gitlab,
+      gitlabSelfHosted,
     );
 
     let suspended = false;
@@ -326,6 +338,7 @@ export async function createServices(): Promise<Services> {
       updates,
       github,
       gitlab,
+      gitlabSelfHosted,
       historyReversal: new HistoryReversalService(
         git,
         repositories,
@@ -357,7 +370,7 @@ export async function createServices(): Promise<Services> {
         operations.reset();
         await backgroundFetch.stop();
         try {
-          await Promise.all([github.reset(), gitlab.reset()]);
+          await Promise.all([github.reset(), gitlab.reset(), gitlabSelfHosted.reset()]);
           await identity.serialize(async () => {
             await avatars.clear();
             await secrets.clear();

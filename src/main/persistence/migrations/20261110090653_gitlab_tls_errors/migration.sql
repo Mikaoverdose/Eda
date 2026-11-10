@@ -1,0 +1,1 @@
+ALTER TABLE `gitlab_self_hosted_accounts` ADD `ignore_tls_errors` integer DEFAULT false NOT NULL;
