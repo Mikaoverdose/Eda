@@ -55,5 +55,6 @@
   "fields.username": "username",
   "fields.value": "value",
   "fields.windowId": "window id",
-  "fields.workflowToken": "workflow token"
+  "fields.workflowToken": "workflow token",
+  "fields.repositoryPage": "repository page"
 }

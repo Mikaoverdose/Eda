@@ -965,5 +965,10 @@
   "main.providers.gitlabAuth.callbackUnavailable": "Eda could not open the local GitLab sign-in callback. Close another sign-in window and try again.",
   "main.providers.gitlabAuth.callbackReceived": "GitLab authorization received. Return to Eda to finish connecting.",
   "main.providers.gitlabAuth.callbackInvalid": "This sign-in link is invalid or expired. Return to Eda and try again.",
-  "main.gitlabHandlers.gitLabSignIn": "GitLab sign-in"
+  "main.gitlabHandlers.gitLabSignIn": "GitLab sign-in",
+  "main.providerRepositories.accessRequired": "Repository access was denied. Reconnect this account in Settings → Integrations to grant repository browsing access, and check any organization access restrictions.",
+  "main.providerRepositories.operation": "Browse connected repositories",
+  "main.providerRepositories.loadFailed": "Could not load repositories. Check your connection and account access, then try again.",
+  "main.providerRepositories.invalidResponse": "The provider returned an invalid repository list. Try again.",
+  "main.providerRepositories.signInRequired": "Reconnect this account in Settings → Integrations, then try again."
 }

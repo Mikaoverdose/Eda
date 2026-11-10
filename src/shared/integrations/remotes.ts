@@ -75,7 +75,6 @@ export interface CloneRequest {
   credentials?: TransportCredentials;
 }
 
-// Prefer team/fork over team when both match the tracking ref.
 export function remoteForTrackingRef(
   remotes: readonly RemoteSummary[],
   ref: string | null | undefined,

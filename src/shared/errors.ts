@@ -144,7 +144,6 @@ function sanitizeText(text: ErrorText): ErrorText {
   );
 }
 
-// Use a localized fallback for unknown exceptions instead of showing their raw message.
 export function errorMessage(
   error: unknown,
   fallback: ErrorText = errorText("errors.unexpected"),

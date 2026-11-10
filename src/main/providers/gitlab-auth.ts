@@ -17,6 +17,7 @@ import type {
 } from "../persistence/gitlab-account-repository";
 import { secretKeys, type SecretStore } from "../secrets/secret-store";
 import { ProviderProfileCache } from "./provider-profile-cache";
+import { listProviderRepositories } from "./provider-repositories";
 import { GitLabOAuthCallback } from "./gitlab-oauth-callback";
 
 type ProfileDetails = { id: string; avatarUrl: string | null };
@@ -151,7 +152,7 @@ export class GitLabAuth {
         redirect_uri: INTEGRATIONS.gitlab.redirectUri,
         response_type: "code",
         state,
-        scope: "read_user write_repository",
+        scope: "read_user read_api write_repository",
         code_challenge: createHash("sha256").update(verifier).digest("base64url"),
         code_challenge_method: "S256",
       }).toString();
@@ -270,6 +271,17 @@ export class GitLabAuth {
     const account = this.accounts.find(profileId);
     if (!account) return undefined;
     return this.credentials(account);
+  }
+
+  async repositories(profileId: string, page = 1) {
+    const account = this.accounts.find(profileId);
+
+    if (!account || this.authorized.has(profileId))
+      throw fail(errorText("main.providerRepositories.signInRequired"), "auth-failed");
+
+    const credentials = await this.credentials(account);
+
+    return listProviderRepositories(this.fetch, "gitlab", credentials.password, page);
   }
 
   private commit(candidate: Authorized): Promise<void> {

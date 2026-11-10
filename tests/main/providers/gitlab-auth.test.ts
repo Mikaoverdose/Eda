@@ -102,7 +102,7 @@ it("uses PKCE without a client secret, verifies account identity and stores only
   const url = new URL(ctx.service.authorizationUrl(ctx.profile.id, signIn.id));
   expect(url.origin + url.pathname).toBe("https://gitlab.com/oauth/authorize");
   expect(url.searchParams.get("client_id")).toBe(INTEGRATIONS.gitlab.clientId);
-  expect(url.searchParams.get("scope")).toBe("read_user write_repository");
+  expect(url.searchParams.get("scope")).toBe("read_user read_api write_repository");
   expect(url.searchParams.get("code_challenge_method")).toBe("S256");
   expect(url.searchParams.get("state")).toBe(callbacks.at(-1)!.state);
   expect(Object.keys(signIn).sort()).toEqual(["expiresAt", "id"]);
@@ -301,4 +301,24 @@ it("reuses the sign-in profile across page visits, deduplicates refreshes and ke
   expect(ctx.fetch).toHaveBeenCalledTimes(2);
   await ctx.service.disconnect(ctx.profile.id);
   expect(await ctx.service.profile(ctx.profile.id)).toBeNull();
+});
+
+it("browses with the active profile's saved GitLab credential and refuses an unconnected profile", async () => {
+  const ctx = setup();
+  await ctx.connect();
+  ctx.fetch.mockClear();
+  ctx.fetch.mockResolvedValueOnce(json([]));
+  await expect(ctx.service.repositories(ctx.profile.id)).resolves.toEqual({
+    repositories: [],
+    nextPage: null,
+  });
+  expect(ctx.fetch).toHaveBeenCalledWith(
+    expect.stringContaining("https://gitlab.com/api/v4/projects?"),
+    expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: `Bearer ${token.access_token}` }),
+    }),
+  );
+  ctx.fetch.mockClear();
+  await expect(ctx.service.repositories(ctx.other.id)).rejects.toThrow();
+  expect(ctx.fetch).not.toHaveBeenCalled();
 });

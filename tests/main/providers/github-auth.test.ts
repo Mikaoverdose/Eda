@@ -411,3 +411,23 @@ it("discards OAuth credentials if sign-in is cancelled during a vault write", as
   expect(ctx.accounts.find(ctx.profile.id)).toBeUndefined();
   expect(ctx.values.size).toBe(0);
 });
+
+it("browses with the active profile's saved GitHub credential and refuses an unconnected profile", async () => {
+  const ctx = setup();
+  await ctx.connect();
+  ctx.fetch.mockClear();
+  ctx.fetch.mockResolvedValueOnce(json([]));
+  await expect(ctx.service.repositories(ctx.profile.id)).resolves.toEqual({
+    repositories: [],
+    nextPage: null,
+  });
+  expect(ctx.fetch).toHaveBeenCalledWith(
+    expect.stringContaining("https://api.github.com/user/repos?"),
+    expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: `Bearer ${token.access_token}` }),
+    }),
+  );
+  ctx.fetch.mockClear();
+  await expect(ctx.service.repositories(ctx.other.id)).rejects.toThrow();
+  expect(ctx.fetch).not.toHaveBeenCalled();
+});

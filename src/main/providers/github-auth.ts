@@ -11,6 +11,7 @@ import {
   type GitHubStatus,
 } from "@shared/integrations/github";
 import type { TransportCredentials } from "@shared/integrations/remotes";
+import { listProviderRepositories } from "./provider-repositories";
 import { randomUUID } from "node:crypto";
 import type {
   GitHubAccountRepository,
@@ -255,6 +256,17 @@ export class GitHubAuth {
     const account = this.accounts.find(profileId);
     if (!account) return undefined;
     return this.credentials(account);
+  }
+
+  async repositories(profileId: string, page = 1) {
+    const account = this.accounts.find(profileId);
+
+    if (!account || this.authorized.has(profileId))
+      throw fail(errorText("main.providerRepositories.signInRequired"), "github-auth-required");
+
+    const credentials = await this.credentials(account);
+
+    return listProviderRepositories(this.fetch, "github", credentials.password, page);
   }
 
   private commit(candidate: Authorized): Promise<void> {

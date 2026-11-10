@@ -12,7 +12,7 @@ export interface DialogProps {
   children: ReactNode;
   placement?: "center" | "right";
   wide?: boolean;
-  size?: "md" | "lg";
+  size?: "md" | "lg" | "xl";
 }
 
 export function Dialog({
@@ -27,7 +27,13 @@ export function Dialog({
 }: DialogProps) {
   const descriptionId = useId();
   const placementWidth = placement === "right" ? "w-full" : "w-[calc(100vw-2rem)]";
-  const maxWidth = wide ? "max-w-[76rem]" : size === "lg" ? "max-w-[40rem]" : "max-w-[30rem]";
+  const maxWidth = wide
+    ? "max-w-[76rem]"
+    : size === "xl"
+      ? "max-w-[60rem]"
+      : size === "lg"
+        ? "max-w-[40rem]"
+        : "max-w-[30rem]";
   const height = placement === "right" ? "min-h-0" : "max-h-[90vh] rounded-lg";
 
   return (

@@ -6,7 +6,7 @@ import type { Services } from "../../services";
 import { GITHUB_VERIFICATION_URL } from "../../providers/github-auth";
 import { handle } from "../transport";
 import { captureProfile } from "../profile-context";
-import { requireId } from "../validate";
+import { optionalInteger, requireId } from "../validate";
 import { missingIdentity } from "../request-errors";
 
 export function registerGitHubHandlers(services: Services): void {
@@ -31,6 +31,10 @@ export function registerGitHubHandlers(services: Services): void {
       return ok(await action(captured.id));
     });
   };
+  handle(IPC_CHANNELS.githubRepositories, async (_event, profile, rawPage) => {
+    const page = optionalInteger(rawPage, t("fields.repositoryPage"), 1, 10000) ?? 1;
+    return work(profile, (id) => github.repositories(id, page));
+  });
   handle(IPC_CHANNELS.githubStatus, async (_event, profile) =>
     work(profile, (id) => github.status(id)),
   );

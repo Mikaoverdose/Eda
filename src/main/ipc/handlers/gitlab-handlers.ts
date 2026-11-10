@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from "@shared/ipc";
 import type { Services } from "../../services";
 import { handle } from "../transport";
 import { captureProfile } from "../profile-context";
-import { requireId } from "../validate";
+import { optionalInteger, requireId } from "../validate";
 import { missingIdentity } from "../request-errors";
 
 export function registerGitLabHandlers(services: Services): void {
@@ -26,6 +26,10 @@ export function registerGitLabHandlers(services: Services): void {
       return { id: details.id, avatarDataUrl: image.dataUrl };
     }),
   );
+  handle(IPC_CHANNELS.gitlabRepositories, async (_event, profile, rawPage) => {
+    const page = optionalInteger(rawPage, t("fields.repositoryPage"), 1, 10000) ?? 1;
+    return work(profile, (id) => gitlab.repositories(id, page));
+  });
   handle(IPC_CHANNELS.gitlabStatus, async (_event, profile) =>
     work(profile, (id) => gitlab.status(id)),
   );

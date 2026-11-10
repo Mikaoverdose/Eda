@@ -1,3 +1,4 @@
+import type { ProviderRepositoryPage } from "./integrations/provider-repositories";
 import type {
   GitLabStatus,
   GitLabSignIn,
@@ -277,6 +278,7 @@ export interface EdaApi {
     retry(id: string): Promise<Result<void>>;
   };
   github: {
+    repositories(profileId: string, page?: number): Promise<Result<ProviderRepositoryPage>>;
     maintainerProfile(): Promise<Result<GitHubAccountProfile | null>>;
     status(profileId: string): Promise<Result<GitHubStatus>>;
     profile(profileId: string): Promise<Result<GitHubAccountProfile | null>>;
@@ -288,6 +290,7 @@ export interface EdaApi {
     disconnect(profileId: string): Promise<Result<void>>;
   };
   gitlab: {
+    repositories(profileId: string, page?: number): Promise<Result<ProviderRepositoryPage>>;
     profile(profileId: string): Promise<Result<GitLabAccountProfile | null>>;
     status(profileId: string): Promise<Result<GitLabStatus>>;
     begin(profileId: string): Promise<Result<GitLabSignIn>>;
@@ -475,6 +478,7 @@ export const IPC_CHANNELS = {
   updatesDownload: "updates:download",
   updatesInstall: "updates:install",
   gitlabProfile: "gitlab:profile",
+  gitlabRepositories: "gitlab:repositories",
   gitlabStatus: "gitlab:status",
   gitlabBegin: "gitlab:begin",
   gitlabPoll: "gitlab:poll",
@@ -482,6 +486,7 @@ export const IPC_CHANNELS = {
   gitlabOpenAuthorization: "gitlab:open-authorization",
   gitlabOpenProfile: "gitlab:open-profile",
   gitlabDisconnect: "gitlab:disconnect",
+  githubRepositories: "github:repositories",
   githubStatus: "github:status",
   githubProfile: "github:profile",
   githubMaintainerProfile: "github:maintainer-profile",

@@ -45,7 +45,6 @@ export const identities = sqliteTable(
   ],
 );
 
-// The same checkout can have a separate row in each profile.
 export const repositories = sqliteTable(
   "repositories",
   {

@@ -80,7 +80,6 @@ export async function pruneCredentialManager(root: string): Promise<void> {
       for (const dependency of Object.values(target))
         for (const section of ["runtime", "native", "runtimeTargets", "resources"]) {
           for (const asset of Object.keys(dependency[section] ?? {})) {
-            // Runtime/native assets are flattened; resources retain locale directories.
             const file = section === "resources" ? asset : basename(asset);
             if (file.split(/[\\/]/).some((part) => part === "..") || /^[\\/]/.test(file))
               throw new Error("Invalid Git Credential Manager asset path.");

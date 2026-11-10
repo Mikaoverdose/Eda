@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
 
-// Build scripts report developer diagnostics, so this check only scans app code.
 test("desktop exceptions use the shared error contract and deferred localization", () => {
   const files = readdirSync("src", { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))

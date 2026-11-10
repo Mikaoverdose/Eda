@@ -1,29 +1,148 @@
 import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
+import type { GitHubStatus } from "@shared/integrations/github";
+import type { RepositoryProvider } from "@shared/integrations/provider-repositories";
 import type { TransportCredentials } from "@shared/integrations/remotes";
-import { useState } from "react";
-import { Button, Dialog, ErrorDialog, Input } from "../../components/ui/index";
+import { ArrowDownToLine, Folder, Link, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  CodeBlock,
+  Dialog,
+  ErrorDialog,
+  Field,
+  IconButton,
+  Input,
+  Select,
+  StateMessage,
+} from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
+import { useShellStore } from "../../stores/shell-store";
+import { ProviderIcon } from "../connections/ProviderIcon";
 import { TransferProgress, TransportFields } from "../sync/TransportFields";
+import { ProviderRepositoryBrowser } from "./ProviderRepositoryBrowser";
+
+type Source = RepositoryProvider | "url";
+
+type Connection = { status: GitHubStatus | null; error: string | null };
+
+function folderName(url: string): string {
+  return (
+    url
+      .trim()
+      .replace(/[?#].*$/, "")
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/:]/)
+      .at(-1)
+      ?.replace(/\.git$/i, "") ?? ""
+  );
+}
 
 export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
-  const [profileId] = useState(() => useAppStore.getState().activeIdentity!.id);
+  const [profile] = useState(() => useAppStore.getState().activeIdentity!);
+  const profileId = profile.id;
+
+  const [source, setSource] = useState<Source | null>(null);
+  const [connections, setConnections] = useState<Record<RepositoryProvider, Connection> | null>(
+    null,
+  );
+
   const [url, setUrl] = useState("");
   const [parent, setParent] = useState("");
   const [name, setName] = useState("");
+  const [nameEdited, setNameEdited] = useState(false);
   const [auth, setAuth] = useState<TransportCredentials>({ username: "", password: "" });
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const currentSource = source ?? "url";
+  const connection = currentSource === "url" ? null : connections?.[currentSource];
+  const connected = connection?.status?.account?.state === "connected";
+  const destination =
+    parent.trim() && name.trim()
+      ? `${parent.trim().replace(/[\\/]+$/, "")}${parent.includes("\\") ? "\\" : "/"}${name.trim()}`
+      : null;
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      const providers = ["github", "gitlab"] as const;
+      const results = await Promise.allSettled(
+        providers.map((provider) => window.eda[provider].status(profileId)),
+      );
+
+      if (!active) return;
+
+      const values = Object.fromEntries(
+        providers.map((provider, index) => {
+          const result = results[index]!;
+          return [
+            provider,
+            result.status === "fulfilled" && result.value.ok
+              ? { status: result.value.value, error: null }
+              : {
+                  status: null,
+                  error:
+                    result.status === "fulfilled" && !result.value.ok
+                      ? errorMessage(result.value.error)
+                      : t("cloneRepositoryDialog.connectionLoadFailed"),
+                },
+          ];
+        }),
+      ) as Record<RepositoryProvider, Connection>;
+
+      setConnections(values);
+      setSource(
+        (current) =>
+          current ??
+          providers.find((provider) => values[provider].status?.account?.state === "connected") ??
+          "url",
+      );
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [profileId]);
+
+  const updateUrl = (value: string) => {
+    setUrl(value);
+    if (!nameEdited) setName(folderName(value));
+  };
+
+  const changeSource = (next: Source) => {
+    if (busy) return;
+
+    setSource(next);
+
+    if (next === currentSource) return;
+
+    setUrl("");
+    if (!nameEdited) setName("");
+    setAuth({ username: "", password: "" });
+  };
+
+  const openIntegrations = () => {
+    onClose();
+    useShellStore.getState().openSettings("integrations");
+  };
+
   const clone = async () => {
+    if (busy || !url.trim() || !parent.trim() || !name.trim()) return;
+
     setBusy(true);
     setError(null);
 
     try {
       const result = await window.eda.remotes.clone({
         profileId,
-        url,
-        parent,
-        name,
+        url: url.trim(),
+        parent: parent.trim(),
+        name: name.trim(),
         ...(auth.username || auth.password ? { credentials: auth } : {}),
       });
 
@@ -36,6 +155,7 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
             value2: errorAction(result.error) ?? "",
           }),
         );
+
         return;
       }
 
@@ -44,6 +164,8 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
       await useAppStore.getState().refreshRepositories();
       useAppStore.getState().selectRepository(result.value.id);
       onClose();
+    } catch {
+      setError(t("cloneRepositoryDialog.cloneFailed"));
     } finally {
       setBusy(false);
     }
@@ -51,65 +173,227 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog
+      size="xl"
       title={t("cloneRepositoryDialog.cloneRepository")}
-      description={t(
-        "cloneRepositoryDialog.cloneAnHttpssshOrLocalRepositoryIntoANewFolderForThisProfile",
-      )}
       onClose={onClose}
       footer={
         <>
           <Button variant="quiet" onClick={onClose}>
             {t("common.close")}
           </Button>
-          <Button disabled={busy || !url || !parent || !name} onClick={() => void clone()}>
+
+          <Button
+            variant="primary"
+            icon={<ArrowDownToLine size={15} />}
+            busy={busy}
+            disabled={!url.trim() || !parent.trim() || !name.trim()}
+            onClick={() => void clone()}
+          >
             {busy ? t("cloneRepositoryDialog.cloning") : t("cloneRepositoryDialog.cloneRepository")}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
-        <label className="block space-y-1 text-sm">
-          {t("cloneRepositoryDialog.repositoryUrl")}
-          <Input
-            aria-label={t("cloneRepositoryDialog.repositoryUrl")}
-            value={url}
-            disabled={busy}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder={t("cloneRepositoryDialog.httpsHostOwnerRepositoryGit")}
-          />
-        </label>
-        <label className="block space-y-1 text-sm">
-          {t("cloneRepositoryDialog.parentFolder")}
-          <Input
-            aria-label={t("cloneRepositoryDialog.cloneParentFolder")}
-            value={parent}
-            disabled={busy}
-            onChange={(event) => setParent(event.target.value)}
-          />
-        </label>
-        <Button
-          size="sm"
-          disabled={busy}
-          onClick={() =>
-            void window.eda.repository.chooseFolder().then((result) => {
-              if (result.ok && result.value) setParent(result.value);
-              else if (!result.ok) setError(errorMessage(result.error));
-            })
-          }
-        >
-          {t("cloneRepositoryDialog.browseFolders")}
-        </Button>
-        <label className="block space-y-1 text-sm">
-          {t("cloneRepositoryDialog.newFolderName")}
-          <Input
-            aria-label={t("cloneRepositoryDialog.cloneFolderName")}
-            value={name}
-            disabled={busy}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <TransportFields value={auth} onChange={setAuth} disabled={busy} />
+      <div className="space-y-6">
+        <div className="grid overflow-hidden rounded-lg border border-border-default min-[800px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <section
+            className="min-w-0 space-y-4 p-4"
+            aria-label={t("cloneRepositoryDialog.repositorySource")}
+          >
+            <Field label={t("cloneRepositoryDialog.provider")}>
+              {(field) => (
+                <Select
+                  {...field}
+                  aria-label={t("cloneRepositoryDialog.provider")}
+                  value={currentSource}
+                  onValueChange={(value) => {
+                    if (value === "add") openIntegrations();
+                    else if (value === "github" || value === "gitlab" || value === "url")
+                      changeSource(value);
+                  }}
+                  disabled={busy}
+                  className="w-full"
+                >
+                  {(["github", "gitlab", "url"] as const)
+                    .filter((value) => value === "url" || connections?.[value].status?.account)
+                    .map((value) => {
+                      const account = value === "url" ? null : connections?.[value].status?.account;
+
+                      return (
+                        <option key={value} value={value}>
+                          <span className="inline-flex min-w-0 items-center gap-2">
+                            {value === "url" ? (
+                              <Link size={15} aria-hidden="true" />
+                            ) : (
+                              <ProviderIcon provider={value === "github" ? "GitHub" : "GitLab"} />
+                            )}
+                            <span>
+                              {value === "url"
+                                ? t("cloneRepositoryDialog.urlSource")
+                                : value === "github"
+                                  ? "GitHub"
+                                  : "GitLab"}
+                            </span>
+                            {value !== "url" && (
+                              <span className="truncate text-xs text-text-tertiary">
+                                {!connections
+                                  ? t("cloneRepositoryDialog.checkingConnection")
+                                  : account?.state === "connected"
+                                    ? `@${account.login}`
+                                    : t(
+                                        account
+                                          ? "cloneRepositoryDialog.reconnect"
+                                          : "cloneRepositoryDialog.notConnected",
+                                      )}
+                              </span>
+                            )}
+                          </span>
+                        </option>
+                      );
+                    })}
+
+                  <option value="add">
+                    <span className="inline-flex items-center gap-2">
+                      <Plus size={15} aria-hidden="true" />
+                      {t("cloneRepositoryDialog.addProvider")}
+                    </span>
+                  </option>
+                </Select>
+              )}
+            </Field>
+
+            {currentSource === "url" ? (
+              <div className="space-y-4">
+                <Field
+                  label={t("cloneRepositoryDialog.repositoryUrl")}
+                  hint={t("cloneRepositoryDialog.anyGitRepository")}
+                >
+                  {(field) => (
+                    <Input
+                      {...field}
+                      aria-label={t("cloneRepositoryDialog.repositoryUrl")}
+                      value={url}
+                      disabled={busy}
+                      spellCheck={false}
+                      autoCapitalize="none"
+                      onChange={(event) => {
+                        setSource("url");
+                        updateUrl(event.target.value);
+                      }}
+                      placeholder={t("cloneRepositoryDialog.httpsHostOwnerRepositoryGit")}
+                    />
+                  )}
+                </Field>
+
+                <TransportFields value={auth} onChange={setAuth} disabled={busy} />
+              </div>
+            ) : !connections ? (
+              <StateMessage
+                tone="loading"
+                className="min-h-[20rem]"
+                title={t("cloneRepositoryDialog.checkingConnection")}
+              />
+            ) : connected ? (
+              <ProviderRepositoryBrowser
+                key={currentSource}
+                profileId={profileId}
+                provider={currentSource}
+                selectedUrl={url}
+                disabled={busy}
+                onSelect={(repository) => updateUrl(repository.cloneUrl)}
+              />
+            ) : (
+              <StateMessage
+                className="min-h-[20rem] rounded-lg border border-border-subtle bg-bg-inset/40"
+                tone={connection?.error ? "error" : "info"}
+                title={t("cloneRepositoryDialog.connectProvider", {
+                  provider: currentSource === "github" ? "GitHub" : "GitLab",
+                })}
+                description={connection?.error ?? t("cloneRepositoryDialog.connectHint")}
+                action={
+                  <Button onClick={openIntegrations}>
+                    {t("cloneRepositoryDialog.openIntegrations")}
+                  </Button>
+                }
+              />
+            )}
+          </section>
+
+          <section
+            className="flex min-w-0 flex-col gap-5 border-t border-border-subtle bg-bg-inset/40 p-4 min-[800px]:border-l min-[800px]:border-t-0"
+            aria-label={t("cloneRepositoryDialog.destination")}
+          >
+            <div className="flex items-center gap-2">
+              <Folder size={16} aria-hidden="true" className="text-text-tertiary" />
+              <h3 className="text-sm font-semibold">{t("cloneRepositoryDialog.destination")}</h3>
+            </div>
+
+            <Field label={t("cloneRepositoryDialog.parentFolder")}>
+              {(field) => (
+                <div className="flex min-w-0 gap-2">
+                  <Input
+                    {...field}
+                    aria-label={t("cloneRepositoryDialog.cloneParentFolder")}
+                    value={parent}
+                    disabled={busy}
+                    onChange={(event) => setParent(event.target.value)}
+                    placeholder={t("cloneRepositoryDialog.chooseParentFolder")}
+                  />
+
+                  <IconButton
+                    size="md"
+                    variant="secondary"
+                    aria-label={t("cloneRepositoryDialog.browseFolders")}
+                    title={t("cloneRepositoryDialog.browseFolders")}
+                    icon={<Folder size={16} />}
+                    disabled={busy}
+                    onClick={() => {
+                      void window.eda.repository
+                        .chooseFolder()
+                        .then((result) => {
+                          if (result.ok && result.value) setParent(result.value);
+                          else if (!result.ok) setError(errorMessage(result.error));
+                        })
+                        .catch(() => setError(t("cloneRepositoryDialog.folderPickerFailed")));
+                    }}
+                  />
+                </div>
+              )}
+            </Field>
+
+            <Field label={t("cloneRepositoryDialog.newFolderName")}>
+              {(field) => (
+                <Input
+                  {...field}
+                  aria-label={t("cloneRepositoryDialog.cloneFolderName")}
+                  value={name}
+                  disabled={busy}
+                  placeholder={t("cloneRepositoryDialog.folderNamePlaceholder")}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setNameEdited(!!event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+
+            <div className="mt-auto space-y-2 border-t border-border-subtle pt-4">
+              <p className="text-xs font-medium text-text-secondary">
+                {t("cloneRepositoryDialog.destinationPath")}
+              </p>
+              <CodeBlock
+                label={t("cloneRepositoryDialog.destinationPath")}
+                wrap
+                className="text-text-secondary"
+              >
+                {destination ?? t("cloneRepositoryDialog.destinationHint")}
+              </CodeBlock>
+            </div>
+          </section>
+        </div>
+
         {busy && <TransferProgress kindKey="operationTitles.cloneRepository" />}
+
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
     </Dialog>
