@@ -3,7 +3,7 @@ import { t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
 import type { CommitInspection, FileDiff } from "@shared/repository/repository-read";
 import { useEffect, useState } from "react";
-import { PanelControls } from "../../components/layout/PanelControls";
+import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
 import { LoadingContent } from "../../components/ui/feedback/Skeleton";
@@ -51,11 +51,13 @@ export function CommitChangesPanel() {
   const truncatedChanges = useRepositoryStore((state) => state.truncatedChanges);
   const [query, setQuery] = useState("");
   const [verificationRevision, setVerificationRevision] = useState(0);
+
   const [details, setDetails] = useState<{
     oid: string;
     inspection?: CommitInspection;
     error?: string;
   } | null>(null);
+
   const panel = usePanel("rail");
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export function CommitChangesPanel() {
     if (repositoryId && oid) {
       void window.eda.repository.inspectCommit(repositoryId, oid).then((result) => {
         if (!alive) return;
+
         setDetails(
           result.ok
             ? { oid, inspection: result.value }
@@ -86,6 +89,7 @@ export function CommitChangesPanel() {
   const inspection = details?.oid === oid ? (details.inspection ?? null) : null;
   const commit =
     inspection?.commit ?? pages.flatMap((page) => page.commits).find((item) => item.oid === oid);
+
   const files = (diff?.files ?? []).filter((file) =>
     [file.newPath, file.oldPath].some((path) =>
       path?.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
@@ -98,19 +102,17 @@ export function CommitChangesPanel() {
       aria-label={t("commitChangesPanel.commitFileChanges")}
       className="app-surface-panel flex h-full min-h-0 w-full min-w-0 flex-col"
     >
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
-        <h3 className="truncate text-sm font-semibold text-text-secondary">
-          {t("commitChangesPanel.fileChanges")}
-        </h3>
-        <span className="ml-auto" />
-        <PanelControls
-          name={t("commitChangesPanel.fileChangesLabel")}
-          state={panel.state}
-          onToggleMaximize={panel.toggleMaximize}
-          onToggleCollapse={panel.toggleCollapse}
-          collapseDirection="right"
-        />
-      </header>
+      <PanelHeader
+        title={t("commitChangesPanel.fileChanges")}
+        controls={{
+          name: t("commitChangesPanel.fileChangesLabel"),
+          state: panel.state,
+          onToggleMaximize: panel.toggleMaximize,
+          onToggleCollapse: panel.toggleCollapse,
+          collapseDirection: "right",
+        }}
+      />
+
       {changeCount > 0 && (
         <div className="flex shrink-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-accent-border bg-accent-muted px-3 py-1.5 text-xs text-text-primary">
           <span role="status">
@@ -121,6 +123,7 @@ export function CommitChangesPanel() {
               { count: changeCount },
             )}
           </span>
+
           <ButtonBase
             onClick={showWorkingTree}
             className="shrink-0 rounded-sm border border-accent-border px-1.5 py-0.5 text-xs text-accent-text hover:bg-bg-raised"
@@ -129,6 +132,7 @@ export function CommitChangesPanel() {
           </ButtonBase>
         </div>
       )}
+
       <div className="max-h-[40%] shrink-0 overflow-auto">
         {commit && (
           <CommitDetails
@@ -139,8 +143,10 @@ export function CommitChangesPanel() {
             onSelectParent={(parent) => void useRepositoryStore.getState().jumpToCommit(parent)}
           />
         )}
+
         {details?.oid === oid && details.error && <ErrorDialog>{details.error}</ErrorDialog>}
       </div>
+
       <div className="shrink-0 border-b border-border-subtle px-3 py-2">
         <SearchField
           aria-label={t("commitChangesPanel.filterCommitFiles")}
@@ -150,6 +156,7 @@ export function CommitChangesPanel() {
           className="w-full"
         />
       </div>
+
       {loading ? (
         <LoadingContent label={t("commitChangesPanel.loadingCommitFiles")} />
       ) : error ? (
@@ -202,11 +209,13 @@ export function CommitChangesPanel() {
                 >
                   {statusLabels[file.status]}
                 </span>
+
                 <span className="min-w-0 flex-1 truncate">
                   {renamed
                     ? t("commitChangesPanel.to", { oldPath: file.oldPath, path: path })
                     : path}
                 </span>
+
                 {file.binary && (
                   <span className="shrink-0 text-text-tertiary">
                     {t("commitChangesPanel.binary")}
@@ -217,6 +226,7 @@ export function CommitChangesPanel() {
           }}
         />
       )}
+
       <footer className="shrink-0 border-t border-border-subtle px-3 py-2 text-xs text-text-tertiary">
         {loading
           ? t("commitChangesPanel.loadingFiles")
@@ -224,6 +234,7 @@ export function CommitChangesPanel() {
               length: files.length,
               value2: diff?.files.length ?? 0,
             })}
+
         {!!diff?.omittedFiles && (
           <p role="status">
             {t("commitChangesPanel.additionalFilesOmittedByThePreviewLimit", {

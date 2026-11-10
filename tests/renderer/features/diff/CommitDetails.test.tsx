@@ -61,7 +61,9 @@ it.each([
         ? ({ signer: "Sample signer", fingerprint: "B".repeat(40), trustLevel: "fully" } as const)
         : {}),
     };
+
     const verify = vi.fn();
+
     await act(async () =>
       root.render(
         <CommitDetails
@@ -78,16 +80,26 @@ it.each([
     expect(indicator.textContent).toBe("");
     expect(indicator.className).toContain(color);
 
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>("button[aria-controls]")!.click(),
-    );
-    const details = container.querySelector<HTMLDivElement>("[id][hidden]");
-    expect(details).toBeNull();
+    const toggle = container.querySelector<HTMLButtonElement>("button[aria-controls]")!;
+    const details = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+
+    expect(details.getAttribute("aria-hidden")).toBe("true");
+    expect(details.hasAttribute("inert")).toBe(true);
+
+    await act(async () => toggle.click());
+    expect(details.getAttribute("aria-hidden")).toBe("false");
+    expect(details.hasAttribute("inert")).toBe(false);
+
     const verifyButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Verify signature again"]',
     )!;
+
     await act(async () => verifyButton.click());
     expect(verify).toHaveBeenCalledOnce();
+
+    await act(async () => toggle.click());
+    expect(details.getAttribute("aria-hidden")).toBe("true");
+    expect(details.hasAttribute("inert")).toBe(true);
 
     if (status === "verified") {
       expect(container.textContent).toContain("Sample signer");
@@ -100,6 +112,7 @@ it.each([
 it("rechecks trust without clearing the file filter and ignores a response for the previous commit", async () => {
   const previous = useRepositoryStore.getState();
   const pending: Array<(value: Result<CommitInspection>) => void> = [];
+
   vi.stubGlobal("eda", {
     repository: {
       inspectCommit: vi.fn(
@@ -117,7 +130,9 @@ it("rechecks trust without clearing the file filter and ignores a response for t
       error: null,
       diffLoading: false,
     });
+
     await act(async () => root.render(<CommitChangesPanel />));
+
     expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe(
       "Checking signature",
     );
@@ -134,12 +149,15 @@ it("rechecks trust without clearing the file filter and ignores a response for t
         ),
       ),
     );
+
     const filter = container.querySelector<HTMLInputElement>('[aria-label="Filter commit files"]')!;
+
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
         filter,
         "keep-filter",
       );
+
       filter.dispatchEvent(new Event("input", { bubbles: true }));
       container.querySelector<HTMLButtonElement>("button[aria-controls]")!.click();
     });
@@ -147,7 +165,9 @@ it("rechecks trust without clearing the file filter and ignores a response for t
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Verify signature again"]')!.click(),
     );
+
     expect(filter.value).toBe("keep-filter");
+
     expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe(
       "Checking signature",
     );
@@ -155,6 +175,7 @@ it("rechecks trust without clearing the file filter and ignores a response for t
     await act(async () =>
       useRepositoryStore.setState({ selection: { kind: "commit", oid: "c".repeat(40) } }),
     );
+
     await act(async () =>
       pending[1]!(
         ok(
@@ -167,6 +188,7 @@ it("rechecks trust without clearing the file filter and ignores a response for t
         ),
       ),
     );
+
     expect(container.querySelector('[aria-label="Invalid signature"]')).toBeNull();
   } finally {
     await act(async () => useRepositoryStore.setState(previous));

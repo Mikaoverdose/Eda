@@ -1,11 +1,11 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
-import type { OperationRecord } from "@shared/operations";
 import { Activity, ChevronUp, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   CodeBlock,
+  Collapse,
   Disclosure,
   ErrorDialog,
   ListItemButton,
@@ -14,53 +14,26 @@ import {
 import { BackgroundFetchPanel } from "../features/sync/BackgroundFetchPanel";
 import { useAppStore } from "../stores/app-store";
 import { useRepositoryStore } from "../stores/repository-store";
+import { useOperationRecords } from "../hooks/useOperationRecords";
 import { formatDateTime } from "../utils/format";
 
 export function ActivityPanel() {
   const repositories = useAppStore((state) => state.repositories);
   const selectedRepositoryId = useAppStore((state) => state.selectedRepositoryId);
-  const [records, setRecords] = useState<OperationRecord[]>([]);
+  const { records, error: loadError } = useOperationRecords();
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    let revision = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async () => {
-      const request = ++revision;
-      const result = await window.eda.operations.list();
-      if (!alive || request !== revision) return;
-      if (result.ok) {
-        setRecords(result.value);
-        setError(null);
-      } else setError(errorMessage(result.error));
-    };
-
-    void load();
-
-    const unsubscribe = window.eda.events.onOperationsChanged(() => {
-      if (timer) return;
-      timer = setTimeout(() => {
-        timer = undefined;
-        void load();
-      }, 100);
-    });
-
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-      unsubscribe();
-    };
-  }, []);
-
   const running = records.filter(
     (record) => record.state === "queued" || record.state === "running",
   );
+
   const active = running.length;
   const current =
     running.find((record) => record.repositoryId === selectedRepositoryId) ?? running[0];
+
   const run = async (id: string, action: "cancel" | "retry") => {
     setBusy(id);
     setError(null);
@@ -87,11 +60,13 @@ export function ActivityPanel() {
       >
         <Activity size={13} className="shrink-0" />
         <span className="shrink-0">{t("activityPanel.activity")}</span>
+
         {active > 0 && (
           <span role="status" className="flex min-w-0 flex-1 items-center gap-3">
             <span className="shrink-0 text-accent-text">
               {t("activityPanel.running", { active: active })}
             </span>
+
             {current && (
               <span
                 className="truncate text-text-secondary"
@@ -102,6 +77,7 @@ export function ActivityPanel() {
             )}
           </span>
         )}
+
         <ChevronUp
           size={13}
           aria-hidden="true"
@@ -109,23 +85,29 @@ export function ActivityPanel() {
           data-open={open}
         />
       </ListItemButton>
-      <div
-        className="activity-content ui-collapse"
-        data-open={open}
-        inert={!open}
-        aria-hidden={!open}
-      >
+
+      <Collapse className="activity-content" open={open}>
         <div className="flex h-full min-h-0 flex-col">
           {open && selectedRepositoryId && (
             <BackgroundFetchPanel key={selectedRepositoryId} repositoryId={selectedRepositoryId} />
           )}
-          <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
+
+          <ErrorDialog
+            onDismiss={() => {
+              setError(null);
+              setDismissedError(loadError);
+            }}
+          >
+            {error ?? (loadError !== dismissedError ? loadError : null)}
+          </ErrorDialog>
+
           <div className="min-h-0 flex-1 overflow-auto">
             {records.length === 0 && (
               <p className="p-4 text-sm text-text-tertiary">
                 {t("activityPanel.gitOperationsWillAppearHere")}
               </p>
             )}
+
             {records.map((record) => (
               <Disclosure
                 key={record.id}
@@ -138,6 +120,7 @@ export function ActivityPanel() {
                     </span>
                     <strong className="font-medium">{record.kind}</strong>
                     <span className="truncate text-text-tertiary">{record.repositoryName}</span>
+
                     <span className="ml-auto text-text-tertiary">
                       {record.durationMs
                         ? t("activityPanel.durationSeconds", {
@@ -151,16 +134,19 @@ export function ActivityPanel() {
                 <div className="space-y-2 px-4 pb-3">
                   <p>{record.message}</p>
                   {record.recovery && <p className="text-git-modified">{record.recovery}</p>}
+
                   <p className="text-text-tertiary">
                     {formatDateTime(record.startedAt)}
                     {record.exitCode !== undefined &&
                       t("activityPanel.exit", { exitCode: record.exitCode })}
                   </p>
+
                   {record.output && (
                     <CodeBlock label={t("activityPanel.operationOutput")} wrap className="max-h-32">
                       {record.output}
                     </CodeBlock>
                   )}
+
                   <div className="flex items-center gap-4">
                     {record.cancellable && (
                       <TextButton
@@ -171,6 +157,7 @@ export function ActivityPanel() {
                         {t("common.cancelOperation")}
                       </TextButton>
                     )}
+
                     {record.retryable && (
                       <TextButton
                         disabled={busy === record.id}
@@ -180,6 +167,7 @@ export function ActivityPanel() {
                         {t("activityPanel.retryAgainstCurrentState")}
                       </TextButton>
                     )}
+
                     <TextButton
                       disabled={
                         !repositories.some((repository) => repository.id === record.repositoryId)
@@ -201,7 +189,7 @@ export function ActivityPanel() {
             ))}
           </div>
         </div>
-      </div>
+      </Collapse>
     </section>
   );
 }

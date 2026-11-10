@@ -1,10 +1,8 @@
 import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { emptyDraft } from "@shared/identity/profile-session";
-import { matchCommitPrefix } from "@shared/preferences/commit-prefix";
 import type { CommitPreview } from "@shared/repository/repository-write";
 import { FileInput, KeyRound, ShieldOff, UserPlus } from "lucide-react";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import { Skeleton } from "../../components/ui/feedback/Skeleton";
 import {
   Button,
@@ -12,25 +10,21 @@ import {
   Dialog,
   Disclosure,
   ErrorDialog,
-  IdentityIcon,
   IconButton,
+  IdentityIcon,
   Input,
   Textarea,
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { usePreferencesStore } from "../../stores/preferences-store";
-import { categorizeChanges, useRepositoryStore } from "../../stores/repository-store";
+import { useRepositoryStore } from "../../stores/repository-store";
 import { useSessionStore } from "../../stores/session-store";
 import { DirectPush } from "../sync/DirectPush";
 import { CommitPrefixPicker } from "./CommitPrefixPicker";
+import { useCommitDraft } from "./hooks/useCommitDraft";
 
 export function CommitBox({ pending = false }: { pending?: boolean }) {
-  const conventional = usePreferencesStore(
-    (state) => state.values.conventionalCommitsEnabled.value,
-  );
-  const prefixes = usePreferencesStore((state) => state.values.commitPrefixes.value);
   const [expanded, setExpanded] = useState(true);
-  const [pushRequest, setPushRequest] = useState(0);
   const [coauthorOpen, setCoauthorOpen] = useState(false);
   const [coauthorName, setCoauthorName] = useState("");
   const [coauthorEmail, setCoauthorEmail] = useState("");
@@ -41,7 +35,6 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
   const writing = useRepositoryStore((state) => state.writing);
   const writeError = useRepositoryStore((state) => state.writeError);
   const commitNotice = useRepositoryStore((state) => state.commitNotice);
-  const commit = useRepositoryStore((state) => state.commit);
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
   const [preview, setPreview] = useState<CommitPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -64,101 +57,29 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
     };
   }, [repositoryId, identity, status, pending, preferences]);
 
-  const snapshot = useSessionStore((state) => state.snapshot);
-  const transitioning = useSessionStore((state) => state.transitioning);
-  const selectedId = useAppStore((state) => state.selectedRepositoryId);
-  const draft = (selectedId && snapshot?.drafts[selectedId]) || emptyDraft();
-  const { message, amend } = draft;
-  const firstBreak = message.indexOf("\n");
-  const title = firstBreak < 0 ? message : message.slice(0, firstBreak).replace(/\r$/, "");
-  const recognized = conventional ? matchCommitPrefix(title, prefixes) : null;
-  const selectedPrefix = recognized?.[1] ?? "";
-  const subject = recognized ? title.slice(recognized[0].length) : title;
-  const composeTitle = (value: string) => {
-    const typed = conventional ? matchCommitPrefix(value, prefixes) : null;
-    if (typed)
-      return `${typed[1]}${typed[2] ?? ""}${typed[3] ?? ""}: ${value.slice(typed[0].length)}`;
-    return selectedPrefix
-      ? `${selectedPrefix}${recognized?.[2] ?? ""}${recognized?.[3] ?? ""}: ${value}`
-      : value;
-  };
-
-  const messageTail = firstBreak < 0 ? "" : message.slice(firstBreak);
-  const description = messageTail.replace(/^\r?\n(?:\r?\n)?/, "");
-  const setMessage = (message: string) => {
-    if (!pending && repositoryId)
-      useSessionStore.getState().setDraft(repositoryId, { ...draft, message });
-  };
-  const setAmend = (amend: boolean) => {
-    if (!pending && repositoryId)
-      useSessionStore.getState().setDraft(repositoryId, { ...draft, amend });
-  };
-
-  const staged = categorizeChanges(status?.changes ?? []).staged.length;
-  const canCommit =
-    !pending &&
-    subject.trim().length > 0 &&
-    (staged > 0 || amend) &&
-    !writing &&
-    status?.capabilities?.write !== false &&
-    !transitioning &&
-    !snapshot?.recovery;
-
-  const submit = async (push = false) => {
-    if (!canCommit || !repositoryId) return;
-
-    const owner = snapshot?.context.profileId;
-    const sessionContext = snapshot?.context;
-    const repositoryGeneration = useRepositoryStore.getState().generation;
-    const revisionKey = `${owner}:${repositoryId}`;
-    const revision = useSessionStore.getState().draftRevisions[revisionKey];
-
-    if (!(await useSessionStore.getState().flush())) return;
-
-    const session = useSessionStore.getState();
-    const repository = useRepositoryStore.getState();
-
-    if (
-      session.transitioning ||
-      session.snapshot?.context.profileId !== owner ||
-      session.snapshot?.context.generation !== sessionContext?.generation ||
-      session.snapshot?.context.windowId !== sessionContext?.windowId ||
-      useAppStore.getState().selectedRepositoryId !== repositoryId ||
-      repository.repositoryId !== repositoryId ||
-      repository.generation !== repositoryGeneration ||
-      repository.writing
-    )
-      return;
-
-    const committed = await commit(message, { amend, signOff: draft.signOff ?? false });
-
-    if (committed) {
-      const current = useSessionStore.getState();
-      const latest = current.snapshot?.drafts[repositoryId];
-
-      if (
-        current.snapshot?.context.profileId === owner &&
-        current.draftRevisions[revisionKey] === revision &&
-        latest?.message === message &&
-        latest.amend === amend
-      )
-        current.setDraft(repositoryId, emptyDraft());
-
-      if (
-        push &&
-        current.snapshot?.context.profileId === owner &&
-        useRepositoryStore.getState().repositoryId === repositoryId
-      )
-        setPushRequest((previous) => previous + 1);
-    }
-  };
-
-  const commitShortcut = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      void submit();
-    }
-  };
+  const {
+    snapshot,
+    transitioning,
+    draft,
+    message,
+    amend,
+    title,
+    recognized,
+    selectedPrefix,
+    subject,
+    composeTitle,
+    messageTail,
+    description,
+    setMessage,
+    setAmend,
+    staged,
+    canCommit,
+    submit,
+    commitShortcut,
+    conventional,
+    prefixes,
+    pushRequest,
+  } = useCommitDraft(pending);
 
   return (
     <section
@@ -171,6 +92,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
         title={
           <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
             <h3 className="text-sm font-medium text-text-primary">{t("commitBox.commit")}</h3>
+
             <span className="mono text-xs text-text-tertiary">
               {pending ? (
                 <Skeleton className="w-20" />
@@ -179,6 +101,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
               ) : (
                 t("commitBox.staged", { staged: staged })
               )}
+
               {!pending && preview && staged > 0 && (
                 <>
                   {", "}
@@ -208,6 +131,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                   }
                 />
               )}
+
               <div className="min-w-0 flex-1">
                 <Input
                   size="sm"
@@ -235,6 +159,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                 />
               </div>
             </div>
+
             <Textarea
               rows={2}
               value={description}
@@ -258,6 +183,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
           >
             {t("commitBox.amendThePreviousCommit")}
           </Checkbox>
+
           {amend && (
             <p className="text-xs text-git-modified">
               {t("commitBox.amendReplacesTheLatestCommitIdIfThat", {
@@ -267,6 +193,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
               })}
             </p>
           )}
+
           <Disclosure title={t("commitBox.commitOptions")} className="text-xs">
             <div className="mt-1.5 space-y-1.5">
               <div className="flex min-w-0 items-center gap-2">
@@ -283,6 +210,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                 >
                   {t("commitBox.addSignedOffByTrailer")}
                 </Checkbox>
+
                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
                   <IconButton
                     size="xs"
@@ -292,6 +220,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                     disabled={writing || transitioning}
                     onClick={() => setCoauthorOpen(true)}
                   />
+
                   <IconButton
                     size="xs"
                     aria-label={t("commitBox.insertGitTemplate")}
@@ -328,6 +257,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                           setMessage(
                             currentMessage ? `${currentMessage}\n\n${result.value}` : result.value,
                           );
+
                           setTemplateMessage(null);
                         }
                       });
@@ -335,9 +265,11 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
                   />
                 </div>
               </div>
+
               {templateMessage && <p role="status">{templateMessage}</p>}
             </div>
           </Disclosure>
+
           {coauthorOpen && (
             <Dialog
               title={t("commitBox.coAuthorDialogTitle")}
@@ -355,6 +287,7 @@ export function CommitBox({ pending = false }: { pending?: boolean }) {
 
 Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
                     );
+
                     setCoauthorOpen(false);
                   }}
                 >
@@ -369,6 +302,7 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
                   value={coauthorName}
                   onChange={(event) => setCoauthorName(event.target.value)}
                 />
+
                 <Input
                   aria-label={t("commitBox.coAuthorEmail")}
                   type="email"
@@ -397,6 +331,7 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
             ) : (
               <Skeleton className="w-20" />
             )}
+
             {preview && (
               <span
                 className="ml-auto flex shrink-0 items-center gap-1.5"
@@ -409,10 +344,12 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
                 ) : (
                   <KeyRound size={14} aria-hidden="true" />
                 )}
+
                 <span>{preview.signing.split(", ")[0]}</span>
               </span>
             )}
           </div>
+
           {previewError && (
             <ErrorDialog title={t("commitBox.commitPreviewUnavailable")}>
               {previewError}
@@ -427,6 +364,7 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
               )}
             </ErrorDialog>
           )}
+
           {commitNotice && (
             <p role="status" className="text-xs text-git-modified">
               {commitNotice}
@@ -444,6 +382,7 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
             >
               {amend ? t("commitBox.amendCommit") : t("commitBox.commit")}
             </Button>
+
             <Button
               size="sm"
               disabled={!canCommit || !status?.branch || status.branch.detached}
@@ -453,6 +392,7 @@ Co-authored-by: ${coauthorName.trim()} <${coauthorEmail.trim()}>`,
               {amend ? t("commitBox.amendAndPush") : t("commitBox.commitAndPush")}
             </Button>
           </div>
+
           {pushRequest > 0 && repositoryId && (
             <DirectPush key={pushRequest} repositoryId={repositoryId} afterCommit />
           )}

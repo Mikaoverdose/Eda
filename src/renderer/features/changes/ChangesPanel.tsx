@@ -1,48 +1,38 @@
-import { isOneOf } from "@shared/validation";
-import {
-  FILE_VIEW_MODES,
-  FILE_VIEW_STATUSES,
-  MAX_FILE_VIEW_PATHS,
-  defaultFileView,
-  type FileView,
-} from "@shared/preferences/file-view";
+import { categorizeChanges } from "../../repository/working-changes";
 import { t } from "@shared/i18n";
-import { copyText } from "../../utils/clipboard";
-import { createPortal } from "react-dom";
-import { EyeOff, History, PackageCheck, Pencil, Trash2, Plus, Minus, X } from "lucide-react";
-import { LoadingContent, Skeleton } from "../../components/ui/feedback/Skeleton";
-import { useEffect, useMemo, useState } from "react";
-import { useSessionStore } from "../../stores/session-store";
+import { MAX_FILE_VIEW_PATHS, defaultFileView, type FileView } from "@shared/preferences/file-view";
 import type { RepositoryChange } from "@shared/repository/repository-read";
-import {
-  categorizeChanges,
-  type ChangeArea,
-  useRepositoryStore,
-} from "../../stores/repository-store";
+import { EyeOff, History, Minus, PackageCheck, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { PanelHeader } from "../../components/layout/PanelHeader";
+import { usePanel } from "../../components/layout/hooks/usePanel";
+import { LoadingContent, Skeleton } from "../../components/ui/feedback/Skeleton";
 import {
   Button,
-  IconButton,
+  ContextPopover,
   ErrorDialog,
+  IconButton,
   MenuItem,
-  PopoverSurface,
-  SearchField,
-  Select,
   TreeIcon,
 } from "../../components/ui/index";
+import { useRepositoryStore, type ChangeArea } from "../../stores/repository-store";
+import { useSessionStore } from "../../stores/session-store";
+import { copyText } from "../../utils/clipboard";
+import { ChangeFilters } from "./ChangeFilters";
 import { ChangeList } from "./ChangeList";
-import { buildChangeRows, type ChangeListRow } from "./change-list-model";
-import { PanelControls } from "../../components/layout/PanelControls";
-import { usePanel } from "../../components/layout/hooks/usePanel";
 import { DiscardDialog } from "./DiscardDialog";
+import { buildChangeRows, type ChangeListRow } from "./change-list-model";
 
 import { IgnoredFilesDialog } from "./IgnoredFilesDialog";
 
 export function ChangesPanel({ pending = false }: { pending?: boolean }) {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [ignoredRepository, setIgnoredRepository] = useState<string | null>(null);
+
   const [discard, setDiscard] = useState<{ repositoryId: string; paths: string[] | null } | null>(
     null,
   );
+
   const [menu, setMenu] = useState<{
     repositoryId: string;
     identityId: string | null;
@@ -62,9 +52,11 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
   const panel = usePanel("rail");
   const stage = useRepositoryStore((state) => state.stage);
   const unstage = useRepositoryStore((state) => state.unstage);
+
   const writing = useRepositoryStore(
     (state) => pending || state.writing || state.status?.capabilities?.write === false,
   );
+
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
 
   useEffect(() => setMenu(null), [repositoryId, identityId, pending]);
@@ -72,11 +64,14 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
   const grouped = useSessionStore((state) =>
     repositoryId ? (state.snapshot?.session.views[repositoryId]?.grouped ?? false) : false,
   );
+
   const savedFiles = useSessionStore((state) =>
     repositoryId ? state.snapshot?.session.views[repositoryId]?.files : undefined,
   );
+
   const files = useMemo(() => savedFiles ?? defaultFileView(grouped), [savedFiles, grouped]);
   const checked = new Set(files.selected);
+
   const updateFiles = (change: Partial<FileView>) => {
     if (repositoryId)
       useSessionStore.getState().setView(repositoryId, {
@@ -86,6 +81,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
   };
 
   const allCategories = useMemo(() => categorizeChanges(status?.changes ?? []), [status?.changes]);
+
   const categories = useMemo(() => {
     const query = files.query.toLocaleLowerCase();
 
@@ -95,6 +91,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           change.path.toLocaleLowerCase().includes(query) &&
           (!files.status || change.index === files.status || change.worktree === files.status),
       );
+
     return {
       conflicted: filter(allCategories.conflicted),
       staged: filter(allCategories.staged),
@@ -108,6 +105,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
       (change) => checked.has(`unstaged:${change.path}`) || checked.has(`untracked:${change.path}`),
     )
     .map((change) => change.path);
+
   const checkedUnstage = allCategories.staged
     .filter((change) => checked.has(`staged:${change.path}`))
     .map((change) => change.path);
@@ -134,6 +132,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
         const choices = rows.filter(
           (row): row is Extract<ChangeListRow, { kind: "change" }> => row.kind === "change",
         );
+
         const current = choices.findIndex(
           (row) =>
             selection?.kind === "change" &&
@@ -180,10 +179,16 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
         }
       }}
     >
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
-        <h3 className="truncate text-sm font-semibold text-text-secondary">
-          {t("changesPanel.workingTree")}
-        </h3>
+      <PanelHeader
+        title={t("changesPanel.workingTree")}
+        controls={{
+          name: t("changesPanel.workingTreeLabel"),
+          state: panel.state,
+          onToggleMaximize: panel.toggleMaximize,
+          onToggleCollapse: panel.toggleCollapse,
+          collapseDirection: "right",
+        }}
+      >
         <div className="ml-auto flex shrink-0 items-center gap-3 text-xs">
           {pending ? (
             <Skeleton className="w-16" />
@@ -201,6 +206,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
                   {allCategories.staged.length}
                 </span>
               )}
+
               {allCategories.unstaged.length + allCategories.untracked.length > 0 && (
                 <span
                   className="mono flex items-center gap-1 text-git-modified"
@@ -218,6 +224,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
             </>
           )}
         </div>
+
         <IconButton
           size="xs"
           onClick={() => {
@@ -233,63 +240,10 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           className={grouped ? "text-accent-text" : undefined}
           icon={<TreeIcon />}
         />
-        <PanelControls
-          name={t("changesPanel.workingTreeLabel")}
-          state={panel.state}
-          onToggleMaximize={panel.toggleMaximize}
-          onToggleCollapse={panel.toggleCollapse}
-          collapseDirection="right"
-        />
-      </header>
-      <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-xs text-text-secondary">
-        <SearchField
-          aria-label={t("changesPanel.filterChangedFiles")}
-          placeholder={t("changesPanel.filterFiles")}
-          value={files.query}
-          maxLength={512}
-          className="min-w-0 flex-1"
-          onChange={(event) => updateFiles({ query: event.target.value })}
-        />
-        <Select
-          aria-label={t("changesPanel.filterFileStatus")}
-          value={files.status}
-          compact
-          surface="surface"
-          className="max-w-32"
-          onValueChange={(value) => {
-            if (isOneOf(value, FILE_VIEW_STATUSES)) updateFiles({ status: value });
-          }}
-        >
-          <option value="">{t("changesPanel.allStatuses")}</option>
-          {Object.entries({
-            M: t("changesPanel.modified"),
-            A: t("changesPanel.added"),
-            D: t("changesPanel.deleted"),
-            R: t("changesPanel.renamed"),
-            C: t("changesPanel.copied"),
-            T: t("changesPanel.typeChanged"),
-            U: t("changesPanel.conflicted"),
-            "?": t("changesPanel.untracked"),
-          }).map(([code, label]) => (
-            <option key={code} value={code}>
-              {label}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label={t("changesPanel.fileListView")}
-          value={files.mode}
-          compact
-          surface="surface"
-          onValueChange={(value) => {
-            if (isOneOf(value, FILE_VIEW_MODES)) updateFiles({ mode: value });
-          }}
-        >
-          <option value="flat">{t("changesPanel.flat")}</option>
-          <option value="path">{t("changesPanel.paths")}</option>
-          <option value="tree">{t("changesPanel.tree")}</option>
-        </Select>
-      </div>
+      </PanelHeader>
+
+      <ChangeFilters files={files} onChange={updateFiles} />
+
       {discard && repositoryId === discard.repositoryId && (
         <DiscardDialog
           repositoryId={repositoryId}
@@ -297,12 +251,14 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           onClose={() => setDiscard(null)}
         />
       )}
+
       {ignoredRepository && repositoryId === ignoredRepository && (
         <IgnoredFilesDialog
           repositoryId={repositoryId}
           onClose={() => setIgnoredRepository(null)}
         />
       )}
+
       {pending ? (
         <LoadingContent label={t("changesPanel.loadingWorkingFiles")} />
       ) : (
@@ -340,6 +296,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           }}
         />
       )}
+
       <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-border-subtle px-3 text-xs text-text-tertiary">
         {files.selected.length > 0 ? (
           <>
@@ -357,6 +314,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
                 {t("changesPanel.stage", { length: checkedStage.length })}
               </Button>
             )}
+
             {checkedUnstage.length > 0 && (
               <Button
                 size="sm"
@@ -373,6 +331,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
                 {t("changesPanel.unstage", { length: checkedUnstage.length })}
               </Button>
             )}
+
             <IconButton
               size="xs"
               disabled={writing || !checkedStage.length}
@@ -389,6 +348,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
             />
           </>
         ) : null}
+
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {files.selected.length > 0 && (
             <IconButton
@@ -399,6 +359,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
               icon={<X size={14} />}
             />
           )}
+
           {files.selected.length === 0 && (
             <IconButton
               size="xs"
@@ -425,6 +386,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
               icon={<Trash2 size={14} />}
             />
           )}
+
           <IconButton
             size="xs"
             aria-label={t("changesPanel.inspectIgnoredFiles")}
@@ -434,6 +396,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
               if (repositoryId) setIgnoredRepository(repositoryId);
             }}
           />
+
           <IconButton
             size="xs"
             aria-label={t("changesPanel.recovery")}
@@ -445,78 +408,77 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
           />
         </div>
       </div>
-      {menu &&
-        !pending &&
-        menu.repositoryId === repositoryId &&
-        menu.identityId === identityId &&
-        createPortal(
-          <PopoverSurface
-            role="menu"
-            aria-label={t("changesPanel.workingFileActions")}
-            onClose={() => setMenu(null)}
-            className="fixed w-56 p-1"
-            style={{
-              left: Math.max(0, Math.min(menu.x, window.innerWidth - 224)),
-              top: Math.max(0, Math.min(menu.y, window.innerHeight - 200)),
+
+      {menu && !pending && menu.repositoryId === repositoryId && menu.identityId === identityId && (
+        <ContextPopover
+          role="menu"
+          aria-label={t("changesPanel.workingFileActions")}
+          onClose={() => setMenu(null)}
+          className="w-56"
+          position={menu}
+        >
+          <MenuItem
+            onClick={() => {
+              void selectChange(menu.change, menu.area);
+              setMenu(null);
             }}
           >
+            {t("changesPanel.inspectFile")}
+          </MenuItem>
+
+          {menu.stagePaths.length > 0 && (
             <MenuItem
+              disabled={writing || menu.stagePaths.length > 256}
               onClick={() => {
-                void selectChange(menu.change, menu.area);
+                void stage(menu.stagePaths);
                 setMenu(null);
               }}
             >
-              {t("changesPanel.inspectFile")}
+              <Plus size={14} />
+              {t("changesPanel.stageSelectedFiles", { length: menu.stagePaths.length })}
             </MenuItem>
-            {menu.stagePaths.length > 0 && (
-              <MenuItem
-                disabled={writing || menu.stagePaths.length > 256}
-                onClick={() => {
-                  void stage(menu.stagePaths);
-                  setMenu(null);
-                }}
-              >
-                <Plus size={14} />
-                {t("changesPanel.stageSelectedFiles", { length: menu.stagePaths.length })}
-              </MenuItem>
-            )}
-            {menu.unstagePaths.length > 0 && (
-              <MenuItem
-                disabled={writing || menu.unstagePaths.length > 256}
-                onClick={() => {
-                  void unstage(menu.unstagePaths);
-                  setMenu(null);
-                }}
-              >
-                <Minus size={14} />
-                {t("changesPanel.unstageSelectedFiles", { length: menu.unstagePaths.length })}
-              </MenuItem>
-            )}
-            {menu.stagePaths.length > 0 && (
-              <MenuItem
-                disabled={writing}
-                onClick={() => {
-                  setDiscard({ repositoryId: menu.repositoryId, paths: menu.stagePaths });
-                  setMenu(null);
-                }}
-              >
-                <Trash2 size={14} />
-                {t("changesPanel.discardSelectedChanges")}
-              </MenuItem>
-            )}
+          )}
+
+          {menu.unstagePaths.length > 0 && (
             <MenuItem
+              disabled={writing || menu.unstagePaths.length > 256}
               onClick={() => {
-                void copyText(menu.change.path).catch(() =>
-                  setCopyError(t("copyButton.clipboardCopyFailed")),
-                );
+                void unstage(menu.unstagePaths);
                 setMenu(null);
               }}
             >
-              {t("changesPanel.copyFilePath")}
+              <Minus size={14} />
+              {t("changesPanel.unstageSelectedFiles", { length: menu.unstagePaths.length })}
             </MenuItem>
-          </PopoverSurface>,
-          document.body,
-        )}
+          )}
+
+          {menu.stagePaths.length > 0 && (
+            <MenuItem
+              disabled={writing}
+              onClick={() => {
+                setDiscard({ repositoryId: menu.repositoryId, paths: menu.stagePaths });
+                setMenu(null);
+              }}
+            >
+              <Trash2 size={14} />
+              {t("changesPanel.discardSelectedChanges")}
+            </MenuItem>
+          )}
+
+          <MenuItem
+            onClick={() => {
+              void copyText(menu.change.path).catch(() =>
+                setCopyError(t("copyButton.clipboardCopyFailed")),
+              );
+
+              setMenu(null);
+            }}
+          >
+            {t("changesPanel.copyFilePath")}
+          </MenuItem>
+        </ContextPopover>
+      )}
+
       <ErrorDialog onDismiss={() => setCopyError(null)}>{copyError}</ErrorDialog>
     </section>
   );
