@@ -11,6 +11,14 @@ import {
 
 export type PanelState = "normal" | "maximized" | "collapsed";
 
+export interface PanelControlsProps {
+  name: string;
+  state: PanelState;
+  onToggleMaximize: () => void;
+  onToggleCollapse?: () => void;
+  collapseDirection: "left" | "right" | "up" | "down";
+}
+
 const CHEVRONS = {
   left: ChevronLeftIcon,
   right: ChevronRightIcon,
@@ -24,13 +32,7 @@ export function PanelControls({
   onToggleMaximize,
   onToggleCollapse,
   collapseDirection,
-}: {
-  name: string;
-  state: PanelState;
-  onToggleMaximize: () => void;
-  onToggleCollapse?: () => void;
-  collapseDirection: "left" | "right" | "up" | "down";
-}) {
+}: PanelControlsProps) {
   const collapsed = state === "collapsed";
   const expand = { left: "right", right: "left", up: "down", down: "up" } as const;
   const Chevron = CHEVRONS[collapsed ? expand[collapseDirection] : collapseDirection];
@@ -49,6 +51,7 @@ export function PanelControls({
           icon={<Chevron size={12} aria-hidden />}
         />
       )}
+
       <IconButton
         size="xs"
         onClick={onToggleMaximize}

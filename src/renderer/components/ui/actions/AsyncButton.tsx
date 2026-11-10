@@ -1,9 +1,10 @@
 import { t } from "@shared/i18n";
+import { Copy, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { Button, type ButtonProps } from "./Button";
-import { ActionIndicator, type ActionState } from "./ActionIndicator";
 import { ACTION_FEEDBACK } from "../../../motion";
+import { copyText } from "../../../utils/clipboard";
+import { ActionIndicator, type ActionState } from "./ActionIndicator";
+import { Button, type ButtonProps } from "./Button";
 
 export function AsyncButton({
   label,
@@ -24,6 +25,7 @@ export function AsyncButton({
 
   useEffect(() => {
     mounted.current = true;
+
     return () => {
       mounted.current = false;
       clearTimeout(resetTimer.current);
@@ -71,6 +73,7 @@ export function AsyncButton({
       >
         {children}
       </Button>
+
       <span role="status" className="sr-only">
         {state === "success"
           ? t("asyncButton.completed", { label: label })
@@ -79,5 +82,56 @@ export function AsyncButton({
             : ""}
       </span>
     </>
+  );
+}
+
+export function CopyButton({
+  value,
+  copied = false,
+  label = t("common.copy"),
+  size = "icon-sm",
+}: {
+  value: string;
+  copied?: boolean;
+  label?: string;
+  size?: "icon-sm" | "icon-xs";
+}) {
+  const copy = async () => {
+    await copyText(value);
+    return true;
+  };
+
+  return (
+    <AsyncButton
+      key={value}
+      size={size}
+      variant="ghost"
+      label={label}
+      title={label}
+      completed={copied}
+      onAction={copy}
+      icon={<Copy size={14} aria-hidden="true" />}
+    />
+  );
+}
+
+export function RefreshButton({
+  label = t("common.refresh"),
+  onRefresh,
+  disabled = false,
+}: {
+  label?: string;
+  onRefresh: () => Promise<boolean>;
+  disabled?: boolean;
+}) {
+  return (
+    <AsyncButton
+      label={label}
+      title={label}
+      onAction={onRefresh}
+      disabled={disabled}
+      size="icon-sm"
+      variant="ghost"
+    />
   );
 }

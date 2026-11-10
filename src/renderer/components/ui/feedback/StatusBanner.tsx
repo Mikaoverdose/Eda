@@ -1,8 +1,10 @@
 import { t } from "@shared/i18n";
-import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { IconButton } from "../actions/Button";
 import { cx } from "../cx";
+import { AnimatedSize } from "../display/AnimatedSize";
+import { BANNER_SURFACES, FEEDBACK_TONES, type BannerTone } from "./feedbackStyles";
 
 export function StatusBanner({
   label,
@@ -15,36 +17,21 @@ export function StatusBanner({
   label: string;
   children: ReactNode;
   action?: ReactNode;
-  tone?: "info" | "warning" | "error";
+  tone?: BannerTone;
   title?: string;
   onDismiss?: () => void;
 }) {
-  const Icon = tone === "error" ? CircleAlert : tone === "warning" ? TriangleAlert : Info;
+  const { Icon, color } = FEEDBACK_TONES[tone];
 
   return (
     <aside
       aria-label={label}
       className={cx(
         "relative flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs",
-        tone === "error"
-          ? "border-git-deleted/20 bg-git-deleted/5"
-          : tone === "warning"
-            ? "border-git-modified/20 bg-git-modified/5"
-            : "border-border-subtle bg-bg-inset",
+        BANNER_SURFACES[tone].status,
       )}
     >
-      <Icon
-        size={13}
-        aria-hidden="true"
-        className={cx(
-          "shrink-0",
-          tone === "error"
-            ? "text-git-deleted"
-            : tone === "warning"
-              ? "text-git-modified"
-              : "text-accent-text",
-        )}
-      />
+      <Icon size={13} aria-hidden="true" className={cx("shrink-0", color)} />
 
       <span
         role={tone === "error" ? "alert" : "status"}
@@ -67,5 +54,13 @@ export function StatusBanner({
         />
       )}
     </aside>
+  );
+}
+
+export function StatusBannerStack({ children }: { children: ReactNode }) {
+  return (
+    <section aria-label={t("statusBanner.notifications")} className="shrink-0">
+      <AnimatedSize contentClassName="flex flex-col">{children}</AnimatedSize>
+    </section>
   );
 }

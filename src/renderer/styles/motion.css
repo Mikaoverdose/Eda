@@ -15,6 +15,9 @@
   --duration-welcome-reveal: 900ms;
   --duration-setup-complete: 500ms;
   --duration-welcome-popup: 8s;
+  --duration-setup: var(--duration-navigation);
+  --duration-welcome: 720ms;
+  --duration-tour-hint: 1.2s;
   --ease-route: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --motion-distance-enter: 4px;
@@ -206,7 +209,6 @@ html[data-navigation-motion="back"] {
     --motion-enter-y: calc(-1 * var(--motion-distance-enter));
   }
 
-  .ui-color-feedback,
   .disclosure-summary,
   button,
   .ui-interactive {
@@ -278,6 +280,15 @@ html[data-navigation-motion="back"] {
 
   .ui-hue > svg {
     animation: ui-overlay-in var(--duration-fast) var(--ease-out) both;
+  }
+
+  .ui-animated-size[data-size-motion="animate"] {
+    transition: block-size var(--duration-collapse) var(--ease-out);
+  }
+
+  .ui-animated-size[data-resizing="true"] {
+    overflow: clip;
+    overflow-clip-margin: 4px;
   }
 
   .ui-collapse,
@@ -372,6 +383,7 @@ html[data-navigation-motion="back"] {
     opacity: 0.45;
   }
 
+  .disclosure-chevron[data-open="true"],
   details[open] > .disclosure-summary .disclosure-chevron {
     transform: rotate(90deg);
   }
@@ -402,11 +414,6 @@ html[data-navigation-motion="back"] {
 
 .ui-skeleton {
   animation: skeleton-pulse var(--duration-skeleton) ease-in-out infinite;
-}
-
-:root {
-  --duration-setup: var(--duration-navigation);
-  --duration-welcome: 720ms;
 }
 
 @keyframes setup-reveal {
@@ -724,7 +731,7 @@ html[data-reduced-motion="true"] .welcome-commit-popup {
 
 .ui-tour-click-hint {
   --tour-hint-travel: 6px;
-  animation: ui-tour-click-hint-bounce 1.2s ease-in-out infinite;
+  animation: ui-tour-click-hint-bounce var(--duration-tour-hint) ease-in-out infinite;
 }
 
 .ui-tour-click-hint[data-direction="up"] {

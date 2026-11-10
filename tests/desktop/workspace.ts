@@ -1,5 +1,6 @@
 import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
+import { assertSmoothResize, sampleResize } from "../helpers/motion.ts";
 import assert from "node:assert/strict";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { execFileSync } from "node:child_process";
@@ -13,6 +14,7 @@ const repository = join(root, "workspace-repo");
 const config = join(root, "gitconfig");
 
 await mkdir(repository);
+
 await writeFile(
   config,
   "[user]\nname = Fixture\nemail = fixture@example.com\n[commit]\ngpgsign = false\n",
@@ -50,6 +52,7 @@ git("tag", "-a", "v1.0", "-m", "Annotated release");
 git("update-ref", "refs/remotes/origin/feature/clear-branch-navigation", feature);
 git("checkout", "main");
 await writeFile(join(repository, "main.txt"), "main\n");
+
 await writeFile(
   join(repository, "large.txt"),
   Array.from({ length: 3_000 }, (_, i) => `preview line ${i}`).join("\n"),
@@ -66,6 +69,7 @@ await writeFile(
   join(repository, "zz-small.txt"),
   Array.from({ length: 38 }, (_, line) => `selected file line ${line}`).join("\n"),
 );
+
 await writeFile(join(repository, "pnpm-lock.yaml"), "lockfileVersion: 9\n");
 await writeFile(join(repository, "image file.bin"), Buffer.from([0, 1, 2, 255, 0]));
 await writeFile(join(repository, "preview.png"), pngVersion("committed"));
@@ -90,8 +94,10 @@ const before = {
   status: git("status", "--porcelain=v1"),
   index: git("write-tree"),
 };
+
 let app: ElectronApplication | undefined;
 const errors: string[] = [];
+
 const launch = async () => {
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
   await trustFixture(app, root);
@@ -109,6 +115,7 @@ try {
 
   await page.getByRole("button", { name: "Maximize window", exact: true }).click();
   await page.getByRole("button", { name: "Restore window", exact: true }).waitFor();
+
   assert.equal(
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMaximized()),
     true,
@@ -117,6 +124,7 @@ try {
   await page.getByRole("button", { name: "Restore window", exact: true }).click();
   await page.getByRole("button", { name: "Maximize window", exact: true }).waitFor();
   await page.getByRole("button", { name: "Minimize window", exact: true }).click();
+
   assert.equal(
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMinimized()),
     true,
@@ -130,6 +138,7 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
+
   assert.equal(
     (await page.evaluate((path) => window.eda.repository.open(path), repository)).ok,
     true,
@@ -138,6 +147,7 @@ try {
   await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
   await page.getByRole("button", { name: /^workspace-repo / }).click();
   await page.getByRole("button", { name: "Inspect branch main", exact: true }).waitFor();
+
   assert.equal(
     await page.getByRole("button", { name: /^Inspect branch origin\/HEAD$/ }).count(),
     0,
@@ -146,6 +156,7 @@ try {
   const overview = page.getByLabel("Repository overview", { exact: true });
 
   assert.match(await overview.innerText(), /Tracking origin\/main/);
+
   assert.equal(
     await overview.getByTitle("Commits ahead of the locally known upstream").innerText(),
     "1",
@@ -156,6 +167,7 @@ try {
 
   const graph = page.getByTestId("commit-graph");
   const initialGraph = await graph.boundingBox();
+
   const mainHeight = await graph.evaluate(
     (element) => element.closest(".panel-split")!.getBoundingClientRect().height,
   );
@@ -185,23 +197,47 @@ try {
   assert.equal(await graph.isVisible(), true, "Selecting a commit keeps history visible");
   assert.equal(await page.getByRole("textbox", { name: "Commit title" }).count(), 0);
 
+  const detailsToggle = commitFiles.getByRole("button", { name: "Commit details", exact: true });
+  const detailsId = await detailsToggle.getAttribute("aria-controls");
+  assert.ok(detailsId);
+
+  const details = commitFiles.locator(`[id="${detailsId}"]`);
+  assertSmoothResize(await sampleResize(details, () => detailsToggle.click()));
+  assert.equal(await details.getAttribute("aria-hidden"), "false");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reducedDetails = await sampleResize(details, () => detailsToggle.click());
+
+  assert.ok(
+    new Set(reducedDetails.map(Math.round)).size <= 2,
+    "Reduced motion should collapse commit details immediately.",
+  );
+
+  assert.equal(await details.getAttribute("aria-hidden"), "true");
+  assert.equal(await details.getAttribute("inert"), "");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
   const graphList = graph.locator("[data-virtual-list]");
 
   await graphList.evaluate((element) => {
     element.scrollTop = 120;
   });
+
   await page.waitForFunction(
     () =>
       document.querySelector('[data-testid="commit-graph"] [data-virtual-list]')?.scrollTop === 120,
   );
+
   await page
     .getByRole("button", { name: "View commit diff for image file.bin", exact: true })
     .click();
+
   await page.getByText("Binary file changed: no text preview.", { exact: true }).waitFor();
   assert.equal(await graph.isVisible(), false, "Selecting a file replaces history with its diff");
 
   await page.getByRole("button", { name: "Back to history", exact: true }).click();
   assert.equal(await graph.isVisible(), true);
+
   assert.equal(
     await graphList.evaluate((element) => element.scrollTop),
     120,
@@ -209,10 +245,12 @@ try {
   );
 
   await page.getByRole("button", { name: "View commit diff for preview.png", exact: true }).click();
+
   await verifyImages(page, [
     ["Parent", "original"],
     ["Commit", "committed"],
   ]);
+
   const imageVersions = page.getByRole("group", { name: "Image versions", exact: true });
   await imageVersions.getByRole("button", { name: "Commit", exact: true }).click();
   assert.equal(await page.getByRole("img", { name: /^Parent image:/ }).count(), 0);
@@ -221,11 +259,14 @@ try {
   await imageVersions.getByRole("button", { name: "Compare", exact: true }).click();
   await mkdir("screenshots", { recursive: true });
   await page.screenshot({ path: resolve("screenshots/image-preview-commit.png") });
+
   await page
     .getByRole("button", { name: "View commit diff for zz-small.txt", exact: true })
     .click();
+
   await page.getByText("selected file line 0", { exact: true }).waitFor();
   await page.getByText("selected file line 37", { exact: true }).waitFor();
+
   assert.equal(
     await page
       .getByText(
@@ -240,6 +281,7 @@ try {
   await page
     .getByRole("button", { name: "View commit diff for pnpm-lock.yaml", exact: true })
     .click();
+
   await page.getByRole("button", { name: "Expand diff for pnpm-lock.yaml", exact: true }).waitFor();
   await page.getByRole("button", { name: "View commit diff for large.txt", exact: true }).click();
 
@@ -248,6 +290,7 @@ try {
     .evaluate((element) => element.closest("section")!.getBoundingClientRect().toJSON());
 
   assert.ok(diffBounds.height >= initialGraph.height, "Diff fills the history area");
+
   assert.equal(
     await page.getByRole("button", { name: "Expand diff for pnpm-lock.yaml", exact: true }).count(),
     0,
@@ -262,16 +305,19 @@ try {
     await page.getByRole("button", { name: /Expand diff for image file.bin/ }).count(),
     0,
   );
+
   assert.equal(await page.getByText("preview line 0", { exact: true }).count(), 0);
 
   await mkdir("screenshots", { recursive: true });
   await page.screenshot({ path: resolve("screenshots/diff-collapsed.png") });
   await largeDiff.click();
+
   await page
     .getByText("Preview truncated to keep the viewer responsive. Some lines or text are omitted.", {
       exact: true,
     })
     .waitFor();
+
   await page.getByText("preview line 0", { exact: true }).waitFor();
 
   const diffList = page
@@ -281,6 +327,7 @@ try {
   await diffList.evaluate((element) => {
     element.scrollTop = 440;
   });
+
   await page.waitForFunction(() =>
     Array.from(document.querySelectorAll("[data-virtual-list]")).some(
       (element) => element.scrollTop === 440,
@@ -296,11 +343,13 @@ try {
   await diffList.evaluate((element) => {
     element.scrollTop = 0;
   });
+
   await verifyCopy(page);
   await page.getByRole("button", { name: "Side by side", exact: true }).click();
   await page.locator("[data-virtual-list] .grid-cols-2").first().waitFor();
   await verifyCopy(page);
   await page.getByRole("button", { name: "Collapse diff for large.txt", exact: true }).waitFor();
+
   assert.equal(
     await page.getByRole("button", { name: "Collapse diff for large.txt", exact: true }).count(),
     1,
@@ -313,44 +362,55 @@ try {
   await page.getByRole("button", { name: "Unified", exact: true }).click();
   await commitFiles.getByRole("button", { name: "View changes", exact: true }).click();
   await page.getByRole("button", { name: "Staged preview.png, status M", exact: true }).click();
+
   await verifyImages(page, [
     ["HEAD", "committed"],
     ["Index", "index"],
   ]);
+
   await page.getByRole("button", { name: "Unstaged preview.png, status M", exact: true }).click();
+
   await verifyImages(page, [
     ["Index", "index"],
     ["Working tree", "working"],
   ]);
+
   await page.getByRole("button", { name: "Untracked added.png, status ?", exact: true }).click();
   const added = page.getByRole("img", { name: "Working tree image: added.png", exact: true });
   await added.waitFor();
+
   await page.waitForFunction(
     () =>
       document.querySelector<HTMLImageElement>('img[alt="Working tree image: added.png"]')
         ?.naturalWidth === 1,
   );
+
   assert.equal(
     await added.getAttribute("src"),
     `data:image/png;base64,${tinyPng.toString("base64")}`,
   );
+
   await page
     .getByRole("group", { name: "Image versions", exact: true })
     .getByRole("button", { name: "Index", exact: true })
     .click();
+
   await page.getByText("File not present", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Untracked photo.jpg, status ?", exact: true }).click();
   const photo = page.getByRole("img", { name: "Working tree image: photo.jpg", exact: true });
   await photo.waitFor();
+
   await page.waitForFunction(
     () =>
       (document.querySelector<HTMLImageElement>('img[alt="Working tree image: photo.jpg"]')
         ?.naturalWidth ?? 0) > 1,
   );
+
   assert.match((await photo.getAttribute("src")) ?? "", /^data:image\/jpeg;base64,/);
   await page.screenshot({ path: resolve("screenshots/image-preview-working.png") });
   await page.getByRole("button", { name: "Unstaged main.txt, status M", exact: true }).click();
   await page.getByTitle("Working tree: main.txt", { exact: true }).waitFor();
+
   assert.equal(
     await page.getByRole("textbox", { name: "Commit title" }).inputValue(),
     "Preserve this draft",
@@ -360,9 +420,11 @@ try {
   const oldSize = Number(await divider.getAttribute("aria-valuenow"));
 
   await divider.focus();
+
   await page.keyboard.press(
     (await divider.getAttribute("aria-orientation")) === "vertical" ? "ArrowRight" : "ArrowDown",
   );
+
   assert.ok(Number(await divider.getAttribute("aria-valuenow")) > oldSize);
 
   await page.locator("summary").filter({ hasText: "Remote branches" }).click();
@@ -375,17 +437,20 @@ try {
   await closed;
   page = await launch();
   await page.getByRole("button", { name: "Show branches and tags", exact: true }).waitFor();
+
   assert.equal(
     await page.getByRole("textbox", { name: "Commit title" }).inputValue(),
     "Preserve this draft",
   );
 
   await page.getByRole("button", { name: "Show branches and tags", exact: true }).click();
+
   await page.waitForFunction(
     () =>
       document.querySelector('.reference-sidebar[data-collapsed="false"]') !== null &&
       document.documentElement.dataset["navigationMotion"] === undefined,
   );
+
   assert.equal(
     await page
       .locator("summary")
@@ -409,15 +474,18 @@ try {
     const references = await page
       .getByRole("complementary", { name: "Repository references" })
       .boundingBox();
+
     const history = await page
       .getByRole("button", { name: "Back to history", exact: true })
       .evaluate((element) => element.closest("section")!.getBoundingClientRect().toJSON());
+
     const draft = await page.getByRole("textbox", { name: "Commit title" }).boundingBox();
 
     assert.ok(references && history && draft);
     assert.ok(references.x + references.width <= history.x + 1);
     assert.ok(history.x + history.width <= draft.x + 1);
     assert.ok(draft.x + draft.width <= width);
+
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       true,
@@ -433,6 +501,7 @@ try {
       const drawerReferences = drawer.getByRole("complementary", { name: "Repository references" });
 
       await drawerReferences.waitFor();
+
       assert.ok(
         (await drawerReferences.boundingBox())!.width > (await drawer.boundingBox())!.width / 2,
         "Expanded references should use the drawer width on small windows",
@@ -441,11 +510,14 @@ try {
       await drawer
         .getByRole("button", { name: "Inspect tag v1.0", exact: true })
         .click({ button: "right" });
+
       await page.getByRole("menu", { name: "Tag actions", exact: true }).waitFor();
       await page.keyboard.press("Escape");
+
       await page
         .getByRole("menu", { name: "Tag actions", exact: true })
         .waitFor({ state: "hidden" });
+
       assert.equal(await drawer.isVisible(), true);
 
       await page.keyboard.press("Escape");
@@ -466,6 +538,7 @@ try {
   }
 
   assert.equal(git("symbolic-ref", "--short", "HEAD"), "main");
+
   assert.deepEqual(
     {
       head: git("rev-parse", "HEAD"),
@@ -474,6 +547,7 @@ try {
     },
     before,
   );
+
   assert.equal(errors.length, 0, errors.join("\n"));
 
   console.log(
@@ -482,6 +556,7 @@ try {
 } catch (error) {
   if (app) {
     await mkdir("screenshots", { recursive: true });
+
     await app
       .windows()[0]
       ?.screenshot({ path: resolve("screenshots/workspace-gate-failure.png") })
@@ -521,6 +596,7 @@ async function verifyCopy(page: Page) {
     selection.removeAllRanges();
     selection.addRange(range);
   });
+
   await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+c`);
 
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
@@ -534,6 +610,7 @@ async function verifyImages(page: Page, versions: [string, string][]) {
   for (const [label, tag] of versions) {
     const image = page.getByRole("img", { name: `${label} image: preview.png`, exact: true });
     await image.waitFor();
+
     await page.waitForFunction(
       (alt) =>
         Array.from(document.images).some(
@@ -541,6 +618,7 @@ async function verifyImages(page: Page, versions: [string, string][]) {
         ),
       `${label} image: preview.png`,
     );
+
     assert.equal(
       await image.getAttribute("src"),
       `data:image/png;base64,${pngVersion(tag).toString("base64")}`,

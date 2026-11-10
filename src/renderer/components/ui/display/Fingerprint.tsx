@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "@shared/i18n";
 import { ButtonBase } from "../actions/ButtonBase";
-import { CopyButton } from "../actions/CopyButton";
+import { CopyButton } from "../actions/AsyncButton";
 import { POPOVER_SURFACE_STYLE } from "../overlays/PopoverSurface";
 import { cx } from "../cx";
 
@@ -27,8 +27,10 @@ export function Fingerprint({
     clearTimeout(timer.current);
     setAnchor(trigger.current?.getBoundingClientRect() ?? null);
   };
+
   const leave = () => {
     clearTimeout(timer.current);
+
     timer.current = setTimeout(() => {
       if (!root.current?.contains(document.activeElement)) setAnchor(null);
     }, 100);
@@ -42,6 +44,7 @@ export function Fingerprint({
   useEffect(() => {
     if (!anchor) return;
     const close = () => setAnchor(null);
+
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -49,9 +52,11 @@ export function Fingerprint({
       clearTimeout(timer.current);
       close();
     };
+
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
     document.addEventListener("keydown", escape, true);
+
     return () => {
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", close, true);
@@ -83,7 +88,9 @@ export function Fingerprint({
       >
         {display}
       </ButtonBase>
+
       <CopyButton value={value} size="icon-xs" label={t("fingerprint.copy", { label })} />
+
       {anchor &&
         createPortal(
           <span

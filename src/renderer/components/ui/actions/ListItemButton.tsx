@@ -1,6 +1,6 @@
-import { ButtonBase } from "./ButtonBase";
-import type { ComponentPropsWithRef, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ComponentPropsWithRef, ReactNode } from "react";
 import { cx } from "../cx";
+import { ButtonBase } from "./ButtonBase";
 
 export function ListItemButton({
   children,
@@ -33,4 +33,8 @@ export function ListItemButton({
       {children}
     </ButtonBase>
   );
+}
+
+export function MenuItem(props: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {
+  return <ListItemButton {...props} role="menuitem" variant="menu" />;
 }

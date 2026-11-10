@@ -4,6 +4,8 @@ export function useMenuKeyboard(
   ref: RefObject<HTMLElement | null>,
   active: boolean,
   onDismiss: () => void,
+  returnFocusRef?: RefObject<HTMLElement | null>,
+  triggerRef?: RefObject<HTMLElement | null>,
 ): void {
   const dismiss = useRef(onDismiss);
 
@@ -12,7 +14,10 @@ export function useMenuKeyboard(
   useEffect(() => {
     if (!active) return;
 
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener =
+      returnFocusRef?.current ??
+      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+
     const items = () =>
       Array.from(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
         (item) => !item.matches(":disabled, [aria-disabled='true']"),
@@ -21,8 +26,13 @@ export function useMenuKeyboard(
     items()[0]?.focus();
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) dismiss.current();
+      if (
+        !ref.current?.contains(event.target as Node) &&
+        !(triggerRef ?? returnFocusRef)?.current?.contains(event.target as Node)
+      )
+        dismiss.current();
     };
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (!ref.current?.contains(event.target as Node)) return;
 
@@ -48,6 +58,7 @@ export function useMenuKeyboard(
       event.preventDefault();
 
       const current = options.indexOf(document.activeElement as HTMLElement);
+
       const next =
         event.key === "Home"
           ? 0
@@ -69,5 +80,5 @@ export function useMenuKeyboard(
       document.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown, { capture: true });
     };
-  }, [active, ref]);
+  }, [active, ref, returnFocusRef, triggerRef]);
 }

@@ -1,13 +1,14 @@
 import { errorFixture } from "../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CopyButton } from "@renderer/components/ui/actions/CopyButton";
+import { CopyButton } from "@renderer/components/ui/actions/AsyncButton";
 import { ACTION_FEEDBACK } from "@renderer/motion";
 import { err, ok } from "@shared/errors";
 
 let root: Root;
 let container: HTMLDivElement;
 const writeText = vi.fn();
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -17,6 +18,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
 });
+
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
@@ -25,9 +27,11 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
 const glyph = (name: string) => container.querySelector(`.ui-action-visible .lucide-${name}`);
 const advance = (duration: number) => act(async () => vi.advanceTimersByTimeAsync(duration));
 const click = () => act(async () => container.querySelector("button")!.click());
+
 const copy = async () => {
   await click();
   await advance(ACTION_FEEDBACK.minimumPending);
@@ -62,6 +66,7 @@ it("shows an X on clipboard failure, then resets and permits retry", async () =>
   writeText.mockResolvedValueOnce(
     err(errorFixture({ kind: "unknown", operation: "copy", message: "Clipboard unavailable" })),
   );
+
   await act(async () => root.render(<CopyButton value="code" />));
   await copy();
   expect(glyph("x")).not.toBeNull();
@@ -77,10 +82,12 @@ it("copies during a renderer update when the existing preload has no copy API", 
   const focused = document.createElement("button");
   document.body.append(focused);
   focused.focus();
+
   const execCommand = vi.fn(() => {
     expect((document.activeElement as HTMLTextAreaElement).value).toBe("ABCD-EFGH");
     return true;
   });
+
   Object.defineProperty(document, "execCommand", { value: execCommand, configurable: true });
   await act(async () => root.render(<CopyButton value="ABCD-EFGH" />));
   await copy();
@@ -97,6 +104,7 @@ it("copies when the running main process has no handler and stops retrying that 
       "Error invoking remote method 'app:copy-text': Error: No handler registered for 'app:copy-text'",
     ),
   );
+
   const execCommand = vi.fn(() => true);
   Object.defineProperty(document, "execCommand", { value: execCommand, configurable: true });
   await act(async () => root.render(<CopyButton value="ABCD-EFGH" />));

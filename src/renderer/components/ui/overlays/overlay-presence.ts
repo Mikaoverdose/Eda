@@ -1,3 +1,5 @@
+import { useLayoutEffect } from "react";
+
 const surfaces = new Set<symbol>();
 
 export function hasOpenOverlay(): boolean {
@@ -7,7 +9,12 @@ export function hasOpenOverlay(): boolean {
 export function registerOverlay(): () => void {
   const token = Symbol();
   surfaces.add(token);
+
   return () => {
     surfaces.delete(token);
   };
+}
+
+export function useOverlayPresence(): void {
+  useLayoutEffect(registerOverlay, []);
 }

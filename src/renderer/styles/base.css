@@ -260,11 +260,6 @@
 }
 
 @layer components {
-  .settings-card {
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 1rem 0;
-  }
-
   .profile-avatar {
     color: oklch(0.82 var(--avatar-chroma, 0.1) var(--avatar-hue));
     background: var(--bg-raised);

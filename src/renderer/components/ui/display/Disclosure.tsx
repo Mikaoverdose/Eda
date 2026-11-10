@@ -1,6 +1,7 @@
 import type { DetailsHTMLAttributes, ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cx } from "../cx";
+import { AnimatedSize } from "./AnimatedSize";
 
 export function Disclosure({
   title,
@@ -28,9 +29,11 @@ export function Disclosure({
           className="disclosure-chevron shrink-0 text-text-tertiary"
           aria-hidden="true"
         />
+
         <span className="flex min-w-0 flex-1 items-center gap-2">{title}</span>
       </summary>
-      {children}
+
+      <AnimatedSize>{children}</AnimatedSize>
     </details>
   );
 }

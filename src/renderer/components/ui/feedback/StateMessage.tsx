@@ -1,14 +1,6 @@
 import type { ReactNode } from "react";
-import { CircleAlert, CircleCheck, Info, LoaderCircle, SearchX } from "lucide-react";
 import { cx } from "../cx";
-
-const ICONS = {
-  empty: SearchX,
-  loading: LoaderCircle,
-  error: CircleAlert,
-  success: CircleCheck,
-  info: Info,
-};
+import { FEEDBACK_TONES, type FeedbackTone } from "./feedbackStyles";
 
 export function StateMessage({
   title,
@@ -19,11 +11,11 @@ export function StateMessage({
 }: {
   title: string;
   description?: ReactNode;
-  tone?: keyof typeof ICONS;
+  tone?: Exclude<FeedbackTone, "warning">;
   action?: ReactNode;
   className?: string;
 }) {
-  const Icon = ICONS[tone];
+  const { Icon, color } = FEEDBACK_TONES[tone];
 
   return (
     <div
@@ -39,22 +31,18 @@ export function StateMessage({
         <Icon
           aria-hidden="true"
           size={20}
-          className={cx(
-            tone === "loading" && "animate-spin-fast",
-            tone === "error"
-              ? "text-git-deleted"
-              : tone === "success"
-                ? "text-git-added"
-                : "text-text-tertiary",
-          )}
+          className={cx(tone === "loading" && "animate-spin-fast", color)}
         />
+
         <p className="text-sm font-medium text-text-primary [overflow-wrap:anywhere]">{title}</p>
+
         {description && (
           <div className="text-sm leading-relaxed text-text-secondary [overflow-wrap:anywhere]">
             {description}
           </div>
         )}
       </div>
+
       {action && <div className="flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
   );

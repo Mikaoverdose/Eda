@@ -1,6 +1,5 @@
 import { t } from "@shared/i18n";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useId, useRef, useState } from "react";
 import { Palette } from "lucide-react";
 import {
   ACCENT_SWATCH_LIGHTNESS,
@@ -10,7 +9,7 @@ import {
   type AccentColor,
 } from "@shared/preferences/accent";
 import { Field, Input } from "./Input";
-import { PopoverSurface } from "../overlays/PopoverSurface";
+import { AnchoredPopover } from "../overlays/PopoverSurface";
 import { cx } from "../cx";
 import { CheckIcon } from "../icons";
 
@@ -78,14 +77,13 @@ export function HuePicker({
   label = t("huePicker.identityColor"),
 }: HuePickerProps) {
   const name = useId();
-  const [position, setPosition] = useState<DOMRect | null>(null);
+  const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLLabelElement>(null);
   const customRadio = useRef<HTMLInputElement>(null);
   const nativePicker = useRef<HTMLInputElement>(null);
-  const customPicker = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<string>(() => accentToHex(value));
-  const [top, setTop] = useState(8);
   const lastRequested = useRef<AccentColor>(value);
+
   const commit = (next: string) => {
     if (!isHexColor(next)) return;
 
@@ -98,6 +96,7 @@ export function HuePicker({
       return;
 
     lastRequested.current = color;
+
     void Promise.resolve(onChange(color)).then((saved) => {
       if (saved === false && lastRequested.current === color) lastRequested.current = value;
     });
@@ -106,8 +105,6 @@ export function HuePicker({
   const commitLatest = useRef(commit);
 
   commitLatest.current = commit;
-
-  const open = !!position;
 
   useEffect(() => {
     setDraft(accentToHex(value));
@@ -123,46 +120,21 @@ export function HuePicker({
     return () => picker.removeEventListener("change", accept);
   }, [open]);
 
-  useEffect(() => {
-    if (!position) return;
-
-    const reposition = (event: Event) => {
-      if (event.target instanceof Node && customPicker.current?.contains(event.target)) return;
-      setPosition(trigger.current?.getBoundingClientRect() ?? null);
-    };
-
-    window.addEventListener("resize", reposition);
-    window.addEventListener("scroll", reposition, true);
-
-    return () => {
-      window.removeEventListener("resize", reposition);
-      window.removeEventListener("scroll", reposition, true);
-    };
-  }, [position]);
-
   const close = () => {
     if (draft.toLowerCase() !== accentToHex(value)) commit(draft.trim());
-    setPosition(null);
+    setOpen(false);
     customRadio.current?.focus();
   };
-  const custom = !!position || !IDENTITY_HUES.some((option) => value === option.hue);
+
+  const custom = open || !IDENTITY_HUES.some((option) => value === option.hue);
   const hex = draft.trim();
   const valid = isHexColor(hex);
-
-  useLayoutEffect(() => {
-    if (!position) return;
-    const height = customPicker.current?.getBoundingClientRect().height ?? 0;
-    const below = position.bottom + 8;
-    setTop(
-      below + height <= window.innerHeight - 8 ? below : Math.max(8, position.top - height - 8),
-    );
-  }, [position, valid]);
 
   return (
     <div className={cx("space-y-3", className)}>
       <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
         {IDENTITY_HUES.map((option) => {
-          const selected = !position && value === option.hue;
+          const selected = !open && value === option.hue;
 
           return (
             <label
@@ -176,13 +148,14 @@ export function HuePicker({
                 value={option.hue}
                 checked={selected}
                 onChange={() => {
-                  setPosition(null);
+                  setOpen(false);
                   setDraft(accentToHex(option.hue));
                   void onChange(option.hue);
                 }}
                 aria-label={option.name}
                 className="peer sr-only"
               />
+
               <span
                 style={{ backgroundColor: swatchColor(option.hue) }}
                 className={cx(
@@ -203,6 +176,7 @@ export function HuePicker({
             </label>
           );
         })}
+
         <label
           ref={trigger}
           title={t("huePicker.custom")}
@@ -216,23 +190,24 @@ export function HuePicker({
             checked={custom}
             onChange={() => {}}
             onClick={() => {
-              if (position) close();
+              if (open) close();
               else {
                 setDraft(accentToHex(value));
-                setPosition(trigger.current!.getBoundingClientRect());
+                setOpen(true);
               }
             }}
             aria-label={t("huePicker.custom")}
             aria-haspopup="dialog"
-            aria-expanded={!!position}
-            aria-controls={position ? `${name}-custom` : undefined}
+            aria-expanded={open}
+            aria-controls={open ? `${name}-custom` : undefined}
             className="peer sr-only"
           />
+
           <span
             style={{
               background:
                 custom && valid
-                  ? position
+                  ? open
                     ? hex
                     : swatchColor(value)
                   : "conic-gradient(#ee7676, #e2c66d, #79b78b, #71b4c9, #a38acb, #ee7676)",
@@ -247,85 +222,77 @@ export function HuePicker({
           </span>
         </label>
       </div>
-      {position &&
-        createPortal(
-          <PopoverSurface
-            surfaceRef={customPicker}
-            returnFocusRef={customRadio}
-            id={`${name}-custom`}
-            role="dialog"
-            aria-label={t("huePicker.customAccentColor")}
-            onClose={close}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                close();
-              }
-            }}
-            className="fixed max-h-[calc(100dvh-16px)] space-y-3 overflow-y-auto p-3"
-            style={{
-              width: Math.min(300, window.innerWidth - 16),
-              left: Math.max(8, Math.min(position.left, window.innerWidth - 308)),
-              top,
-            }}
-          >
-            <div className="space-y-3">
-              <div className="flex items-end gap-3">
-                <label className="flex shrink-0 flex-col gap-1.5 text-sm font-medium">
-                  {t("huePicker.custom")}
-                  <input
-                    ref={nativePicker}
-                    id={`${name}-native`}
-                    type="color"
-                    aria-label={t("huePicker.chooseCustomAccentColor")}
-                    value={valid ? hex : accentToHex(value)}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onBlur={(event) => commit(event.target.value)}
-                    className="h-9 w-11 cursor-pointer rounded-sm border border-control-border bg-bg-raised p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
-                  />
-                </label>
-                <div className="min-w-0 flex-1">
-                  <Field label={t("huePicker.hexColor")}>
-                    {(props) => (
-                      <Input
-                        {...props}
-                        autoFocus
-                        mono
-                        value={draft}
-                        maxLength={7}
-                        invalid={!valid}
-                        spellCheck={false}
-                        autoComplete="off"
-                        onChange={(event) => {
-                          setDraft(event.target.value);
-                          commit(event.target.value.trim());
-                        }}
-                        onBlur={(event) => commit(event.target.value.trim())}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            commit(hex);
-                            close();
-                          }
-                        }}
-                      />
-                    )}
-                  </Field>
-                </div>
+
+      {open && (
+        <AnchoredPopover
+          anchorRef={trigger}
+          gap={8}
+          returnFocusRef={customRadio}
+          id={`${name}-custom`}
+          role="dialog"
+          aria-label={t("huePicker.customAccentColor")}
+          onClose={close}
+          className="w-[300px] space-y-3 p-3"
+        >
+          <div className="space-y-3">
+            <div className="flex items-end gap-3">
+              <label className="flex shrink-0 flex-col gap-1.5 text-sm font-medium">
+                {t("huePicker.custom")}
+
+                <input
+                  ref={nativePicker}
+                  id={`${name}-native`}
+                  type="color"
+                  aria-label={t("huePicker.chooseCustomAccentColor")}
+                  value={valid ? hex : accentToHex(value)}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onBlur={(event) => commit(event.target.value)}
+                  className="h-9 w-11 cursor-pointer rounded-sm border border-control-border bg-bg-raised p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text"
+                />
+              </label>
+
+              <div className="min-w-0 flex-1">
+                <Field label={t("huePicker.hexColor")}>
+                  {(props) => (
+                    <Input
+                      {...props}
+                      autoFocus
+                      mono
+                      value={draft}
+                      maxLength={7}
+                      invalid={!valid}
+                      spellCheck={false}
+                      autoComplete="off"
+                      onChange={(event) => {
+                        setDraft(event.target.value);
+                        commit(event.target.value.trim());
+                      }}
+                      onBlur={(event) => commit(event.target.value.trim())}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commit(hex);
+                          close();
+                        }
+                      }}
+                    />
+                  )}
+                </Field>
               </div>
-              {!valid && (
-                <p role="alert" className="text-xs text-git-deleted">
-                  {t("huePicker.enterASixDigitHexColorLike3b82f6")}
-                </p>
-              )}
-              <p className="text-xs text-text-tertiary">
-                {t("huePicker.colorsAdaptToLightAndDarkThemes")}
-              </p>
             </div>
-          </PopoverSurface>,
-          document.body,
-        )}
+
+            {!valid && (
+              <p role="alert" className="text-xs text-git-deleted">
+                {t("huePicker.enterASixDigitHexColorLike3b82f6")}
+              </p>
+            )}
+
+            <p className="text-xs text-text-tertiary">
+              {t("huePicker.colorsAdaptToLightAndDarkThemes")}
+            </p>
+          </div>
+        </AnchoredPopover>
+      )}
     </div>
   );
 }

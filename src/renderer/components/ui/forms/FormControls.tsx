@@ -11,6 +11,8 @@ import { Check, ChevronDown } from "lucide-react";
 import { cx } from "../cx";
 import { controlAppearance, controlSize, type ControlSurface } from "./controlStyles";
 
+import { POPOVER_SURFACE_STYLE } from "../overlays/PopoverSurface";
+
 const EMPTY_OPTION = "__eda_empty_option__";
 
 interface Choice {
@@ -108,17 +110,22 @@ export function Select({
           className="block min-w-0 flex-1 truncate"
           placeholder={empty?.label ?? t("formControls.selectAnOption")}
         />
+
         <SelectPrimitive.Icon className="ui-select-chevron shrink-0 text-text-tertiary">
           <ChevronDown size={14} aria-hidden="true" />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
+
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           position="popper"
           sideOffset={4}
           collisionPadding={8}
           data-eda-select-popover=""
-          className="ui-popover-in z-[100] min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border border-border-default bg-bg-overlay shadow-popover"
+          className={cx(
+            POPOVER_SURFACE_STYLE,
+            "ui-popover-in z-[100] min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)] overflow-hidden",
+          )}
         >
           <SelectPrimitive.Viewport className="max-h-72 overflow-y-auto p-1">
             {choices.map((choice, index) => (
