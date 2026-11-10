@@ -94,7 +94,7 @@ it("keeps the avatar skeleton visible until the matching self-hosted profile is 
 
   await act(async () => root.render(<GitLabSelfHostedConnection profileId="work" />));
   expect(container.querySelector(".profile-avatar.ui-skeleton")).not.toBeNull();
-  expect(button("@work.user")).toBeUndefined();
+  expect(button("@work.user")?.disabled).toBe(true);
 
   await act(async () =>
     finish(ok({ id: "7", baseUrl: base, name: "Work User", avatarDataUrl: null })),
@@ -172,7 +172,7 @@ it("keeps every setup step inside the provider card without opening a dialog", a
 
   const card = container.querySelector('[aria-label="GitLab Self-Hosted connection"]')!;
 
-  expect(card.querySelector('[role="status"] .animate-spin-fast')).not.toBeNull();
+  expect(card.querySelector('[role="status"] .animate-spin-fast')).toBeNull();
 
   expect(card.contains(urlInput())).toBe(true);
   expect(card.querySelector('ol, [aria-current="step"]')).toBeNull();
@@ -312,6 +312,7 @@ it("cancels a pending connection when setup closes and ignores its late response
   await startSetup();
   await fill(tokenInput(), "private-token");
   await act(async () => button("Connect").click());
+  expect(container.querySelector('[role="status"] .animate-spin-fast')).not.toBeNull();
   await act(async () => button("Cancel").click());
 
   expect(api.cancel).toHaveBeenCalledWith("work");

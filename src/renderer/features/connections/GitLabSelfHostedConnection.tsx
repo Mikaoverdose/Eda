@@ -19,6 +19,7 @@ export function GitLabSelfHostedConnection({
   profileId: string;
   compact?: boolean;
 }) {
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<GitLabSelfHostedStatus | null>(null);
   const [setupBaseUrl, setSetupBaseUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,8 @@ export function GitLabSelfHostedConnection({
   const singleAccount = status?.accounts.length === 1 ? status.accounts[0] : undefined;
 
   const load = async () => {
+    setLoading(true);
+
     try {
       const result = await window.eda.gitlabSelfHosted.status(profileId);
       if (!alive.current) return;
@@ -36,6 +39,8 @@ export function GitLabSelfHostedConnection({
       else setError(errorMessage(result.error));
     } catch {
       if (alive.current) setError(t("settings.gitLabSelfHosted.loadFailed"));
+    } finally {
+      if (alive.current) setLoading(false);
     }
   };
 
@@ -156,9 +161,7 @@ export function GitLabSelfHostedConnection({
       provider="GitLab Self-Hosted"
       compact={compact}
       pendingLabel={
-        setupBaseUrl !== null || busy || (!status && compact)
-          ? t("settings.gitLabSelfHosted.setupTitle")
-          : undefined
+        busy || (loading && compact) ? t("settings.gitLabSelfHosted.setupTitle") : undefined
       }
       bodyOpen={(status?.accounts.length ?? 0) > 1 || setupBaseUrl !== null || !!error}
       summary={
@@ -179,7 +182,7 @@ export function GitLabSelfHostedConnection({
       }
       actions={
         <>
-          {!status && <ConnectionActionSkeleton label={t("settings.gitLabSelfHosted.connect")} />}
+          {loading && <ConnectionActionSkeleton label={t("settings.gitLabSelfHosted.connect")} />}
 
           {status && setupBaseUrl === null && (
             <Button size="sm" disabled={busy} onClick={() => openSetup()}>

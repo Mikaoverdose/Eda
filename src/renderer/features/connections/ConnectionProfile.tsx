@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { GlobeIcon, MapPinIcon } from "../../components/ui/icons";
 import type { AccentColor } from "@shared/preferences/accent";
+import { cx } from "../../components/ui/cx";
 import { ConnectionAccount } from "./ConnectionAccount";
 
 function ProfileDetail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
@@ -27,6 +28,7 @@ export function ConnectionProfile({
   children,
   connected = true,
   disabled = false,
+  loading = false,
 }: {
   login: string;
   name?: string | null | undefined;
@@ -40,10 +42,12 @@ export function ConnectionProfile({
   children?: ReactNode;
   connected?: boolean;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div aria-busy={loading} className="space-y-2">
       <ConnectionAccount
+        loading={loading}
         login={login}
         name={name?.trim() || login}
         avatarDataUrl={avatarDataUrl}
@@ -54,9 +58,26 @@ export function ConnectionProfile({
         onOpen={onOpenProfile}
       />
 
-      {bio && <p className="whitespace-pre-line break-words text-xs text-text-secondary">{bio}</p>}
+      <div className="space-y-2" aria-hidden={loading || (!bio && !location)}>
+        <p
+          title={bio ?? undefined}
+          className={cx(
+            "line-clamp-2 h-8 whitespace-pre-line break-words text-xs text-text-secondary",
+            loading && "ui-skeleton rounded-sm",
+          )}
+        >
+          {bio}
+        </p>
 
-      {location && <ProfileDetail icon={<MapPinIcon size={14} />}>{location}</ProfileDetail>}
+        <div className={cx("h-4 min-w-0", loading && "ui-skeleton w-2/3 rounded-sm")}>
+          {location && (
+            <p title={location} className="flex items-center gap-1.5 text-xs text-text-tertiary">
+              <MapPinIcon size={14} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{location}</span>
+            </p>
+          )}
+        </div>
+      </div>
 
       {instanceUrl && <ProfileDetail icon={<GlobeIcon size={14} />}>{instanceUrl}</ProfileDetail>}
 

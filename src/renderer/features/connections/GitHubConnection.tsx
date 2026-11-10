@@ -8,11 +8,10 @@ import {
 } from "../../components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { ConnectionProfile } from "./ConnectionProfile";
-import { Button, CodeBlock, CopyButton, ActionsMenu, Skeleton } from "../../components/ui/index";
+import { Button, CodeBlock, CopyButton, ActionsMenu } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
-import { ConnectionAccountSkeleton, ConnectionActionSkeleton } from "./ConnectionSkeleton";
-import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
+import { ConnectionActionSkeleton } from "./ConnectionSkeleton";
 
 export function GitHubConnection({
   profileId,
@@ -21,6 +20,8 @@ export function GitHubConnection({
   profileId: string;
   compact?: boolean;
 }) {
+  const [statusRevision, setStatusRevision] = useState(0);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [status, setStatus] = useState<GitHubStatus | null>(null);
   const [pending, setPending] = useState<GitHubSignIn | null>(null);
   const [profileReadyFor, setProfileReadyFor] = useState<string | null>(null);
@@ -37,6 +38,8 @@ export function GitHubConnection({
 
   useEffect(() => {
     alive.current = true;
+    setStatusLoading(true);
+    setError(null);
     let active = true;
 
     void window.eda.github
@@ -51,6 +54,9 @@ export function GitHubConnection({
           setError(
             t("settings.gitHubConnection.couldNotLoadTheGitHubConnectionReopenSettingsAndTryAgain"),
           );
+      })
+      .finally(() => {
+        if (active) setStatusLoading(false);
       });
 
     return () => {
@@ -59,7 +65,7 @@ export function GitHubConnection({
       if (current.current) void window.eda.github.cancel(profileId, current.current.id);
       current.current = null;
     };
-  }, [profileId]);
+  }, [profileId, statusRevision]);
 
   useEffect(() => {
     let active = true;
@@ -72,7 +78,9 @@ export function GitHubConnection({
         .then((result) => {
           if (active && result.ok && result.value?.id === accountId) setProfile(result.value);
         })
-        .catch(() => {})
+        .catch(() => {
+          if (active) setProfile(null);
+        })
         .finally(() => {
           if (active) setProfileReadyFor(accountId);
         });
@@ -228,7 +236,7 @@ export function GitHubConnection({
     if (isConnected) setExpanded(false);
   }, [compact, isConnected]);
 
-  const loading = !status || !!(account && profileReadyFor !== account.id);
+  const loading = statusLoading || !!(account && profileReadyFor !== account.id);
 
   const starting = busy && !pending && !signedIn;
   const details = profile?.id === account?.id ? profile : null;
@@ -249,10 +257,9 @@ export function GitHubConnection({
       bodySeparator={!account || !!pending || !!error}
       bodyOpen={!!pending || starting || !!error || !!(status && !status.secureStorage)}
       summary={
-        loading && account ? (
-          <ConnectionAccountSkeleton login={account.login} hue={hue} />
-        ) : account ? (
+        account ? (
           <ConnectionProfile
+            loading={loading}
             login={login ?? account.login}
             name={details?.name}
             avatarDataUrl={details?.avatarDataUrl}
@@ -342,33 +349,22 @@ export function GitHubConnection({
         ) : null
       }
     >
+      {!status && !statusLoading && (
+        <Button size="sm" onClick={() => setStatusRevision((value) => value + 1)}>
+          {t("common.retry")}
+        </Button>
+      )}
+
       {error && (
         <p role="alert" className="text-xs text-git-deleted">
           {error}
         </p>
       )}
 
-      {loading && compact ? (
-        <div aria-hidden="true" className="space-y-3">
-          <div className="flex items-center gap-3">
-            <ProfileAvatar name={account?.login ?? ""} hue={hue} loading />
-
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-          </div>
-
-          <Skeleton className="h-4 w-4/5" />
-
-          <div className="flex items-start gap-1.5">
-            <Skeleton className="mt-0.5 size-3.5 shrink-0 rounded-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        </div>
-      ) : account && compact ? (
+      {account && compact ? (
         <div>
           <ConnectionProfile
+            loading={loading}
             key={account.id}
             login={login ?? account.login}
             name={details?.name}

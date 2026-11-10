@@ -513,10 +513,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/connections/ConnectionAccount.tsx": ["ConnectionAccount"],
   "features/connections/ConnectionCard.tsx": ["ConnectionCard"],
   "features/connections/ConnectionProfile.tsx": ["ConnectionProfile"],
-  "features/connections/ConnectionSkeleton.tsx": [
-    "ConnectionActionSkeleton",
-    "ConnectionAccountSkeleton",
-  ],
+  "features/connections/ConnectionSkeleton.tsx": ["ConnectionActionSkeleton"],
   "features/connections/GitHubConnection.tsx": ["GitHubConnection"],
   "features/connections/GitHubSignInDialog.tsx": ["GitHubSignInDialog"],
   "features/connections/GitLabConnection.tsx": ["GitLabConnection"],

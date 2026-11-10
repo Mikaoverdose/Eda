@@ -7,7 +7,7 @@ import { Button, ActionsMenu } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
 import { ConnectionProfile } from "./ConnectionProfile";
-import { ConnectionAccountSkeleton, ConnectionActionSkeleton } from "./ConnectionSkeleton";
+import { ConnectionActionSkeleton } from "./ConnectionSkeleton";
 
 export function GitLabConnection({
   profileId,
@@ -16,6 +16,8 @@ export function GitLabConnection({
   profileId: string;
   compact?: boolean;
 }) {
+  const [statusRevision, setStatusRevision] = useState(0);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [status, setStatus] = useState<GitLabStatus | null>(null);
   const [profileReadyFor, setProfileReadyFor] = useState<string | null>(null);
   const [profile, setProfile] = useState<GitLabAccountProfile | null>(null);
@@ -27,29 +29,37 @@ export function GitLabConnection({
   const alive = useRef(true);
   const current = useRef<GitLabSignIn | null>(null);
   const hue = useAppStore((state) => state.activeIdentity?.hue ?? 210);
-  const loading = !status || !!(status.account && profileReadyFor !== status.account.id);
+  const loading = statusLoading || !!(status?.account && profileReadyFor !== status.account.id);
   const connected = status?.account?.state === "connected";
 
   useEffect(() => {
     alive.current = true;
+    setStatusLoading(true);
+    setError(null);
+
+    let active = true;
 
     void window.eda.gitlab
       .status(profileId)
       .then((result) => {
-        if (!alive.current) return;
+        if (!active) return;
         if (result.ok) setStatus(result.value);
         else setError(errorMessage(result.error));
       })
       .catch(() => {
-        if (alive.current) setError(t("settings.gitLabConnection.loadFailed"));
+        if (active) setError(t("settings.gitLabConnection.loadFailed"));
+      })
+      .finally(() => {
+        if (active) setStatusLoading(false);
       });
 
     return () => {
+      active = false;
       alive.current = false;
       if (current.current) void window.eda.gitlab.cancel(profileId, current.current.id);
       current.current = null;
     };
-  }, [profileId]);
+  }, [profileId, statusRevision]);
 
   useEffect(() => {
     let active = true;
@@ -62,7 +72,9 @@ export function GitLabConnection({
         .then((result) => {
           if (active && result.ok && result.value?.id === accountId) setProfile(result.value);
         })
-        .catch(() => {})
+        .catch(() => {
+          if (active) setProfile(null);
+        })
         .finally(() => {
           if (active) setProfileReadyFor(accountId);
         });
@@ -200,6 +212,7 @@ export function GitLabConnection({
   const details = profile?.id === account?.id ? profile : null;
   const accountProfile = account ? (
     <ConnectionProfile
+      loading={loading}
       login={account.login}
       name={details?.name}
       bio={details?.bio}
@@ -224,13 +237,7 @@ export function GitLabConnection({
       completedLabel={connected ? t("settings.gitLabConnection.connected") : undefined}
       actionsPlacement={pending ? "body" : "header"}
       bodyOpen={!!pending || !!error || !!(status && !status.secureStorage)}
-      summary={
-        loading && status?.account ? (
-          <ConnectionAccountSkeleton login={status.account.login} hue={hue} />
-        ) : (
-          accountProfile
-        )
-      }
+      summary={accountProfile}
       pendingLabel={
         (loading && compact) || busy || pending ? t("settings.gitLabConnection.waiting") : undefined
       }
@@ -289,6 +296,12 @@ export function GitLabConnection({
         ) : undefined
       }
     >
+      {!status && !statusLoading && (
+        <Button size="sm" onClick={() => setStatusRevision((value) => value + 1)}>
+          {t("common.retry")}
+        </Button>
+      )}
+
       {error && (
         <p role="alert" className="text-xs text-git-deleted">
           {error}
@@ -301,11 +314,7 @@ export function GitLabConnection({
         </p>
       )}
 
-      {loading && compact ? (
-        <ConnectionAccountSkeleton login={account?.login ?? ""} hue={hue} />
-      ) : compact && !pending ? (
-        accountProfile
-      ) : null}
+      {compact && !pending && accountProfile}
 
       {status && !status.secureStorage && (
         <p className="text-xs text-git-modified">{t("settings.gitLabConnection.unlockStorage")}</p>

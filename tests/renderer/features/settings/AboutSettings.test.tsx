@@ -119,11 +119,8 @@ it.each([
         false,
       );
       expect(developerToggle.checked).toBe(false);
-      expect(
-        container.querySelector('[role="status"][aria-label="Loading maintainer profile"]'),
-      ).not.toBeNull();
-      expect(container.querySelector(".profile-avatar")).toBeNull();
-      expect(container.querySelector('[aria-label="Copy maintainer email"]')).toBeNull();
+      expect(container.querySelector(".profile-avatar.ui-skeleton")).not.toBeNull();
+      expect(container.querySelector('[aria-label="Copy maintainer email"]')).not.toBeNull();
 
       await act(async () => finishProfile());
 

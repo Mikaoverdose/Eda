@@ -306,3 +306,19 @@ it("keeps instructions and disabled actions visible while fetching the verificat
   await click("Cancel");
   expect(container.querySelector("details")?.open).toBe(false);
 });
+
+it.each(["rejected", "reported"])(
+  "retries a %s status failure without leaving a loading placeholder",
+  async (failure) => {
+    if (failure === "rejected") github.status.mockRejectedValueOnce(new Error("offline"));
+    else github.status.mockResolvedValueOnce(err(errorFixture({ message: "offline" })));
+
+    await act(async () => root.render(<GitHubConnection profileId="work" />));
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(container.querySelector(".ui-skeleton")).toBeNull();
+
+    await act(async () => button("Retry").click());
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(button("Sign in with GitHub")?.disabled).toBe(false);
+  },
+);

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ok } from "@shared/errors";
+import { errorFixture } from "../../../helpers/error";
+import { err, ok } from "@shared/errors";
 import { GitLabConnection } from "@renderer/features/connections/GitLabConnection";
 import { IntegrationsSettings } from "@renderer/features/settings/integrations/IntegrationsSettings";
 
@@ -177,7 +178,7 @@ it("reveals the cached profile and avatar together without flashing initials dur
   await act(async () => root.render(<GitLabConnection profileId="work" />));
   expect(container.querySelector(".ui-skeleton")).not.toBeNull();
   expect(container.querySelector(".profile-avatar.ui-skeleton")).not.toBeNull();
-  expect(button("@work.user")).toBeUndefined();
+  expect(button("@work.user").disabled).toBe(true);
   await act(async () => finish(ok({ id: "7", avatarDataUrl: "data:image/png;base64,AQID" })));
   expect(container.querySelector(".ui-skeleton")).toBeNull();
   expect(container.textContent).toContain("@work.user");
@@ -186,3 +187,19 @@ it("reveals the cached profile and avatar together without flashing initials dur
     "data:image/png;base64,AQID",
   );
 });
+
+it.each(["rejected", "reported"])(
+  "retries a %s status failure without leaving a loading placeholder",
+  async (failure) => {
+    if (failure === "rejected") gitlab.status.mockRejectedValueOnce(new Error("offline"));
+    else gitlab.status.mockResolvedValueOnce(err(errorFixture({ message: "offline" })));
+
+    await act(async () => root.render(<GitLabConnection profileId="work" />));
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(container.querySelector(".ui-skeleton")).toBeNull();
+
+    await act(async () => button("Retry").click());
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(button("Sign in with GitLab")?.disabled).toBe(false);
+  },
+);

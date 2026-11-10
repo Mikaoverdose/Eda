@@ -14,13 +14,7 @@ import {
   StarIcon as Star,
 } from "../../../components/ui/icons";
 import { useEffect, useState } from "react";
-import {
-  Button,
-  Checkbox,
-  CopyButton,
-  ExternalLinkButton,
-  Skeleton,
-} from "../../../components/ui/index";
+import { Button, Checkbox, CopyButton, ExternalLinkButton } from "../../../components/ui/index";
 import { usePreferencesStore } from "../../../stores/preferences-store";
 import { useShellStore } from "../../../stores/shell-store";
 import { useSimulationStore } from "../../../stores/simulation-store";
@@ -73,7 +67,9 @@ export function AboutSettings() {
       .then((result) => {
         if (active && result.ok) setProfile(result.value);
       })
-      .catch(() => {})
+      .catch(() => {
+        if (active) setProfile(null);
+      })
       .finally(() => {
         if (active) setLoadingProfile(false);
       });
@@ -181,69 +177,37 @@ export function AboutSettings() {
             </h2>
 
             <div className="min-h-32" aria-busy={loadingProfile}>
-              {loadingProfile ? (
-                <div
-                  role="status"
-                  aria-label={t("settings.aboutSettings.loadingMaintainerProfile")}
-                >
-                  <div aria-hidden="true" className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+              <ConnectionProfile
+                loading={loadingProfile}
+                login={profile?.login ?? maintainer}
+                name={profile?.name ?? t("settings.aboutSettings.yuzu")}
+                bio={profile?.bio}
+                location={profile?.location}
+                avatarDataUrl={profile?.avatarDataUrl}
+                hue={45}
+                profileLabel={t("settings.gitHubConnection.viewOnGitHub", {
+                  login: profile?.login ?? maintainer,
+                })}
+                onOpenProfile={() =>
+                  window.open(`https://github.com/${maintainer}`, "_blank", "noopener,noreferrer")
+                }
+              >
+                <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+                  <Mail size={14} aria-hidden="true" className="shrink-0" />
 
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <Skeleton className="h-4 w-16" />
-                        <Skeleton className="h-4 w-24" />
-                      </div>
-                    </div>
+                  <span className="selectable min-w-0 [overflow-wrap:anywhere]">
+                    {maintainerEmail}
+                  </span>
 
-                    <div className="flex h-4.5 items-center">
-                      <Skeleton className="h-4 w-4/5" />
-                    </div>
-
-                    <div className="flex h-4.5 items-center gap-1.5">
-                      <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-full" />
-                      <Skeleton className="h-4 w-2/3" />
-                    </div>
-
-                    <div className="flex h-4.5 items-center gap-1.5">
-                      <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
-                      <Skeleton className="h-4 w-36" />
-                      <Skeleton className="h-6 w-6 rounded-sm" />
-                    </div>
-                  </div>
+                  <span className="-my-1 inline-flex shrink-0">
+                    <CopyButton
+                      value={maintainerEmail}
+                      label={t("settings.aboutSettings.copyMaintainerEmail")}
+                      size="icon-xs"
+                    />
+                  </span>
                 </div>
-              ) : (
-                <ConnectionProfile
-                  login={profile?.login ?? maintainer}
-                  name={profile?.name ?? t("settings.aboutSettings.yuzu")}
-                  bio={profile?.bio}
-                  location={profile?.location}
-                  avatarDataUrl={profile?.avatarDataUrl}
-                  hue={45}
-                  profileLabel={t("settings.gitHubConnection.viewOnGitHub", {
-                    login: profile?.login ?? maintainer,
-                  })}
-                  onOpenProfile={() =>
-                    window.open(`https://github.com/${maintainer}`, "_blank", "noopener,noreferrer")
-                  }
-                >
-                  <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
-                    <Mail size={14} aria-hidden="true" className="shrink-0" />
-
-                    <span className="selectable min-w-0 [overflow-wrap:anywhere]">
-                      {maintainerEmail}
-                    </span>
-
-                    <span className="-my-1 inline-flex shrink-0">
-                      <CopyButton
-                        value={maintainerEmail}
-                        label={t("settings.aboutSettings.copyMaintainerEmail")}
-                        size="icon-xs"
-                      />
-                    </span>
-                  </div>
-                </ConnectionProfile>
-              )}
+              </ConnectionProfile>
             </div>
           </div>
 

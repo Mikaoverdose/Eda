@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ConnectionProfile } from "./ConnectionProfile";
-import { ConnectionAccountSkeleton } from "./ConnectionSkeleton";
 import { cx } from "../../components/ui/cx";
 import { GitLabSelfHostedAccountActions } from "./GitLabSelfHostedAccountActions";
 
@@ -74,23 +73,20 @@ export function GitLabSelfHostedAccountCard({
       )}
     >
       <div className="min-w-0 flex-1">
-        {ready ? (
-          <ConnectionProfile
-            login={login}
-            name={profile?.name}
-            bio={profile?.bio}
-            location={profile?.location}
-            instanceUrl={baseUrl}
-            avatarDataUrl={profile?.avatarDataUrl}
-            hue={hue}
-            disabled={busy}
-            connected={state === "connected"}
-            profileLabel={t("settings.gitLabSelfHosted.viewProfile", { login, instance: baseUrl })}
-            onOpenProfile={() => onOpen(baseUrl)}
-          />
-        ) : (
-          <ConnectionAccountSkeleton login={login} hue={hue} />
-        )}
+        <ConnectionProfile
+          loading={!ready}
+          login={login}
+          name={profile?.name}
+          bio={profile?.bio}
+          location={profile?.location}
+          instanceUrl={baseUrl}
+          avatarDataUrl={profile?.avatarDataUrl}
+          hue={hue}
+          disabled={busy}
+          connected={state === "connected"}
+          profileLabel={t("settings.gitLabSelfHosted.viewProfile", { login, instance: baseUrl })}
+          onOpenProfile={() => onOpen(baseUrl)}
+        />
       </div>
 
       {showActions && (

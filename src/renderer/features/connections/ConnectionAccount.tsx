@@ -13,6 +13,7 @@ export function ConnectionAccount({
   profileLabel,
   avatarName,
   disabled = false,
+  loading = false,
   onOpen,
 }: {
   login: string;
@@ -23,11 +24,13 @@ export function ConnectionAccount({
   profileLabel: string;
   avatarName?: string;
   disabled?: boolean;
+  loading?: boolean;
   onOpen(): void;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
+    <div aria-busy={loading} className="flex min-w-0 items-center gap-2.5">
       <ProfileAvatar
+        loading={loading}
         name={avatarName ?? name ?? login}
         hue={hue}
         imageUrl={avatarDataUrl ?? undefined}
@@ -35,8 +38,14 @@ export function ConnectionAccount({
 
       <div className="min-w-0">
         {name && (
-          <p title={name} className="truncate text-sm font-medium text-text-primary">
-            {name}
+          <p
+            title={name}
+            className={cx(
+              "truncate text-sm font-medium text-text-primary",
+              loading && "ui-skeleton rounded-sm",
+            )}
+          >
+            <span className={loading ? "invisible" : undefined}>{name}</span>
           </p>
         )}
 
@@ -44,13 +53,14 @@ export function ConnectionAccount({
           <TextButton
             onClick={onOpen}
             aria-label={profileLabel}
-            disabled={disabled}
+            disabled={disabled || loading}
             className={cx(
               "max-w-full truncate text-left",
+              loading && "ui-skeleton rounded-sm",
               !name && "text-sm font-medium text-text-primary",
             )}
           >
-            @{login}
+            <span className={loading ? "invisible" : undefined}>@{login}</span>
           </TextButton>
 
           {!connected && (
