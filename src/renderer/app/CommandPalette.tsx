@@ -56,6 +56,7 @@ export function CommandPalette({
       onClose={onClose}
     >
       <SearchField
+        autoFocus
         size="md"
         role="combobox"
         aria-label={t("commandPalette.searchCommands")}

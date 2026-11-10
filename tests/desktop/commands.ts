@@ -56,7 +56,9 @@ try {
   const search = palette.getByRole("combobox", { name: "Search commands" });
 
   await page.getByRole("button", { name: "Command palette", exact: true }).click();
-  await search.fill("refresh repository");
+  await expect(search).toBeFocused();
+  await page.keyboard.type("refresh repository");
+  await expect(search).toHaveValue("refresh repository");
 
   const refresh = palette.getByRole("option", { name: /Refresh repository/ });
 
@@ -79,7 +81,9 @@ try {
   await expect(page.getByRole("button", { name: "Command palette", exact: true })).toBeFocused();
 
   await page.keyboard.press(`${modifier}+Shift+p`);
-  await search.fill("manage profiles");
+  await expect(search).toBeFocused();
+  await page.keyboard.type("manage profiles");
+  await expect(search).toHaveValue("manage profiles");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await page.getByRole("heading", { name: "Profiles", exact: true, level: 1 }).waitFor();
