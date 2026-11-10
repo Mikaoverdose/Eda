@@ -42,6 +42,20 @@ try {
   await page.getByRole("button", { name: "About", exact: true }).click();
   await page.getByRole("checkbox", { name: "Enable developer settings", exact: true }).check();
   await page.getByRole("button", { name: "Components", exact: true }).click();
+  await page.locator("#gallery-identity .profile-avatar").last().waitFor();
+
+  const avatarSizes = await page
+    .locator("#gallery-identity .profile-avatar")
+    .evaluateAll((avatars) =>
+      avatars.map((avatar) => {
+        const { width, height } = avatar.getBoundingClientRect();
+        return { width, height };
+      }),
+    );
+  assert.equal(avatarSizes.length, 6);
+  assert.deepEqual(avatarSizes.slice(3), avatarSizes.slice(0, 3));
+  assert.ok(avatarSizes.every(({ width, height }) => width > 0 && width === height));
+
   await page.getByRole("textbox", { name: "Example input", exact: true }).fill("Gallery draft");
   await page.getByRole("tab", { name: "Activity", exact: true }).click();
 

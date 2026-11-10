@@ -59,6 +59,10 @@ export function ComponentGallery() {
         <div className="flex flex-wrap items-center gap-5">
           <ProfileAvatar name="Eda Example" hue={hue} />
           <ProfileAvatar name="Eda Example" hue={hue} small />
+          <ProfileAvatar name="Eda Example" hue={hue} compact />
+          <ProfileAvatar name="Eda Example" hue={hue} loading />
+          <ProfileAvatar name="Eda Example" hue={hue} small loading />
+          <ProfileAvatar name="Eda Example" hue={hue} compact loading />
           <HuePicker value={hue} onChange={setHue} />
         </div>
 

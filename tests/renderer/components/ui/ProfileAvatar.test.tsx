@@ -20,8 +20,11 @@ it("falls back on image failure and replaces the previous profile image immediat
     );
 
     const first = container.querySelector("img")!;
+    expect(container.querySelector(".ui-skeleton")).not.toBeNull();
+    expect(container.textContent).toBe("");
 
     await act(async () => first.dispatchEvent(new Event("load")));
+    expect(container.querySelector(".ui-skeleton")).toBeNull();
     await act(async () =>
       root.render(
         <ProfileAvatar
@@ -36,10 +39,12 @@ it("falls back on image failure and replaces the previous profile image immediat
 
     expect(second).not.toBe(first);
     expect(second.src).toContain("/second");
-    expect(container.textContent).toBe("SU");
+    expect(container.textContent).toBe("");
+    expect(container.querySelector(".ui-skeleton")).not.toBeNull();
 
     await act(async () => second.dispatchEvent(new Event("error")));
     expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector(".ui-skeleton")).toBeNull();
     expect(container.textContent).toBe("SU");
   } finally {
     await act(async () => root.unmount());
@@ -99,3 +104,29 @@ it("shares cached lookups and rejects late avatar results after an author change
     vi.unstubAllGlobals();
   }
 });
+
+it.each([{}, { small: true }, { compact: true }])(
+  "keeps the same avatar element while loading with size %j",
+  async (size) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    try {
+      await act(async () =>
+        root.render(<ProfileAvatar name="Work User" hue={210} {...size} loading />),
+      );
+      const avatar = container.firstElementChild;
+      expect(avatar?.classList.contains("ui-skeleton")).toBe(true);
+      expect(container.textContent).toBe("");
+
+      await act(async () => root.render(<ProfileAvatar name="Work User" hue={210} {...size} />));
+      expect(container.firstElementChild).toBe(avatar);
+      expect(avatar?.classList.contains("ui-skeleton")).toBe(false);
+      expect(container.textContent).toBe("WU");
+    } finally {
+      await act(async () => root.unmount());
+      vi.unstubAllGlobals();
+    }
+  },
+);

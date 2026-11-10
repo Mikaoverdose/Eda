@@ -10,6 +10,7 @@ export function ProfileAvatar({
   email,
   compact = false,
   small = false,
+  loading = false,
 }: {
   name: string;
   hue: AccentColor;
@@ -17,11 +18,13 @@ export function ProfileAvatar({
   email?: string | undefined;
   compact?: boolean;
   small?: boolean;
+  loading?: boolean;
 }) {
   const cachedUrl = useAvatar(email);
   const imageUrl = email ? cachedUrl : providedUrl;
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showSkeleton = loading || (!!imageUrl && loadedUrl !== imageUrl && failedUrl !== imageUrl);
   const initials = name
     .trim()
     .split(/\s+/)
@@ -44,9 +47,10 @@ export function ProfileAvatar({
       className={cx(
         "profile-avatar relative overflow-hidden flex shrink-0 items-center justify-center rounded-full font-semibold",
         compact ? "size-5 text-[9px]" : small ? "size-7 text-xs" : "size-11 text-base",
+        showSkeleton && "ui-skeleton bg-border-subtle shadow-none",
       )}
     >
-      {initials}
+      {!showSkeleton && initials}
       {imageUrl && failedUrl !== imageUrl && (
         <img
           key={imageUrl}
@@ -55,7 +59,7 @@ export function ProfileAvatar({
           referrerPolicy="no-referrer"
           className={cx(
             "absolute inset-0 size-full object-cover",
-            loadedUrl !== imageUrl && "invisible",
+            (loading || loadedUrl !== imageUrl) && "invisible",
           )}
           onLoad={() => setLoadedUrl(imageUrl)}
           onError={() => setFailedUrl(imageUrl)}
