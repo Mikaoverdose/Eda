@@ -53,10 +53,11 @@ export function ThemesPreview() {
 
 export function UpdatesPreview() {
   const [phase, setPhase] = useState<UpdatePhase>("available");
+  const [homebrew, setHomebrew] = useState(false);
 
   const state: UpdateState = {
     revision: 0,
-    capability: "automatic",
+    capability: homebrew ? "homebrew" : "automatic",
     reason: null,
     phase,
     feedUrl: null,
@@ -89,6 +90,18 @@ export function UpdatesPreview() {
       </p>
 
       <Select
+        aria-label={t("settings.stateSimulations.installationMethod")}
+        value={homebrew ? "homebrew" : "direct"}
+        onValueChange={(value) => {
+          setHomebrew(value === "homebrew");
+          setPhase("available");
+        }}
+      >
+        <option value="direct">{t("settings.aboutSettings.installationDirect")}</option>
+        <option value="homebrew">{t("settings.aboutSettings.installationHomebrew")}</option>
+      </Select>
+
+      <Select
         aria-label={t("settings.componentPreviews.updatePreviewState")}
         value={phase}
         onValueChange={(value) => setPhase(value as UpdatePhase)}
@@ -104,11 +117,13 @@ export function UpdatesPreview() {
             "installing",
             "error",
           ] as const
-        ).map((item) => (
-          <option key={item} value={item}>
-            {item}
-          </option>
-        ))}
+        )
+          .filter((item) => !homebrew || !["downloading", "ready"].includes(item))
+          .map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
       </Select>
 
       <UpdateStatus

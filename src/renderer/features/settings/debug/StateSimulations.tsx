@@ -63,6 +63,7 @@ export function StateSimulations() {
                 .filter(
                   ({ value }) =>
                     installation === "direct" ||
+                    (installation === "homebrew" && value === "installing") ||
                     !["downloading", "ready", "installing"].includes(value),
                 )
                 .map(({ value, label }) => (

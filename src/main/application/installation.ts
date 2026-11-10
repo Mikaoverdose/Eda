@@ -13,6 +13,9 @@ interface InstallationOptions {
   environment?: NodeJS.ProcessEnv;
 }
 
+type NonHomebrewInstallation = Exclude<InstallationInfo, { method: "homebrew" }>;
+type DetectedInstallation = NonHomebrewInstallation | { method: "homebrew"; executable: string };
+
 function missingPath(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -24,7 +27,7 @@ function missingPath(error: unknown): boolean {
 async function homebrewInstallation(
   resourcesPath: string,
   environment: NodeJS.ProcessEnv,
-): Promise<boolean> {
+): Promise<string | null> {
   const bundle = await realpath(resolve(resourcesPath, "../.."));
   const roots = new Set(
     [
@@ -49,7 +52,8 @@ async function homebrewInstallation(
         (entry) => entry.isDirectory() && !entry.name.startsWith("."),
       )) {
         try {
-          if ((await realpath(join(cask, version.name, "Eda.app"))) === bundle) return true;
+          if ((await realpath(join(cask, version.name, "Eda.app"))) === bundle)
+            return resolve(root, "../bin/brew");
         } catch (error) {
           if (!missingPath(error)) throw error;
         }
@@ -59,14 +63,14 @@ async function homebrewInstallation(
     }
   }
 
-  return false;
+  return null;
 }
 
 async function systemPackageInstallation(
   executablePath: string,
   environment: NodeJS.ProcessEnv,
   runner: ProcessRunner,
-): Promise<InstallationInfo> {
+): Promise<NonHomebrewInstallation> {
   const path = await realpath(executablePath);
   const candidates = [
     { manager: "dpkg", executable: "dpkg-query", args: ["--search", "--", path] },
@@ -74,7 +78,7 @@ async function systemPackageInstallation(
     { manager: "pacman", executable: "pacman", args: ["-Qoq", "--", path] },
   ] as const;
   const results = await Promise.all(
-    candidates.map(async (candidate): Promise<InstallationInfo | null> => {
+    candidates.map(async (candidate): Promise<NonHomebrewInstallation | null> => {
       try {
         const result = await runner.run({
           executable: candidate.executable,
@@ -119,15 +123,18 @@ async function systemPackageInstallation(
 export async function detectInstallation(
   options: InstallationOptions,
   runner: ProcessRunner = new NodeProcessRunner(),
-): Promise<InstallationInfo> {
+): Promise<DetectedInstallation> {
   if (!options.packaged) return { method: "development" };
 
   const platform = options.platform ?? process.platform;
   const environment = options.environment ?? process.env;
 
   try {
-    if (platform === "darwin" && (await homebrewInstallation(options.resourcesPath, environment)))
-      return { method: "homebrew" };
+    if (platform === "darwin") {
+      const executable = await homebrewInstallation(options.resourcesPath, environment);
+
+      if (executable) return { method: "homebrew", executable };
+    }
 
     if (platform === "linux")
       return await systemPackageInstallation(options.executablePath, environment, runner);

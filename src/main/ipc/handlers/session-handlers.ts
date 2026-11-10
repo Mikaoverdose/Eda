@@ -18,6 +18,11 @@ export function registerSessionHandlers(services: Services): void {
     const caller = window.webContents.id;
 
     window.on("close", (event) => {
+      if (services.updates.blocksQuit) {
+        event.preventDefault();
+        return;
+      }
+
       if (
         !services.sessions.hasBinding(caller) ||
         window.webContents.isDestroyed() ||

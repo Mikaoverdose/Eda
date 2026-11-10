@@ -99,3 +99,83 @@ it("defaults to pre-release updates, saves an opt-out and prevents changes durin
     vi.unstubAllGlobals();
   }
 });
+
+it("offers one Homebrew action only after the cask is ready and saves the workspace before installing", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { useSessionStore } = await import("@renderer/stores/session-store");
+  const flush = vi.spyOn(useSessionStore.getState(), "flush").mockResolvedValue(false);
+  let deliver!: (state: UpdateState) => void;
+  const state: UpdateState = {
+    revision: 0,
+    capability: "homebrew",
+    reason: "Eda 0.0.2 is not available through Homebrew yet. Check again later.",
+    phase: "current",
+    feedUrl: null,
+    checkedAt: null,
+    release: null,
+    progress: null,
+    error: null,
+  };
+  const install = vi.fn(async () => ({ ok: true, value: state }));
+  const download = vi.fn();
+  vi.stubGlobal("eda", {
+    app: { version: { displayVersion: "0.0.1" } },
+    settings: { resolve: async (key: SettingKey) => ({ ok: true, value: builtInSetting(key) }) },
+    updates: { state: async () => ({ ok: true, value: state }), install, download },
+    events: {
+      onUpdateChanged: (listener: typeof deliver) => {
+        deliver = listener;
+        return () => {};
+      },
+    },
+  });
+  const previous = usePreferencesStore.getState();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const action = () =>
+    container.querySelector<HTMLButtonElement>('[aria-label="Update with Homebrew"]');
+
+  try {
+    await act(async () => root.render(<UpdatesSettings />));
+    expect(container.textContent).toContain("not available through Homebrew yet");
+    expect(action()).toBeNull();
+
+    await act(async () =>
+      deliver({
+        ...state,
+        revision: 1,
+        phase: "available",
+        reason: null,
+        release: { version: "0.0.2", name: "Eda 0.0.2", notes: null, releasedAt: null },
+      }),
+    );
+    expect(action()).not.toBeNull();
+    expect(container.textContent).not.toContain("Download update");
+    await act(async () => action()!.click());
+    expect(flush).toHaveBeenCalledOnce();
+    expect(install).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Save your workspace successfully before restarting");
+    await act(async () => vi.runOnlyPendingTimersAsync());
+
+    flush.mockResolvedValue(true);
+    await act(async () => action()!.click());
+    expect(install).toHaveBeenCalledOnce();
+    expect(download).not.toHaveBeenCalled();
+
+    await act(async () => deliver({ ...state, revision: 2, phase: "installing", reason: null }));
+    expect(action()).toBeNull();
+    expect(container.textContent).toContain("Updating with Homebrew");
+    expect(
+      container
+        .querySelector('input[aria-label="Include pre-release updates"]')
+        ?.hasAttribute("disabled"),
+    ).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    usePreferencesStore.setState(previous);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  }
+});

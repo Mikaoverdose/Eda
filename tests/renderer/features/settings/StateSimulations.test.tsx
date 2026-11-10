@@ -164,7 +164,15 @@ it("previews update banners and actions throughout the app, then restores the la
         /Download update|Restart and install|brew upgrade|sudo /,
       );
       expect(useSimulationStore.getState().runUpdateAction("download")).toBe(false);
-      expect(useSimulationStore.getState().runUpdateAction("install")).toBe(false);
+
+      if (manager === "Homebrew") {
+        await click(about(), "Update with Homebrew");
+        expect(useSimulationStore.getState().update?.phase).toBe("installing");
+        expect(about().textContent).toContain("Updating with Homebrew");
+        await choose("Update available");
+      } else {
+        expect(useSimulationStore.getState().runUpdateAction("install")).toBe(false);
+      }
 
       await click(banner(), "Dismiss App update");
 

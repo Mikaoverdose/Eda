@@ -187,6 +187,11 @@ async function start(): Promise<void> {
     let stopping: Promise<void> | undefined;
 
     app.on("before-quit", (event) => {
+      if (services.updates.blocksQuit) {
+        event.preventDefault();
+        return;
+      }
+
       services.updates.stop();
       services.cancelSignIns();
       if (backgroundStopped) return;

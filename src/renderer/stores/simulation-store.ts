@@ -23,20 +23,22 @@ function updatePreview(
   requestedPhase: UpdatePhase,
   installation: UpdateInstallationSimulation,
 ): UpdateState {
-  const managed = installation !== "direct";
+  const managed = installation !== "direct" && installation !== "homebrew";
   const phase =
-    managed && ["downloading", "ready", "installing"].includes(requestedPhase)
+    (managed && ["downloading", "ready", "installing"].includes(requestedPhase)) ||
+    (installation === "homebrew" && ["downloading", "ready"].includes(requestedPhase))
       ? "available"
       : requestedPhase;
   const hasRelease = ["available", "downloading", "ready", "installing"].includes(phase);
 
   return {
     revision: 0,
-    capability: managed ? "managed" : "automatic",
+    capability: installation === "homebrew" ? "homebrew" : managed ? "managed" : "automatic",
     phase,
-    reason: managed
-      ? t("updates.managedBy", { manager: PACKAGE_MANAGER_NAMES[installation] })
-      : null,
+    reason:
+      installation !== "direct"
+        ? t("updates.managedBy", { manager: PACKAGE_MANAGER_NAMES[installation] })
+        : null,
     feedUrl: null,
     checkedAt: new Date().toISOString(),
     release: hasRelease
@@ -91,7 +93,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   runUpdateAction(action) {
     const { update } = get();
 
-    if (!update || (update.capability !== "automatic" && action !== "check")) return false;
+    if (
+      !update ||
+      (update.capability !== "automatic" &&
+        action !== "check" &&
+        !(update.capability === "homebrew" && action === "install" && update.phase === "available"))
+    )
+      return false;
 
     get().setUpdatePhase(
       action === "check" ? "current" : action === "download" ? "downloading" : "installing",

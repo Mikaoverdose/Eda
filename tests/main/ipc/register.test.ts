@@ -196,6 +196,7 @@ function setup() {
   const mocks = {
     installation: { method: "development" },
     updates: {
+      blocksQuit: false,
       onChange: vi.fn(),
       refreshSchedule: vi.fn(),
       snapshot: vi.fn(),
@@ -960,3 +961,29 @@ it.each([false, true])(
     );
   },
 );
+
+it("keeps the application window open during a Homebrew upgrade and restores normal closing afterwards", () => {
+  const mocks = setup();
+  const window = Object.assign(new EventEmitter(), {
+    webContents: {
+      id: 42,
+      isDestroyed: () => false,
+      isCrashed: () => false,
+      send: electron.send,
+    },
+  });
+  const onWindowCreated = electron.on.mock.calls.find(
+    ([name]) => name === "browser-window-created",
+  )?.[1] as (event: unknown, window: unknown) => void;
+  onWindowCreated({}, window);
+  mocks.updates.blocksQuit = true;
+  const preventDefault = vi.fn();
+
+  window.emit("close", { preventDefault });
+  expect(preventDefault).toHaveBeenCalledOnce();
+  expect(electron.send).not.toHaveBeenCalled();
+
+  mocks.updates.blocksQuit = false;
+  window.emit("close", { preventDefault });
+  expect(electron.send).toHaveBeenCalledWith(IPC_EVENTS.flushRequested, expect.any(String));
+});

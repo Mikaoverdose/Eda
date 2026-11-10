@@ -2531,5 +2531,8 @@
   "settings.gitLabSelfHosted.connectionLabel": "GitLab · {instance}",
   "settings.gitLabSelfHosted.chooseTokenType": "Fine-grained token",
   "settings.gitLabSelfHosted.setupTitle": "Connect self-hosted GitLab",
-  "settings.gitLabSelfHosted.finishConnect": "Connect"
+  "settings.gitLabSelfHosted.finishConnect": "Connect",
+  "settings.updatesSettings.homebrewUpdateInProgress": "Updating with Homebrew…",
+  "settings.updatesSettings.updateWithHomebrew": "Update with Homebrew",
+  "settings.updatesSettings.updatingWithHomebrew": "Updating with Homebrew. Eda will restart when finished…"
 }

@@ -243,6 +243,7 @@ try {
       .waitFor();
 
     if (manager === "Homebrew") {
+      await page.getByRole("button", { name: "Update with Homebrew", exact: true }).waitFor();
       await page.locator('[aria-labelledby="about-updates-heading"]').screenshot({
         path: join(tmpdir(), "eda-updates-managed-light.png"),
       });
@@ -503,9 +504,56 @@ try {
     0,
   );
   assert.doesNotMatch(await updates.innerText(), /brew upgrade|sudo |Use your package manager/);
+
+  const waiting: UpdateState = {
+    ...managed,
+    revision: managed.revision + 1,
+    capability: "homebrew",
+    phase: "current",
+    release: null,
+    reason: "Eda 0.0.4 is not available through Homebrew yet. Check again later.",
+  };
+
+  await app.evaluate(({ BrowserWindow }, state) => {
+    BrowserWindow.getAllWindows()[0]!.webContents.send("updates:changed", state);
+  }, waiting);
+  await updates.getByText(waiting.reason!, { exact: true }).waitFor();
+  assert.equal(
+    await updates.getByRole("button", { name: "Update with Homebrew", exact: true }).count(),
+    0,
+  );
+
+  const homebrew: UpdateState = {
+    ...managed,
+    revision: waiting.revision + 1,
+    capability: "homebrew",
+    reason: null,
+  };
+
+  await app.evaluate(({ BrowserWindow, ipcMain }, state) => {
+    ipcMain.removeHandler("updates:install");
+    ipcMain.handle("updates:install", (event) => {
+      const installing = { ...state, revision: state.revision + 1, phase: "installing" };
+      event.sender.send("updates:changed", installing);
+      return { ok: true, value: installing };
+    });
+    BrowserWindow.getAllWindows()[0]!.webContents.send("updates:changed", state);
+  }, homebrew);
+  await updates.getByRole("button", { name: "Update with Homebrew", exact: true }).click();
+  await updates
+    .getByText("Updating with Homebrew. Eda will restart when finished…", { exact: true })
+    .waitFor();
+  await updates.getByRole("button", { name: "Updating with Homebrew…", exact: true }).waitFor();
+  assert.equal(
+    await updates.getByRole("button", { name: "Update with Homebrew", exact: true }).count(),
+    0,
+  );
+  assert.equal(await prereleases.isDisabled(), true);
+  await updates.screenshot({ path: join(tmpdir(), "eda-updates-homebrew-installing.png") });
+
   assert.deepEqual(errors, []);
   console.log(
-    "Update desktop gate passed: source-build protection, version display, persisted preference, shared View update transitions, reduced motion, verified-download/install previews and managed notifications without replacement actions or instructions.",
+    "Update desktop gate passed: source-build protection, persisted preferences, update navigation, direct and managed previews, and one-click Homebrew updates gated on cask availability.",
   );
 } finally {
   await app?.close();

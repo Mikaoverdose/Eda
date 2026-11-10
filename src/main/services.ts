@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVelopackUpdater, type VelopackUpdater } from "./application/velopack-updater";
 import { detectInstallation } from "./application/installation";
+import { HomebrewUpdater } from "./application/homebrew-updater";
 import { checkReleaseFeed } from "./application/release-feed";
 import { clearDatabase } from "./application/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
@@ -271,7 +272,13 @@ export async function createServices(): Promise<Services> {
           : null;
 
     let capability: UpdateCapability =
-      installation.method === "development" ? "development" : manager ? "managed" : "manual";
+      installation.method === "development"
+        ? "development"
+        : installation.method === "homebrew"
+          ? "homebrew"
+          : manager
+            ? "managed"
+            : "manual";
     let installedUpdater: VelopackUpdater | undefined;
 
     const initialFeedUrl = updateFeedUrl(
@@ -313,6 +320,18 @@ export async function createServices(): Promise<Services> {
       automaticChecks: () => preferences.resolve("automaticUpdateChecks").value,
       includePrereleases: () => preferences.resolve("includePrereleaseUpdates").value,
       checkRelease: (url) => checkReleaseFeed(url, platform, process.arch, request),
+      ...(installation.method === "homebrew" && {
+        homebrew: new HomebrewUpdater(
+          runner,
+          installation.executable,
+          neutralDirectory,
+          app.getVersion(),
+          () => {
+            app.relaunch();
+            app.quit();
+          },
+        ),
+      }),
       createDriver: (url) =>
         url === initialFeedUrl
           ? installedUpdater!

@@ -17,7 +17,7 @@ export function updateChannel(platform: UpdatePlatform, arch: string): string {
   return `${platform}-${arch}-stable`;
 }
 
-export type UpdateCapability = "automatic" | "managed" | "manual" | "development";
+export type UpdateCapability = "automatic" | "homebrew" | "managed" | "manual" | "development";
 export type UpdatePhase =
   "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "installing" | "error";
 

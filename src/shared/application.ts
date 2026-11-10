@@ -8,7 +8,8 @@ export const PACKAGE_MANAGER_NAMES = {
 } as const;
 
 export type InstallationInfo =
-  | { method: "development" | "direct" | "homebrew" | "unknown" }
+  | { method: "development" | "direct" | "unknown" }
+  | { method: "homebrew" }
   | { method: "system-package"; manager: "dpkg" | "rpm" | "pacman" };
 
 export interface GraphicsStatus {

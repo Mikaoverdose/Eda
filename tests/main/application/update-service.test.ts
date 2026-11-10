@@ -338,3 +338,89 @@ it("maps Velopack full packages and uses markdown notes as plain text", () => {
   for (const change of [{ PackageId: "Other" }, { Type: "Delta" }, { Version: "0.0.2-beta" }])
     expect(() => releaseFromManifest({ ...info, ...change })).toThrow();
 });
+
+function homebrewFixture() {
+  const homebrew = {
+    check: vi.fn(async (_version: string): Promise<string | null> => null),
+    install: vi.fn(async (_version: string) => {}),
+    restart: vi.fn(),
+  };
+  const checkRelease = vi.fn(async () => ({ available: true, release }));
+  return {
+    ...fixture({ capability: "homebrew", homebrew, checkRelease }),
+    homebrew,
+    checkRelease,
+  };
+}
+
+it("withholds Homebrew installation until the announced release is available in the cask", async () => {
+  const { service, homebrew, driver, options } = homebrewFixture();
+  homebrew.check.mockResolvedValueOnce("The cask is not available yet.");
+
+  await service.check();
+  expect(service.snapshot()).toMatchObject({
+    phase: "current",
+    release: null,
+    reason: "The cask is not available yet.",
+  });
+  await expect(service.install()).rejects.toThrow();
+  expect(options.prepareInstall).not.toHaveBeenCalled();
+  expect(homebrew.install).not.toHaveBeenCalled();
+
+  await service.check();
+  expect(service.snapshot()).toMatchObject({ phase: "available", release, reason: null });
+  expect(homebrew.check).toHaveBeenLastCalledWith(release.version);
+  expect(() => service.download()).toThrow();
+  await service.install();
+  expect(homebrew.install).toHaveBeenCalledExactlyOnceWith(release.version);
+  expect(homebrew.restart).toHaveBeenCalledOnce();
+  expect(driver.install).not.toHaveBeenCalled();
+  expect(options.createDriver).not.toHaveBeenCalled();
+});
+
+it("keeps Homebrew failures blocked until another successful check, restores app operations and allows retry", async () => {
+  const { service, homebrew, rollback } = homebrewFixture();
+  await service.check();
+  let fail!: (error: Error) => void;
+  homebrew.install.mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+  );
+  const pending = service.install();
+  await vi.waitFor(() => expect(homebrew.install).toHaveBeenCalledOnce());
+  expect(service.blocksQuit).toBe(true);
+  await expect(service.install()).rejects.toThrow();
+  fail(new Error("Upgrade failed"));
+  await pending;
+
+  expect(service.blocksQuit).toBe(false);
+  expect(service.snapshot()).toMatchObject({
+    phase: "idle",
+    release: null,
+    error: expect.any(String),
+  });
+  expect(rollback).toHaveBeenCalledOnce();
+  expect(homebrew.restart).not.toHaveBeenCalled();
+  await expect(service.install()).rejects.toThrow();
+  await service.check();
+  homebrew.restart.mockImplementationOnce(() => expect(service.blocksQuit).toBe(false));
+  await service.install();
+  expect(homebrew.restart).toHaveBeenCalledOnce();
+});
+
+it("never offers a Homebrew update after a failed cask check or when the release is not newer", async () => {
+  const { service, homebrew, checkRelease } = homebrewFixture();
+  homebrew.check.mockRejectedValueOnce(new Error("Homebrew unavailable"));
+  await service.check();
+  expect(service.snapshot()).toMatchObject({ phase: "error", release: null });
+  await expect(service.install()).rejects.toThrow();
+  checkRelease.mockResolvedValueOnce({
+    available: true,
+    release: { ...release, version: "0.0.1" },
+  });
+  await service.check();
+  expect(service.snapshot().phase).toBe("current");
+  expect(homebrew.check).toHaveBeenCalledOnce();
+});

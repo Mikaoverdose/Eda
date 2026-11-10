@@ -33,6 +33,11 @@ export interface UpdateOptions {
   includePrereleases: () => boolean;
   createDriver: (url: string) => UpdateDriver | Promise<UpdateDriver>;
   checkRelease?: (url: string) => Promise<UpdateCheckResult>;
+  homebrew?: {
+    check(version: string): Promise<string | null>;
+    install(version: string): Promise<void>;
+    restart(): void;
+  };
   prepareInstall: () => Promise<() => void>;
   now?: () => number;
 }
@@ -50,6 +55,7 @@ export class UpdateService {
   private running = false;
   private cancelled = false;
   private rollbackInstall: (() => void) | undefined;
+  private installingHomebrew = false;
 
   constructor(private readonly options: UpdateOptions) {
     this.state = {
@@ -61,15 +67,18 @@ export class UpdateService {
       release: null,
       progress: null,
       error: null,
-      feedUrl:
-        options.capability === "automatic" || options.capability === "managed"
-          ? updateFeedUrl(options.platform, options.arch, options.includePrereleases())
-          : null,
+      feedUrl: ["automatic", "homebrew", "managed"].includes(options.capability)
+        ? updateFeedUrl(options.platform, options.arch, options.includePrereleases())
+        : null,
     };
   }
 
   snapshot(): UpdateState {
     return this.state;
+  }
+
+  get blocksQuit(): boolean {
+    return this.installingHomebrew;
   }
 
   onChange(listener: (state: UpdateState) => void): () => void {
@@ -139,7 +148,7 @@ export class UpdateService {
     this.publish({
       feedUrl,
       phase: "idle",
-      reason: this.state.capability === "managed" ? this.options.reason : null,
+      reason: this.state.capability !== "automatic" ? this.options.reason : null,
       checkedAt: null,
       release: null,
       progress: null,
@@ -163,7 +172,7 @@ export class UpdateService {
   }
 
   private canCheck(): boolean {
-    return this.state.capability === "automatic" || this.state.capability === "managed";
+    return ["automatic", "homebrew", "managed"].includes(this.state.capability);
   }
 
   check(): Promise<UpdateState> {
@@ -180,30 +189,39 @@ export class UpdateService {
     this.checking = Promise.resolve().then(async () => {
       try {
         const result =
-          this.state.capability === "managed"
+          this.state.capability !== "automatic"
             ? await this.options.checkRelease?.(this.state.feedUrl!)
             : await (await this.native()).check();
 
         if (!result) throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
 
         const newer = newerRelease(result.release.version, this.options.currentVersion);
-        const available = result.available && newer;
+        const homebrewReason =
+          newer && result.available && this.state.capability === "homebrew"
+            ? await this.options.homebrew?.check(result.release.version)
+            : null;
+
+        if (this.state.capability === "homebrew" && !this.options.homebrew)
+          throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
+
+        const available = result.available && newer && !homebrewReason;
 
         this.publish({
           phase: available ? "available" : "current",
           release: available ? result.release : null,
           reason:
-            this.state.capability === "managed"
+            homebrewReason ??
+            (this.state.capability === "managed"
               ? this.options.reason
               : newer && !result.available
                 ? t("main.updateService.aNewerReleaseExistsButIsNotOffered")
-                : null,
+                : null),
           checkedAt: new Date((this.options.now ?? Date.now)()).toISOString(),
         });
       } catch (error) {
         this.publish({
           phase: "error",
-          error: updateError(error, "check"),
+          error: error instanceof GitError ? error.message : updateError(error, "check"),
           checkedAt: new Date((this.options.now ?? Date.now)()).toISOString(),
         });
       } finally {
@@ -267,27 +285,42 @@ export class UpdateService {
   }
 
   async install(): Promise<UpdateState> {
-    this.requireAutomatic();
+    const homebrew = this.state.capability === "homebrew";
 
-    if (this.state.phase !== "ready")
+    if (!homebrew) this.requireAutomatic();
+
+    if (this.state.phase !== (homebrew ? "available" : "ready") || !this.state.release)
       throw updateRequest(
         errorText("main.updateService.downloadAndVerifyAnUpdateBeforeInstallingIt"),
       );
 
+    const version = this.state.release.version;
+
+    this.installingHomebrew = homebrew;
     this.publish({ phase: "installing", error: null });
 
     try {
       this.rollbackInstall = await this.options.prepareInstall();
 
-      const driver = await this.native();
+      if (homebrew) {
+        if (!this.options.homebrew) throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
 
-      await driver.install();
+        await this.options.homebrew.install(version);
+        this.installingHomebrew = false;
+        this.options.homebrew.restart();
+      } else {
+        const driver = await this.native();
+
+        await driver.install();
+      }
     } catch (error) {
+      this.installingHomebrew = false;
       this.rollbackInstall?.();
       this.rollbackInstall = undefined;
 
       this.publish({
-        phase: "ready",
+        phase: homebrew ? "idle" : "ready",
+        ...(homebrew && { release: null }),
         error: error instanceof GitError ? error.message : updateError(error, "install"),
       });
 

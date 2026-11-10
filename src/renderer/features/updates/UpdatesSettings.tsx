@@ -1,4 +1,5 @@
 import { errorMessage } from "@shared/errors";
+import { PACKAGE_MANAGER_NAMES } from "@shared/application";
 import { t } from "@shared/i18n";
 import type { UpdatePhase, UpdateState } from "@shared/updates";
 import { CircleAlert, CircleCheck, Download, Info, RotateCw } from "lucide-react";
@@ -39,7 +40,11 @@ function statusText(state: UpdateState, phase: UpdatePhase): string {
         value1: state.release?.name ?? t("settings.updatesSettings.theUpdate"),
       });
     case "installing":
-      return t("settings.updatesSettings.savingYourWorkspaceAndRestartingEda");
+      return t(
+        state.capability === "homebrew"
+          ? "settings.updatesSettings.updatingWithHomebrew"
+          : "settings.updatesSettings.savingYourWorkspaceAndRestartingEda",
+      );
     case "error":
       return t("settings.updatesSettings.updateCheckFailed");
     default:
@@ -56,27 +61,32 @@ function UpdateAction({
   phase: UpdatePhase;
   actions: UpdateActions;
 }) {
-  if (state.capability === "automatic") {
+  const homebrew = state.capability === "homebrew";
+
+  if (state.capability === "automatic" || homebrew) {
     if (phase === "installing")
       return (
         <Button size="sm" busy>
-          {t("settings.updatesSettings.restartingEda")}
+          {t(
+            homebrew
+              ? "settings.updatesSettings.homebrewUpdateInProgress"
+              : "settings.updatesSettings.restartingEda",
+          )}
         </Button>
       );
 
-    if (phase === "available" || phase === "ready") {
+    if (phase === "available" || (!homebrew && phase === "ready")) {
       const ready = phase === "ready";
-      const label = t(
-        ready
-          ? "settings.updatesSettings.restartAndInstall"
-          : "settings.updatesSettings.downloadUpdate",
-      );
+      let label = t("settings.updatesSettings.downloadUpdate");
+
+      if (homebrew) label = t("settings.updatesSettings.updateWithHomebrew");
+      else if (ready) label = t("settings.updatesSettings.restartAndInstall");
 
       return (
         <AsyncButton
           size="sm"
           label={label}
-          onAction={ready ? actions.install : actions.download}
+          onAction={homebrew || ready ? actions.install : actions.download}
           icon={ready ? <RotateCw size={14} /> : <Download size={14} />}
           variant="primary"
         >
@@ -86,7 +96,7 @@ function UpdateAction({
     }
   }
 
-  const canCheck = state.capability === "managed" || state.capability === "automatic";
+  const canCheck = ["managed", "homebrew", "automatic"].includes(state.capability);
 
   if (!canCheck || ["available", "downloading", "ready", "installing"].includes(phase)) return null;
 
@@ -123,18 +133,20 @@ export function UpdateStatus({
       ? CircleAlert
       : busy
         ? RotateCw
-        : phase === "current"
+        : phase === "current" && !(state.capability === "homebrew" && state.reason)
           ? CircleCheck
           : ["available", "ready"].includes(phase)
             ? Download
             : Info;
   const detail = managed
     ? (state.reason ?? t("updates.managedExternally"))
-    : state.capability === "automatic"
-      ? phase === "ready"
-        ? t("appUpdateNotice.downloadedAndVerified")
-        : null
-      : state.reason;
+    : state.capability === "homebrew"
+      ? t("updates.managedBy", { manager: PACKAGE_MANAGER_NAMES.homebrew })
+      : state.capability === "automatic"
+        ? phase === "ready"
+          ? t("appUpdateNotice.downloadedAndVerified")
+          : null
+        : state.reason;
 
   return (
     <div className="space-y-3 rounded-md border border-border-subtle bg-bg-surface p-4">
@@ -301,7 +313,7 @@ export function UpdatesSettings() {
               className="block text-xs leading-relaxed text-text-tertiary"
             >
               {t(
-                state?.capability === "managed"
+                state?.capability === "managed" || state?.capability === "homebrew"
                   ? "settings.updatesSettings.managedCheckSchedule"
                   : "settings.updatesSettings.installedBuildsCheckAfterStartupAndEverySix",
               )}

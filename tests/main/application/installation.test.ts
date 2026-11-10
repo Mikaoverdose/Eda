@@ -69,7 +69,10 @@ it.each(["caskroom", "prefix", "path"] as const)(
           ? { PATH: "", HOMEBREW_PREFIX: join(root, "brew") }
           : { PATH: join(root, "brew", "bin") };
 
-    expect(await detectInstallation({ ...options(), environment })).toEqual({ method: "homebrew" });
+    expect(await detectInstallation({ ...options(), environment })).toEqual({
+      method: "homebrew",
+      executable: join(root, "brew", "bin", "brew"),
+    });
     expect(await readFile(executablePath, "utf8")).toBe("fixture executable");
   },
 );
