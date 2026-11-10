@@ -1,3 +1,4 @@
+import { OAuthCredentials, type AuthorizedAccount } from "./oauth-credentials";
 import {
   requestOAuth,
   readOAuthTokens,
@@ -21,7 +22,7 @@ import type {
   ProviderAccountRepository,
   SavedProviderAccount,
 } from "../persistence/provider-account-repository";
-import { secretKeys, type SecretStore } from "../secrets/secret-store";
+import type { SecretStore } from "../secrets/secret-store";
 import { ProviderProfileCache } from "./provider-profile-cache";
 import { listProviderRepositories } from "./provider-repositories";
 import { GitLabOAuthCallback } from "./gitlab-oauth-callback";
@@ -35,14 +36,6 @@ const fail = (
   kind:
     "invalid-input" | "network-failed" | "auth-failed" | "keychain-unavailable" = "invalid-input",
 ) => new GitError({ kind, operation: t("operations.gitLabSignIn"), message });
-
-interface Authorized {
-  signInId: string;
-  profileId: string;
-  accountId: string;
-  login: string;
-  tokens: Tokens;
-}
 
 interface Pending {
   profileId: string;
@@ -58,10 +51,8 @@ interface Pending {
 export class GitLabAuth {
   private readonly profiles: ProviderProfileCache<GitLabProfileDetails>;
   private readonly clientId = INTEGRATIONS.gitlab.clientId;
-  private readonly authorized = new Map<string, Authorized>();
-  private readonly committing = new Map<string, Promise<void>>();
+  private readonly credentialsStore: OAuthCredentials;
   private readonly pending = new Map<string, Pending>();
-  private readonly refreshing = new Map<string, Promise<Tokens>>();
 
   constructor(
     private readonly accounts: ProviderAccountRepository,
@@ -69,17 +60,18 @@ export class GitLabAuth {
     private readonly fetch: typeof globalThis.fetch,
     private readonly now = Date.now,
   ) {
+    this.credentialsStore = new OAuthCredentials("gitlab", accounts, secrets, now);
     this.profiles = new ProviderProfileCache(now);
   }
 
   status(profileId: string): GitLabStatus {
     const saved = this.accounts.find(profileId);
-    const account = saved && this.ownsCredential(saved) ? saved : undefined;
+    const account = saved && this.credentialsStore.owns(saved) ? saved : undefined;
 
     return {
       secureStorage: this.secrets.available,
       account:
-        account && !this.authorized.has(profileId)
+        account && !this.credentialsStore.authorized.has(profileId)
           ? { id: account.accountId, login: account.login, state: account.state }
           : null,
     };
@@ -87,7 +79,12 @@ export class GitLabAuth {
 
   async profile(profileId: string): Promise<GitLabProfileDetails | null> {
     const account = this.accounts.find(profileId);
-    if (!account || !this.ownsCredential(account) || this.authorized.has(profileId)) return null;
+    if (
+      !account ||
+      !this.credentialsStore.owns(account) ||
+      this.credentialsStore.authorized.has(profileId)
+    )
+      return null;
 
     const details = await this.profiles.get(account.credentialRef, async () => {
       const credentials = await this.credentials(account);
@@ -107,7 +104,11 @@ export class GitLabAuth {
 
   profileUrl(profileId: string): string {
     const account = this.accounts.find(profileId);
-    if (!account || !this.ownsCredential(account) || this.authorized.has(profileId))
+    if (
+      !account ||
+      !this.credentialsStore.owns(account) ||
+      this.credentialsStore.authorized.has(profileId)
+    )
       throw fail(errorText("main.providers.gitlabAuth.connectAGitLabAccountFirst"));
     const login = account.login;
     if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/.test(login))
@@ -222,7 +223,7 @@ export class GitLabAuth {
 
     this.requirePending(profileId, signIn.id);
 
-    const candidate: Authorized = {
+    const candidate: AuthorizedAccount = {
       signInId: signIn.id,
       profileId,
       accountId: String(user["id"]),
@@ -230,8 +231,8 @@ export class GitLabAuth {
       tokens,
     };
 
-    this.authorized.set(profileId, candidate);
-    await this.commit(candidate);
+    this.credentialsStore.authorized.set(profileId, candidate);
+    await this.credentialsStore.commit(candidate);
     this.requirePending(profileId, signIn.id);
     const account = this.accounts.find(profileId);
 
@@ -242,8 +243,8 @@ export class GitLabAuth {
   }
 
   cancel(profileId: string, id: string): void {
-    if (this.authorized.get(profileId)?.signInId === id) {
-      this.authorized.delete(profileId);
+    if (this.credentialsStore.authorized.get(profileId)?.signInId === id) {
+      this.credentialsStore.authorized.delete(profileId);
     }
 
     const pending = this.pending.get(id);
@@ -254,19 +255,19 @@ export class GitLabAuth {
   }
 
   cancelProfile(profileId: string): void {
-    this.authorized.delete(profileId);
+    this.credentialsStore.authorized.delete(profileId);
     for (const [id, pending] of this.pending)
       if (pending.profileId === profileId) this.cancel(profileId, id);
   }
 
   cancelAll(): void {
-    this.authorized.clear();
+    this.credentialsStore.authorized.clear();
     for (const [id, pending] of this.pending) this.cancel(pending.profileId, id);
   }
 
   async reset(): Promise<void> {
     this.cancelAll();
-    await Promise.allSettled([...this.committing.values(), ...this.refreshing.values()]);
+    await this.credentialsStore.settle();
     await this.profiles.clear();
   }
 
@@ -275,7 +276,7 @@ export class GitLabAuth {
     const account = this.accounts.find(profileId);
     if (!account) return;
     this.requireStorage();
-    if (this.ownsCredential(account)) await this.secrets.delete(account.credentialRef);
+    if (this.credentialsStore.owns(account)) await this.secrets.delete(account.credentialRef);
     this.accounts.delete(profileId);
     this.profiles.delete(account.credentialRef);
   }
@@ -283,7 +284,7 @@ export class GitLabAuth {
   async forFetch(profileId: string, url: string): Promise<TransportCredentials | undefined> {
     if (!isGitLabHttps(url)) return undefined;
 
-    if (this.authorized.has(profileId))
+    if (this.credentialsStore.authorized.has(profileId))
       throw fail(
         errorText("main.providers.gitlabAuth.finishConnectingGitLabInProfileSettingsThenRetry"),
         "auth-failed",
@@ -297,53 +298,12 @@ export class GitLabAuth {
   async repositories(profileId: string, page = 1) {
     const account = this.accounts.find(profileId);
 
-    if (!account || this.authorized.has(profileId))
+    if (!account || this.credentialsStore.authorized.has(profileId))
       throw fail(errorText("main.providerRepositories.signInRequired"), "auth-failed");
 
     const credentials = await this.credentials(account);
 
     return listProviderRepositories(this.fetch, "gitlab", credentials.password, page);
-  }
-
-  private commit(candidate: Authorized): Promise<void> {
-    const existing = this.committing.get(candidate.profileId);
-
-    if (existing)
-      return existing.then(async () => {
-        if (this.authorized.get(candidate.profileId) === candidate) await this.commit(candidate);
-      });
-
-    const work = this.saveAuthorized(candidate).finally(() =>
-      this.committing.delete(candidate.profileId),
-    );
-
-    this.committing.set(candidate.profileId, work);
-    return work;
-  }
-
-  private async saveAuthorized(candidate: Authorized): Promise<void> {
-    const { profileId, accountId, login, tokens } = candidate;
-    const previous = this.accounts.find(profileId);
-    const credentialRef =
-      secretKeys.provider(profileId, "gitlab-oauth", "gitlab.com", accountId) + ":" + randomUUID();
-    await this.secrets.set(credentialRef, JSON.stringify(tokens));
-
-    try {
-      if (this.authorized.get(profileId) !== candidate)
-        throw fail(
-          errorText("main.providers.gitlabAuth.theGitLabConnectionWasCancelledSignInAgain"),
-          "auth-failed",
-        );
-
-      this.accounts.save({ profileId, accountId, login, credentialRef, state: "connected" });
-      this.authorized.delete(profileId);
-    } catch (error) {
-      await this.secrets.delete(credentialRef);
-      throw error;
-    }
-
-    if (previous && this.ownsCredential(previous))
-      await this.secrets.delete(previous.credentialRef);
   }
 
   private async credentials(account: SavedProviderAccount): Promise<TransportCredentials> {
@@ -355,27 +315,10 @@ export class GitLabAuth {
         "auth-failed",
       );
 
-    let tokens = await this.readTokens(account);
-
-    if (tokens.expiresAt !== undefined && tokens.expiresAt <= this.now() + 60_000) {
-      let refresh = this.refreshing.get(account.profileId);
-
-      if (!refresh) {
-        refresh = this.refresh(account, tokens).finally(() =>
-          this.refreshing.delete(account.profileId),
-        );
-
-        this.refreshing.set(account.profileId, refresh);
-      }
-
-      tokens = await refresh;
-    }
-
-    if (this.accounts.find(account.profileId)?.credentialRef !== account.credentialRef)
-      throw fail(
-        errorText("main.providers.gitlabAuth.theGitLabAccountChangedRetryThePull"),
-        "auth-failed",
-      );
+    const saved = await this.readTokens(account);
+    const tokens = await this.credentialsStore.currentTokens(account, saved, () =>
+      this.refresh(account, saved),
+    );
 
     return { username: "oauth2", password: tokens.accessToken };
   }
@@ -432,16 +375,10 @@ export class GitLabAuth {
   }
 
   private async readTokens(account: SavedProviderAccount): Promise<Tokens> {
-    if (!this.ownsCredential(account)) return this.expired(account);
+    if (!this.credentialsStore.owns(account)) return this.expired(account);
     const raw = await this.secrets.get(account.credentialRef);
     const tokens = readOAuthTokens(raw, this.clientId);
     return tokens ? tokens : this.expired(account);
-  }
-
-  private ownsCredential(account: SavedProviderAccount): boolean {
-    return account.credentialRef.startsWith(
-      secretKeys.provider(account.profileId, "gitlab-oauth", "gitlab.com", account.accountId) + ":",
-    );
   }
 
   private tokens(response: Record<string, unknown>, clientId: string): Tokens {

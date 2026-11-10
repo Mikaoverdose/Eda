@@ -140,7 +140,9 @@ export function readOAuthTokens(
         ...(refreshToken !== undefined ? { refreshToken } : {}),
         ...(refreshExpiresAt !== undefined ? { refreshExpiresAt } : {}),
       };
-  } catch {}
+  } catch {
+    return undefined;
+  }
 
   return undefined;
 }

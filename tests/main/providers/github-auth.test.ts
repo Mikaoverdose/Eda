@@ -522,3 +522,25 @@ it("keeps hosted provider accounts separate when they share a profile", async ()
   expect(gitlab.find(ctx.profile.id)).toBeUndefined();
   expect(ctx.accounts.find(ctx.profile.id)).toEqual(github);
 });
+
+it("does not return credentials when the account disconnects during a secret read", async () => {
+  const fixture = setup();
+  await fixture.connect();
+  let finish!: (value: string | undefined) => void;
+  const saved = [...fixture.values.values()][0];
+  vi.mocked(fixture.secrets.get).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+
+  const credentials = fixture.service.forFetch(
+    fixture.profile.id,
+    "https://github.com/owner/repo.git",
+  );
+  const refused = expect(credentials).rejects.toMatchObject({ kind: "github-auth-required" });
+  await fixture.service.disconnect(fixture.profile.id);
+  finish(saved);
+  await refused;
+});

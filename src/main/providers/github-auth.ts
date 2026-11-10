@@ -1,3 +1,4 @@
+import { OAuthCredentials } from "./oauth-credentials";
 import {
   requestOAuth,
   readOAuthTokens,
@@ -23,7 +24,7 @@ import type {
   ProviderAccountRepository,
   SavedProviderAccount,
 } from "../persistence/provider-account-repository";
-import { secretKeys, type SecretStore } from "../secrets/secret-store";
+import type { SecretStore } from "../secrets/secret-store";
 import { GitHubProfileCache, type GitHubProfileDetails } from "./github-profile-cache";
 
 const DEVICE_URL = "https://github.com/login/device/code";
@@ -39,14 +40,6 @@ const fail = (
     | "keychain-unavailable" = "invalid-input",
 ) => new GitError({ kind, operation: t("operations.gitHubSignIn"), message });
 
-interface Authorized {
-  signInId: string;
-  profileId: string;
-  accountId: string;
-  login: string;
-  tokens: Tokens;
-}
-
 interface Pending {
   profileId: string;
   deviceCode: string;
@@ -57,10 +50,8 @@ interface Pending {
 
 export class GitHubAuth {
   private readonly clientId = INTEGRATIONS.github.clientId;
-  private readonly authorized = new Map<string, Authorized>();
-  private readonly committing = new Map<string, Promise<void>>();
+  private readonly credentialsStore: OAuthCredentials;
   private readonly pending = new Map<string, Pending>();
-  private readonly refreshing = new Map<string, Promise<Tokens>>();
   private readonly profiles: GitHubProfileCache;
 
   constructor(
@@ -69,17 +60,18 @@ export class GitHubAuth {
     private readonly fetch: typeof globalThis.fetch,
     private readonly now = Date.now,
   ) {
+    this.credentialsStore = new OAuthCredentials("github", accounts, secrets, now);
     this.profiles = new GitHubProfileCache((url) => this.request(url), now);
   }
 
   status(profileId: string): GitHubStatus {
     const saved = this.accounts.find(profileId);
-    const account = saved && this.ownsCredential(saved) ? saved : undefined;
+    const account = saved && this.credentialsStore.owns(saved) ? saved : undefined;
 
     return {
       secureStorage: this.secrets.available,
       account:
-        account && !this.authorized.has(profileId)
+        account && !this.credentialsStore.authorized.has(profileId)
           ? { id: account.accountId, login: account.login, state: account.state }
           : null,
     };
@@ -87,8 +79,12 @@ export class GitHubAuth {
 
   async profile(profileId: string): Promise<GitHubProfileDetails | null> {
     const account = this.accounts.find(profileId);
-    if (this.authorized.has(profileId)) return null;
-    if (!account || !this.ownsCredential(account) || !/^[1-9][0-9]{0,15}$/.test(account.accountId))
+    if (this.credentialsStore.authorized.has(profileId)) return null;
+    if (
+      !account ||
+      !this.credentialsStore.owns(account) ||
+      !/^[1-9][0-9]{0,15}$/.test(account.accountId)
+    )
       return null;
     return this.profiles.get({ id: account.accountId, login: account.login });
   }
@@ -99,7 +95,11 @@ export class GitHubAuth {
 
   profileUrl(profileId: string): string {
     const account = this.accounts.find(profileId);
-    if (!account || !this.ownsCredential(account) || this.authorized.has(profileId))
+    if (
+      !account ||
+      !this.credentialsStore.owns(account) ||
+      this.credentialsStore.authorized.has(profileId)
+    )
       throw fail(errorText("main.providers.githubAuth.connectAGitHubAccountFirst"));
     const login = this.profiles.peek(account.accountId)?.login ?? account.login;
     if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(login))
@@ -208,7 +208,7 @@ export class GitHubAuth {
       this.requirePending(profileId, id);
       this.cancel(profileId, id);
 
-      this.authorized.set(profileId, {
+      this.credentialsStore.authorized.set(profileId, {
         signInId: id,
         profileId,
         accountId: String(user["id"]),
@@ -216,7 +216,7 @@ export class GitHubAuth {
         tokens,
       });
 
-      await this.commit(this.authorized.get(profileId)!);
+      await this.credentialsStore.commit(this.credentialsStore.authorized.get(profileId)!);
       return { state: "connected", status: this.status(profileId) };
     } catch (error) {
       this.cancel(profileId, id);
@@ -229,8 +229,8 @@ export class GitHubAuth {
   }
 
   cancel(profileId: string, id: string): void {
-    if (this.authorized.get(profileId)?.signInId === id) {
-      this.authorized.delete(profileId);
+    if (this.credentialsStore.authorized.get(profileId)?.signInId === id) {
+      this.credentialsStore.authorized.delete(profileId);
     }
 
     const pending = this.pending.get(id);
@@ -240,19 +240,19 @@ export class GitHubAuth {
   }
 
   cancelProfile(profileId: string): void {
-    this.authorized.delete(profileId);
+    this.credentialsStore.authorized.delete(profileId);
     for (const [id, pending] of this.pending)
       if (pending.profileId === profileId) this.cancel(profileId, id);
   }
 
   cancelAll(): void {
-    this.authorized.clear();
+    this.credentialsStore.authorized.clear();
     for (const [id, pending] of this.pending) this.cancel(pending.profileId, id);
   }
 
   async reset(): Promise<void> {
     this.cancelAll();
-    await Promise.allSettled([...this.committing.values(), ...this.refreshing.values()]);
+    await this.credentialsStore.settle();
     await this.profiles.clear();
   }
 
@@ -261,14 +261,14 @@ export class GitHubAuth {
     const account = this.accounts.find(profileId);
     if (!account) return;
     this.requireStorage();
-    if (this.ownsCredential(account)) await this.secrets.delete(account.credentialRef);
+    if (this.credentialsStore.owns(account)) await this.secrets.delete(account.credentialRef);
     this.accounts.delete(profileId);
   }
 
   async forFetch(profileId: string, url: string): Promise<TransportCredentials | undefined> {
     if (!isGitHubHttps(url)) return undefined;
 
-    if (this.authorized.has(profileId))
+    if (this.credentialsStore.authorized.has(profileId))
       throw fail(
         errorText("main.providers.githubAuth.finishConnectingGitHubInProfileSettingsThenRetry"),
         "github-auth-required",
@@ -282,53 +282,12 @@ export class GitHubAuth {
   async repositories(profileId: string, page = 1) {
     const account = this.accounts.find(profileId);
 
-    if (!account || this.authorized.has(profileId))
+    if (!account || this.credentialsStore.authorized.has(profileId))
       throw fail(errorText("main.providerRepositories.signInRequired"), "github-auth-required");
 
     const credentials = await this.credentials(account);
 
     return listProviderRepositories(this.fetch, "github", credentials.password, page);
-  }
-
-  private commit(candidate: Authorized): Promise<void> {
-    const existing = this.committing.get(candidate.profileId);
-
-    if (existing)
-      return existing.then(async () => {
-        if (this.authorized.get(candidate.profileId) === candidate) await this.commit(candidate);
-      });
-
-    const work = this.saveAuthorized(candidate).finally(() =>
-      this.committing.delete(candidate.profileId),
-    );
-
-    this.committing.set(candidate.profileId, work);
-    return work;
-  }
-
-  private async saveAuthorized(candidate: Authorized): Promise<void> {
-    const { profileId, accountId, login, tokens } = candidate;
-    const previous = this.accounts.find(profileId);
-    const credentialRef =
-      secretKeys.provider(profileId, "github-oauth", "github.com", accountId) + ":" + randomUUID();
-    await this.secrets.set(credentialRef, JSON.stringify(tokens));
-
-    try {
-      if (this.authorized.get(profileId) !== candidate)
-        throw fail(
-          errorText("main.providers.githubAuth.theGitHubConnectionWasCancelledSignInAgain"),
-          "github-auth-required",
-        );
-
-      this.accounts.save({ profileId, accountId, login, credentialRef, state: "connected" });
-      this.authorized.delete(profileId);
-    } catch (error) {
-      await this.secrets.delete(credentialRef);
-      throw error;
-    }
-
-    if (previous && this.ownsCredential(previous))
-      await this.secrets.delete(previous.credentialRef);
   }
 
   private async credentials(account: SavedProviderAccount): Promise<TransportCredentials> {
@@ -340,21 +299,10 @@ export class GitHubAuth {
         "github-auth-required",
       );
 
-    let tokens = await this.readTokens(account);
-
-    if (tokens.expiresAt !== undefined && tokens.expiresAt <= this.now() + 60_000) {
-      let refresh = this.refreshing.get(account.profileId);
-
-      if (!refresh) {
-        refresh = this.refresh(account, tokens).finally(() =>
-          this.refreshing.delete(account.profileId),
-        );
-
-        this.refreshing.set(account.profileId, refresh);
-      }
-
-      tokens = await refresh;
-    }
+    const saved = await this.readTokens(account);
+    const tokens = await this.credentialsStore.currentTokens(account, saved, () =>
+      this.refresh(account, saved),
+    );
 
     return { username: "x-access-token", password: tokens.accessToken };
   }
@@ -414,16 +362,10 @@ export class GitHubAuth {
   }
 
   private async readTokens(account: SavedProviderAccount): Promise<Tokens> {
-    if (!this.ownsCredential(account)) return this.expired(account);
+    if (!this.credentialsStore.owns(account)) return this.expired(account);
     const raw = await this.secrets.get(account.credentialRef);
     const tokens = readOAuthTokens(raw, this.clientId);
     return tokens?.accessToken.startsWith("gho_") ? tokens : this.expired(account);
-  }
-
-  private ownsCredential(account: SavedProviderAccount): boolean {
-    return account.credentialRef.startsWith(
-      secretKeys.provider(account.profileId, "github-oauth", "github.com", account.accountId) + ":",
-    );
   }
 
   private tokens(response: Record<string, unknown>, clientId: string): Tokens {
