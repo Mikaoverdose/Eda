@@ -9,7 +9,7 @@ export function applyWindowZoom(contents: WebContents, factor: number): void {
   if (process.platform === "darwin") {
     BrowserWindow.fromWebContents(contents)?.setWindowButtonPosition({
       x: 12,
-      y: Math.round((TITLEBAR_HEIGHT * factor - WINDOW_BUTTON_HEIGHT) / 2),
+      y: (TITLEBAR_HEIGHT - WINDOW_BUTTON_HEIGHT) / 2,
     });
   }
 }

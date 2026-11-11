@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { EdaApi, IpcEvent, IpcEventArgs } from "@shared/ipc";
 
@@ -331,4 +331,13 @@ function subscribe<C extends IpcEvent>(
   };
 }
 
-if (process.isMainFrame) contextBridge.exposeInMainWorld("eda", api);
+if (process.isMainFrame) {
+  contextBridge.exposeInMainWorld("eda", api);
+
+  const syncZoom = () => {
+    document.documentElement.style.setProperty("--window-zoom", String(webFrame.getZoomFactor()));
+  };
+
+  window.addEventListener("DOMContentLoaded", syncZoom, { once: true });
+  window.addEventListener("resize", syncZoom);
+}

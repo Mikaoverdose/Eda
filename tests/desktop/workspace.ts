@@ -124,12 +124,19 @@ try {
       "The macOS title bar reserves space for native traffic lights.",
     );
 
+    let previousCaptionSize = 0;
+
     for (const zoom of [75, 100, 200]) {
       const changed = await page.evaluate(
         (zoom) => window.eda.settings.set("uiZoom", { kind: "application" }, zoom),
         zoom,
       );
       assert.equal(changed.ok, true);
+      await page.waitForFunction(
+        (zoom) =>
+          Number(document.documentElement.style.getPropertyValue("--window-zoom")) === zoom / 100,
+        zoom,
+      );
 
       const position: Electron.Point | null = await app.evaluate(({ BrowserWindow }) =>
         BrowserWindow.getAllWindows()[0]!.getWindowButtonPosition(),
@@ -137,9 +144,22 @@ try {
       const titlebar = await page.locator(".window-titlebar").boundingBox();
       assert.ok(position && titlebar);
       assert.ok(
+        Math.abs((titlebar.height * zoom) / 100 - 44) <= 1,
+        `The macOS title bar stays 44 screen pixels high at ${zoom}% zoom.`,
+      );
+      assert.ok(
         Math.abs(position.y + 7 - (titlebar.height * zoom) / 200) <= 1,
         `Native traffic lights stay vertically centered at ${zoom}% zoom.`,
       );
+      const captionSize = await page
+        .locator(".window-titlebar > span")
+        .first()
+        .evaluate(
+          (element, zoom) => (parseFloat(getComputedStyle(element).fontSize) * zoom) / 100,
+          zoom,
+        );
+      assert.ok(captionSize > previousCaptionSize, "Title bar text follows interface zoom.");
+      previousCaptionSize = captionSize;
       assert.ok(
         await page.locator(".window-titlebar").evaluate((element) => {
           return parseFloat(getComputedStyle(element).paddingRight) >= 20;
@@ -185,6 +205,43 @@ try {
   await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
   await page.getByRole("button", { name: /^workspace-repo / }).click();
   await page.getByRole("button", { name: "Inspect branch main", exact: true }).waitFor();
+
+  if (process.platform === "darwin") {
+    let previousAvatarSize = 0;
+
+    for (const zoom of [75, 100, 200]) {
+      await page.evaluate(
+        (zoom) => window.eda.settings.set("uiZoom", { kind: "application" }, zoom),
+        zoom,
+      );
+      await page.waitForFunction(
+        (zoom) =>
+          Number(document.documentElement.style.getPropertyValue("--window-zoom")) === zoom / 100,
+        zoom,
+      );
+      const outside = await page.locator(".window-titlebar").evaluate((header) => {
+        const bar = header.getBoundingClientRect();
+        return Array.from(header.querySelectorAll("button"))
+          .filter((button) => {
+            const bounds = button.getBoundingClientRect();
+            return (
+              bounds.height > 0 && (bounds.top < bar.top - 0.5 || bounds.bottom > bar.bottom + 0.5)
+            );
+          })
+          .map((button) => button.getAttribute("aria-label") ?? button.textContent);
+      });
+      assert.deepEqual(
+        outside,
+        [],
+        `Title bar controls fit inside the fixed bar at ${zoom}% zoom.`,
+      );
+      const avatar = await page.locator(".window-titlebar .profile-avatar").boundingBox();
+      assert.ok(avatar && (avatar.height * zoom) / 100 > previousAvatarSize);
+      previousAvatarSize = (avatar.height * zoom) / 100;
+    }
+
+    await page.evaluate(() => window.eda.settings.reset("uiZoom", { kind: "application" }));
+  }
 
   assert.equal(
     await page.getByRole("button", { name: /^Inspect branch origin\/HEAD$/ }).count(),

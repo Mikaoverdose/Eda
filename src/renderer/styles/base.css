@@ -8,8 +8,29 @@
 }
 
 .window-titlebar[data-platform="mac"] {
+  height: calc(var(--toolbar-height) / var(--window-zoom, 1));
   padding-left: calc(env(titlebar-area-x, 80px) + var(--space-2));
   padding-right: var(--space-5);
+}
+
+.window-titlebar[data-platform="mac"] button {
+  min-height: 0;
+  max-height: calc((var(--toolbar-height) - var(--space-1)) / var(--window-zoom, 1));
+}
+
+.window-titlebar[data-platform="mac"] [role="tablist"] {
+  padding-block: 0;
+}
+
+.window-titlebar[data-platform="mac"] [data-tour="profile"] > button {
+  padding-block: min(var(--space-1), calc(var(--space-1) / var(--window-zoom, 1)));
+}
+
+.window-titlebar[data-platform="mac"] .profile-avatar {
+  width: auto;
+  height: 100%;
+  max-height: 1.75rem;
+  aspect-ratio: 1;
 }
 
 .window-titlebar button,
