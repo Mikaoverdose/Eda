@@ -11,6 +11,7 @@ import {
 import { isMergeTool } from "@shared/integrations/merge-tool";
 import { BrowserWindow, app, dialog } from "electron";
 import { readBackgroundImage } from "../../application/background-image";
+import { applyWindowZoom } from "../../application/window-zoom";
 import type { Services } from "../../services";
 import { broadcast, handle } from "../transport";
 
@@ -65,8 +66,7 @@ export function registerSettingsHandlers(services: Services): void {
       !previewing.has(contents) && active ? { profileId: active.id } : {},
     ).value;
 
-    if (Math.abs(contents.getZoomFactor() - value / 100) > 0.001)
-      contents.setZoomFactor(value / 100);
+    applyWindowZoom(contents, value / 100);
 
     const transparency = services.preferences.resolve(
       "windowTransparency",

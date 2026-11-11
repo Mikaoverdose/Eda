@@ -6,6 +6,7 @@ import { BrowserWindow, clipboard, dialog } from "electron";
 import { detectEditors } from "../../application/detect-editors";
 import { detectMergeTools } from "../../application/detect-merge-tools";
 import { graphicsStatus } from "../../application/graphics";
+import { applyWindowZoom } from "../../application/window-zoom";
 import { buildGitEnvironment } from "../../git/execution/environment";
 import { NodeProcessRunner } from "../../git/execution/node-process-runner";
 import type { Services } from "../../services";
@@ -63,7 +64,7 @@ export function registerApplicationHandlers(services: Services): void {
           await event.sender.session.clearStorageData();
           await event.sender.session.clearCache();
           services.navigation.take();
-          event.sender.setZoomFactor(1);
+          applyWindowZoom(event.sender, 1);
           if (process.platform !== "linux") window.setOpacity(1);
           event.sender.reload();
         });

@@ -123,6 +123,32 @@ try {
       }),
       "The macOS title bar reserves space for native traffic lights.",
     );
+
+    for (const zoom of [75, 100, 200]) {
+      const changed = await page.evaluate(
+        (zoom) => window.eda.settings.set("uiZoom", { kind: "application" }, zoom),
+        zoom,
+      );
+      assert.equal(changed.ok, true);
+
+      const position: Electron.Point | null = await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]!.getWindowButtonPosition(),
+      );
+      const titlebar = await page.locator(".window-titlebar").boundingBox();
+      assert.ok(position && titlebar);
+      assert.ok(
+        Math.abs(position.y + 7 - (titlebar.height * zoom) / 200) <= 1,
+        `Native traffic lights stay vertically centered at ${zoom}% zoom.`,
+      );
+      assert.ok(
+        await page.locator(".window-titlebar").evaluate((element) => {
+          return parseFloat(getComputedStyle(element).paddingRight) >= 20;
+        }),
+        "The right edge of the macOS title bar has comfortable padding.",
+      );
+    }
+
+    await page.evaluate(() => window.eda.settings.reset("uiZoom", { kind: "application" }));
   } else {
     await page.getByRole("button", { name: "Maximize window", exact: true }).click();
     await page.getByRole("button", { name: "Restore window", exact: true }).waitFor();

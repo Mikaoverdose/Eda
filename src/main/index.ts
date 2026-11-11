@@ -10,6 +10,7 @@ import { isRendererDocument, isRendererFile, rendererUrl } from "./application/r
 import { configureGraphics } from "./application/graphics";
 import { recoverMigrationStartup } from "./application/startup-recovery";
 import { registerWindowRecovery } from "./application/window-recovery";
+import { applyWindowZoom } from "./application/window-zoom";
 import { registerApplicationContents } from "./ipc/transport";
 import { registerIpcHandlers } from "./ipc/register";
 import {
@@ -98,7 +99,7 @@ function createWindow(zoom = 100): BrowserWindow {
       if (event.message.startsWith("[Eda navigation] ")) console.info(event.message);
     });
 
-  window.webContents.setZoomFactor(zoom / 100);
+  applyWindowZoom(window.webContents, zoom / 100);
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);

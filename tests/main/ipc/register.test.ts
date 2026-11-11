@@ -120,6 +120,7 @@ const electron = vi.hoisted(() => ({
   destroy: vi.fn(),
   quit: vi.fn(),
   setZoomFactor: vi.fn(),
+  setWindowButtonPosition: vi.fn(),
   minimize: vi.fn(),
   maximize: vi.fn(),
   unmaximize: vi.fn(),
@@ -182,6 +183,7 @@ const event = {
     openDevTools: electron.openDevTools,
     reload: electron.reload,
     setZoomFactor: electron.setZoomFactor,
+    getZoomFactor: () => 1,
     session: { clearStorageData: electron.clearStorageData, clearCache: electron.clearCache },
   },
   senderFrame: mainFrame,
@@ -309,6 +311,7 @@ beforeEach(() => {
     unmaximize: electron.unmaximize,
     close: electron.close,
     setOpacity: electron.setOpacity,
+    setWindowButtonPosition: electron.setWindowButtonPosition,
   });
 
   handlers = new Map();
