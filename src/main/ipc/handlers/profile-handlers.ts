@@ -15,6 +15,7 @@ import {
   requireId,
   requireRecord,
   requireString,
+  requireStringArray,
 } from "../validate";
 
 export function registerProfileHandlers(services: Services): void {
@@ -27,6 +28,17 @@ export function registerProfileHandlers(services: Services): void {
   identity.onChange((changed) => broadcast(IPC_EVENTS.identityChanged, changed));
 
   handle(IPC_CHANNELS.identityList, async () => ok(identities.list()));
+
+  handle(IPC_CHANNELS.identityReorder, async (_event, rawIds) => {
+    const ids = requireStringArray(rawIds, t("profilesSettings.profile")).map((id) =>
+      requireId(id),
+    );
+    const ordered = await identity.serialize(async () => identities.reorder(ids));
+
+    broadcast(IPC_EVENTS.identityChanged, identity.getActive());
+
+    return ok(ordered);
+  });
 
   handle(IPC_CHANNELS.identityGetActive, async () => ok(identity.getActive()));
 

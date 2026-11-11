@@ -378,6 +378,7 @@ export interface EdaApi {
   identity: {
     listGpgSigningKeys(): Promise<Result<GpgSigningKey[]>>;
     list(): Promise<Result<Identity[]>>;
+    reorder(ids: string[]): Promise<Result<Identity[]>>;
     getActive(): Promise<Result<Identity | null>>;
     create(draft: IdentityDraft, options?: IdentityCreateOptions): Promise<Result<Identity>>;
     update(id: string, draft: Partial<IdentityDraft>): Promise<Result<Identity>>;
@@ -638,6 +639,7 @@ export const IPC_CHANNELS = {
   appGetGlobalGitUser: "app:getGlobalGitUser",
 
   identityList: "identity:list",
+  identityReorder: "identity:reorder",
   identityGetActive: "identity:getActive",
   identityCreate: "identity:create",
   identityUpdate: "identity:update",

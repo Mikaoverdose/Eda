@@ -180,6 +180,7 @@ const api: EdaApi = {
   identity: {
     listGpgSigningKeys: () => ipcRenderer.invoke(IPC_CHANNELS.identityListGpgSigningKeys),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.identityList),
+    reorder: (ids) => ipcRenderer.invoke(IPC_CHANNELS.identityReorder, ids),
     getActive: () => ipcRenderer.invoke(IPC_CHANNELS.identityGetActive),
     create: (draft, options) => ipcRenderer.invoke(IPC_CHANNELS.identityCreate, draft, options),
     update: (id, draft) => ipcRenderer.invoke(IPC_CHANNELS.identityUpdate, id, draft),

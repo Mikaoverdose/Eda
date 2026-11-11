@@ -18,6 +18,7 @@ export const identities = sqliteTable(
     name: text("name").notNull(),
     // Use the NFKC-normalized, trimmed, lowercase name for uniqueness. Keep the spelling in name.
     nameKey: text("name_key").notNull().unique(),
+    sortOrder: integer("sort_order").notNull().default(0),
     gitName: text("git_name").notNull(),
     gitEmail: text("git_email").notNull(),
     username: text("username"),

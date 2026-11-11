@@ -3,7 +3,7 @@ import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { Identity, IdentityCreateOptions, IdentityDraft } from "@shared/identity/identity";
 import { builtInSetting } from "@shared/preferences/settings";
-import { eq } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { appState, identities, type IdentityRow } from "./schema";
 import { SettingsRepository } from "./settings-repository";
@@ -19,9 +19,32 @@ export class IdentityRepository {
     return this.db
       .select()
       .from(identities)
-      .orderBy(identities.nameKey)
+      .orderBy(identities.sortOrder, identities.nameKey)
       .all()
       .map((row) => this.present(row));
+  }
+
+  reorder(ids: string[]): Identity[] {
+    return this.db.transaction(() => {
+      const current = this.list();
+      const known = new Set(current.map((profile) => profile.id));
+
+      if (
+        ids.length !== current.length ||
+        new Set(ids).size !== ids.length ||
+        ids.some((id) => !known.has(id))
+      )
+        throw new GitError({
+          kind: "invalid-input",
+          operation: t("operations.manageProfile"),
+          message: errorText("main.persistence.identityRepository.invalidProfileOrder"),
+        });
+
+      for (const [sortOrder, id] of ids.entries())
+        this.db.update(identities).set({ sortOrder }).where(eq(identities.id, id)).run();
+
+      return this.list();
+    });
   }
 
   findById(id: string): Identity | undefined {
@@ -36,9 +59,20 @@ export class IdentityRepository {
     const id = randomUUID();
 
     this.write(() => {
+      const last = this.db
+        .select({ value: max(identities.sortOrder) })
+        .from(identities)
+        .get();
+
       this.db
         .insert(identities)
-        .values({ id, ...toColumns(draft), createdAt: now, updatedAt: now })
+        .values({
+          id,
+          ...toColumns(draft),
+          sortOrder: (last?.value ?? -1) + 1,
+          createdAt: now,
+          updatedAt: now,
+        })
         .run();
 
       if (draft.hue !== builtInSetting("accentHue").value)

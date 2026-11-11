@@ -1,4 +1,5 @@
 {
+  "main.persistence.identityRepository.invalidProfileOrder": "The profile list changed. Refresh it and try again.",
   "main.avatarCache.imageExceedsSizeLimit": "The avatar exceeds the permitted image size.",
   "main.sshHandlers.invalidKeyParameters": "Use a single-line key comment and a 2048, 3072 or 4096-bit RSA key.",
   "main.sshHandlers.chooseKeyFirst": "Choose the new key’s destination in the file picker.",

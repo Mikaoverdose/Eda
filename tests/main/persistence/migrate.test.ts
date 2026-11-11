@@ -1,3 +1,4 @@
+import profileOrderSql from "@main/persistence/migrations/20261111075032_profile_order/migration.sql?raw";
 import repositoryTrustSql from "@main/persistence/migrations/20261107000000_repository_trust/migration.sql?raw";
 import gitlabAccountsSql from "@main/persistence/migrations/20261110074538_gitlab_self_hosted_accounts/migration.sql?raw";
 import gitlabTlsSql from "@main/persistence/migrations/20261110090653_gitlab_tls_errors/migration.sql?raw";
@@ -283,4 +284,21 @@ it("rejects migration names that differ only by separators", () => {
       { id: "002_cleanup_old", sql: "SELECT 1;" },
     ]),
   ).toThrow(/unique and ordered/);
+});
+
+it("preserves alphabetical profile order when adding saved positions", () => {
+  const db = setup();
+  const profiles = {
+    id: "002_profiles",
+    sql: `CREATE TABLE identities (id TEXT PRIMARY KEY, name_key TEXT NOT NULL);
+      INSERT INTO identities VALUES ('work', 'work'), ('home', 'home'), ('alpha', 'alpha');`,
+  };
+
+  applyMigrations(db, [initial, profiles, { id: "003_order", sql: profileOrderSql }]);
+
+  expect(db.prepare("SELECT id, sort_order FROM identities ORDER BY sort_order").all()).toEqual([
+    { id: "alpha", sort_order: 0 },
+    { id: "home", sort_order: 1 },
+    { id: "work", sort_order: 2 },
+  ]);
 });

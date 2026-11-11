@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { openDatabase, openInMemoryDatabase } from "@main/persistence/database";
+import { IdentityRepository } from "@main/persistence/identity-repository";
 import * as schema from "@main/persistence/schema";
 import { appState, identities, repositories, settings } from "@main/persistence/schema";
 
@@ -399,5 +400,31 @@ it("uses indexes for growing history queries and keeps generated workflow metada
     });
   } finally {
     db.close();
+  }
+});
+
+it("persists profile order across database restarts", async () => {
+  const { path } = await fileDatabase();
+  const first = openDatabase(path);
+
+  try {
+    first
+      .insert(identities)
+      .values([identity("work"), identity("home")])
+      .run();
+    new IdentityRepository(first).reorder(["home", "work"]);
+  } finally {
+    first.close();
+  }
+
+  const reopened = openDatabase(path);
+
+  try {
+    expect(new IdentityRepository(reopened).list().map((profile) => profile.id)).toEqual([
+      "home",
+      "work",
+    ]);
+  } finally {
+    reopened.close();
   }
 });

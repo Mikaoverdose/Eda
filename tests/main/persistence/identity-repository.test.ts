@@ -126,11 +126,11 @@ describe("reading identities", () => {
     expect(identities.findById("3d7cbfac-c122-4457-9e8c-5040dbb7832f")).toBeUndefined();
   });
 
-  it("sorts by name case-insensitively", () => {
+  it("appends new profiles in creation order", () => {
     identities.create(draft({ name: "zeta" }));
     identities.create(draft({ name: "Alpha" }));
     identities.create(draft({ name: "beta" }));
-    expect(identities.list().map((i) => i.name)).toEqual(["Alpha", "beta", "zeta"]);
+    expect(identities.list().map((i) => i.name)).toEqual(["zeta", "Alpha", "beta"]);
   });
 });
 
@@ -230,5 +230,37 @@ describe("the active identity", () => {
 
     identities.setActiveId(null);
     expect(identities.getActiveId()).toBeNull();
+  });
+});
+
+describe("profile order", () => {
+  it("keeps custom order after renames, creation and deletion without changing the active profile", () => {
+    const work = identities.create(draft());
+    const home = identities.create(draft({ name: "Home" }));
+    identities.setActiveId(work.id);
+
+    expect(identities.reorder([home.id, work.id]).map((profile) => profile.id)).toEqual([
+      home.id,
+      work.id,
+    ]);
+    expect(identities.getActiveId()).toBe(work.id);
+    identities.update(home.id, { name: "Zebra" });
+    const extra = identities.create(draft({ name: "Alpha" }));
+    expect(identities.list().map((profile) => profile.id)).toEqual([home.id, work.id, extra.id]);
+    identities.delete(work.id);
+    expect(identities.list().map((profile) => profile.id)).toEqual([home.id, extra.id]);
+    expect(identities.getActiveId()).toBeNull();
+  });
+
+  it("rejects missing, duplicate and stale profile IDs without partially changing order", () => {
+    const work = identities.create(draft());
+    const home = identities.create(draft({ name: "Home" }));
+    identities.setActiveId(work.id);
+
+    for (const invalid of [[home.id], [home.id, home.id], [home.id, "missing"]]) {
+      expect(() => identities.reorder(invalid)).toThrow(/profile list changed/);
+      expect(identities.list().map((profile) => profile.id)).toEqual([work.id, home.id]);
+      expect(identities.getActiveId()).toBe(work.id);
+    }
   });
 });

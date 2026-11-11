@@ -642,6 +642,17 @@ try {
   await draftIs("Home gamma draft");
   await view(true);
 
+  await expect(page.getByRole("button", { name: "Move Work up", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Move Home up", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-testid^="profile-"]').first()).toHaveAttribute(
+    "data-testid",
+    `profile-${home.id}`,
+  );
+  await expect(page.getByRole("button", { name: "Move Home down", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Move Work down", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: /Active profile: Home/ }).waitFor();
+
   const homeCard = page.getByTestId(`profile-${home.id}`);
 
   await homeCard.getByRole("button", { name: "Edit", exact: true }).click();
@@ -693,6 +704,11 @@ try {
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor();
+  await expect(page.locator('[data-testid^="profile-"]').first()).toHaveAttribute(
+    "data-testid",
+    `profile-${home.id}`,
+  );
+  await expect(page.getByRole("button", { name: "Move Personal up", exact: true })).toBeDisabled();
   await page
     .getByTestId(`profile-${work.id}`)
     .getByRole("button", { name: "Switch", exact: true })

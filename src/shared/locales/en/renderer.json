@@ -1,4 +1,6 @@
 {
+  "profilesSettings.moveUp": "Move {name} up",
+  "profilesSettings.moveDown": "Move {name} down",
   "aboutSettings.clean": "Clean",
   "aboutSettings.localChangesDirty": "Local changes (dirty)",
   "aboutSettings.unavailable": "Unavailable",
