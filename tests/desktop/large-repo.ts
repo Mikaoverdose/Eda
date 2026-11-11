@@ -87,6 +87,17 @@ try {
   assert.ok((await page.getByRole("button", { name: /^Inspect branch / }).count()) <= 200);
 
   const initialHeap = await heapSize(page);
+  const coldStart = performance.now();
+  await page.evaluate(async (profileId) => {
+    const result = await window.eda.settings.set(
+      "vigilantMode",
+      { kind: "profile", profileId },
+      true,
+    );
+    if (!result.ok) throw new Error(result.error.message);
+  }, openedRepository.identityId);
+  await waitForSignatures(page);
+  const coldVerificationMs = Math.round(performance.now() - coldStart);
   const targetOffset = Math.min(commitCount - PAGE_SIZE * MAX_PAGES, 1_000);
   let offset = 0;
 
@@ -149,8 +160,16 @@ try {
   if (heapGrowth > 128 * 1024 * 1024)
     throw new Error(`Renderer heap grew by ${Math.round(heapGrowth / 1024 / 1024)} MiB.`);
 
+  await waitForSignatures(page);
+  const warmStart = performance.now();
+  await page.reload();
+  await list.waitFor({ state: "visible" });
+  await waitForSignatures(page);
+  const warmReopenMs = Math.round(performance.now() - warmStart);
+  assertBounds(await readMetrics(list));
+
   console.log(
-    `Large-repository gate passed (${commitCount} commits): traversed to commit ${forwardOffset}, retained <= ${PAGE_SIZE * MAX_PAGES}, mounted <= ${MAX_MOUNTED_ROWS}, heap delta ${Math.round(heapGrowth / 1024 / 1024)} MiB.`,
+    `Large-repository gate passed with vigilant mode (${commitCount} commits): traversed to commit ${forwardOffset}, retained <= ${PAGE_SIZE * MAX_PAGES}, mounted <= ${MAX_MOUNTED_ROWS}, heap delta ${Math.round(heapGrowth / 1024 / 1024)} MiB, initial signatures ${coldVerificationMs} ms, warm app reload ${warmReopenMs} ms.`,
   );
 } catch (error) {
   console.error("Large-repository assertion failed:", error);
@@ -218,6 +237,24 @@ async function readMetrics(locator: Locator) {
     retained: Number(element.getAttribute("data-retained-count")),
     offset: Number(element.getAttribute("data-item-offset")),
   }));
+}
+
+async function waitForSignatures(page: Page) {
+  await page.waitForFunction(
+    () => {
+      const rows = [
+        ...document.querySelectorAll('[data-testid="commit-graph"] [data-tour="history-commit"]'),
+      ];
+      return (
+        rows.length > 0 &&
+        rows.every(
+          (row) => row.querySelector('[role="img"]')?.getAttribute("aria-label") === "Unsigned",
+        )
+      );
+    },
+    undefined,
+    { timeout: 15000 },
+  );
 }
 
 function assertBounds(metrics: Awaited<ReturnType<typeof readMetrics>>) {
