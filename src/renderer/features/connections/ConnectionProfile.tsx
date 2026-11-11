@@ -58,26 +58,35 @@ export function ConnectionProfile({
         onOpen={onOpenProfile}
       />
 
-      <div className="space-y-2" aria-hidden={loading || (!bio && !location)}>
-        <p
-          title={bio ?? undefined}
-          className={cx(
-            "line-clamp-2 h-8 whitespace-pre-line break-words text-xs text-text-secondary",
-            loading && "ui-skeleton rounded-sm",
-          )}
-        >
-          {bio}
-        </p>
-
-        <div className={cx("h-4 min-w-0", loading && "ui-skeleton w-2/3 rounded-sm")}>
-          {location && (
-            <p title={location} className="flex items-center gap-1.5 text-xs text-text-tertiary">
-              <MapPinIcon size={14} className="shrink-0" aria-hidden="true" />
-              <span className="truncate">{location}</span>
+      {(loading || bio || location) && (
+        <div className="space-y-2" aria-hidden={loading}>
+          {(loading || bio) && (
+            <p
+              title={bio ?? undefined}
+              className={cx(
+                "line-clamp-2 whitespace-pre-line break-words text-xs text-text-secondary",
+                loading && "ui-skeleton h-8 rounded-sm",
+              )}
+            >
+              {bio}
             </p>
           )}
+
+          {(loading || location) && (
+            <div className={cx("min-w-0", loading && "ui-skeleton h-4 w-2/3 rounded-sm")}>
+              {location && (
+                <p
+                  title={location}
+                  className="flex items-center gap-1.5 text-xs text-text-tertiary"
+                >
+                  <MapPinIcon size={14} className="shrink-0" aria-hidden="true" />
+                  <span className="truncate">{location}</span>
+                </p>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {instanceUrl && <ProfileDetail icon={<GlobeIcon size={14} />}>{instanceUrl}</ProfileDetail>}
 
