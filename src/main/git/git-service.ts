@@ -535,6 +535,18 @@ export class GitService {
     };
   }
 
+  async commitSignature(path: string, oid: string): Promise<CommitSignatureVerification> {
+    assertFullObjectId(oid, t("operations.verifyCommitSignature"));
+
+    const object = await this.exec(["cat-file", "commit", oid], {
+      cwd: path,
+      operation: t("operations.verifyCommitSignature"),
+      maxStdoutBytes: 1024 * 1024,
+    });
+
+    return this.verifyCommitSignature(path, oid, commitSignatureFormat(object.stdout));
+  }
+
   private async verifyCommitSignature(
     path: string,
     oid: string,

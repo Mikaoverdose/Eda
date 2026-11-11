@@ -438,11 +438,18 @@ export function RepositoryRowsPreview() {
       </div>
 
       <div className="overflow-hidden rounded-md border border-border-default bg-bg-inset">
-        {layoutCommitPage(COMMITS).rows.map((row) => (
+        {layoutCommitPage(COMMITS).rows.map((row, index) => (
           <CommitRow
             key={row.commit.oid}
             row={row}
-            columns={[]}
+            columns={[{ id: "sha", visible: true, width: 80 }]}
+            vigilantMode
+            signature={{
+              status: index === 0 ? "verified" : "unsigned",
+              format: index === 0 ? "ssh" : null,
+              reasonCode: null,
+              diagnostics: "",
+            }}
             gutter={40}
             selected={commit.oid === row.commit.oid}
             related={false}

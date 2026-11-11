@@ -236,6 +236,8 @@ const api: EdaApi = {
     forgetRecovery: (id, snapshot) =>
       ipcRenderer.invoke(IPC_CHANNELS.repositoryForgetRecovery, id, snapshot),
     inspectCommit: (id, oid) => ipcRenderer.invoke(IPC_CHANNELS.repositoryInspectCommit, id, oid),
+    commitSignature: (id, oid) =>
+      ipcRenderer.invoke(IPC_CHANNELS.repositoryCommitSignature, id, oid),
     workingDiff: (request) => ipcRenderer.invoke(IPC_CHANNELS.repositoryWorkingDiff, request),
     commitDiff: (request) => ipcRenderer.invoke(IPC_CHANNELS.repositoryCommitDiff, request),
     imagePreview: (request) => ipcRenderer.invoke(IPC_CHANNELS.repositoryImagePreview, request),

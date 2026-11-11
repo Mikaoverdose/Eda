@@ -7,12 +7,14 @@ import {
 } from "@shared/repository/repository-read";
 import {
   ChevronRightIcon as ChevronRight,
-  KeyRoundIcon as KeyRound,
   RefreshIcon as RefreshCw,
-  ShieldOffIcon as ShieldOff,
 } from "../../components/ui/icons";
 import { useId, useState, type ReactNode } from "react";
 import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
+import {
+  CommitSignatureIcon,
+  commitSignatureTone,
+} from "../../components/ui/display/CommitSignatureIcon";
 import {
   CodeBlock,
   Collapse,
@@ -26,7 +28,7 @@ import {
   commitSignatureFormatLabel,
   commitSignatureLabel,
   commitSignatureTrustLabel,
-} from "./commit-signature-label";
+} from "../../components/ui/display/commit-signature-label";
 
 export function CommitDetails({
   commit,
@@ -63,15 +65,7 @@ export function CommitDetails({
       ? commitSignatureLabel(signature)
       : "";
 
-  const signatureColor = verifying
-    ? "text-text-tertiary"
-    : signature?.status === "verified"
-      ? "text-git-added"
-      : signature?.status === "invalid"
-        ? "text-git-deleted"
-        : signature?.status === "unverified"
-          ? "text-git-modified"
-          : "text-text-tertiary";
+  const signatureColor = commitSignatureTone(verifying ? null : signature);
 
   return (
     <div className="app-surface-chrome shrink-0 border-b border-border-subtle bg-bg-surface px-3 py-2">
@@ -110,21 +104,7 @@ export function CommitDetails({
         <CopyButton value={commit.oid} label={t("diff.commitDetails.copySha")} size="icon-xs" />
 
         {(signature || verifying) && (
-          <span
-            role="img"
-            tabIndex={0}
-            aria-label={signatureLabel}
-            title={[signatureLabel, signature?.signer, signature?.fingerprint ?? signature?.keyId]
-              .filter(Boolean)
-              .join("\n")}
-            className={`flex shrink-0 items-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text ${signatureColor}`}
-          >
-            {signature?.status !== "unsigned" ? (
-              <KeyRound size={14} aria-hidden="true" />
-            ) : (
-              <ShieldOff size={14} aria-hidden="true" />
-            )}
-          </span>
+          <CommitSignatureIcon signature={signature} verifying={verifying} />
         )}
 
         <TextButton

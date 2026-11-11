@@ -74,6 +74,24 @@ export function WindowControls() {
 
 export function WindowTitlebar({ children }: { children?: ReactNode }) {
   const platform = window.eda.app.platform;
+  const [development, setDevelopment] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    void window.eda.app
+      .installation()
+      .then((result) => {
+        if (active) setDevelopment(result.ok && result.value.method === "development");
+      })
+      .catch(() => {
+        if (active) setDevelopment(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <header
@@ -83,7 +101,15 @@ export function WindowTitlebar({ children }: { children?: ReactNode }) {
     >
       <span className="flex shrink-0 items-center gap-2 pr-3 text-sm font-semibold text-text-secondary">
         <GitBranch size={15} aria-hidden="true" />
-        {t("windowControls.eda")}
+        <span>
+          {t("windowControls.eda")}
+          {development && (
+            <>
+              {" "}
+              <span className="ml-1 text-git-deleted">{t("windowControls.development")}</span>
+            </>
+          )}
+        </span>
       </span>
 
       {children ?? <div className="min-w-0 flex-1" />}

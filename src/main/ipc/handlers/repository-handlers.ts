@@ -390,6 +390,17 @@ export function registerRepositoryHandlers(services: Services): void {
     );
   });
 
+  handle(IPC_CHANNELS.repositoryCommitSignature, async (_e, id, oid) => {
+    const repository = repositories.resolveActiveRepository(requireId(id));
+
+    return ok(
+      await git.commitSignature(
+        repository.path,
+        requireString(oid, t("fields.commitObjectId"), 64),
+      ),
+    );
+  });
+
   handle(IPC_CHANNELS.repositoryWorkingDiff, async (_e, raw) => {
     const input = requireRecord(raw, t("main.repositoryHandlers.workingDiffRequest"));
 

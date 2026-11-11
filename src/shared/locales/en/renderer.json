@@ -2394,6 +2394,7 @@
   "useShellCommands.thisRepositoryIsReadOnly": "This repository is read-only.",
   "virtualRows.scrollableRows": "Scrollable rows",
   "windowControls.closeWindow": "Close window",
+  "windowControls.development": "Dev",
   "windowControls.eda": "Eda",
   "windowControls.maximize": "Maximize",
   "windowControls.maximizeWindow": "Maximize window",
