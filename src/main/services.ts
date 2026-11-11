@@ -16,6 +16,7 @@ import { detectInstallation } from "./application/installation";
 import { HomebrewUpdater } from "./application/homebrew-updater";
 import { checkReleaseFeed } from "./application/release-feed";
 import { restartApplication } from "./application/restart";
+import { prepareReleaseDataImport } from "./persistence/import-release-data";
 import { clearDatabase } from "./persistence/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
 import { UpdateService } from "./application/update-service";
@@ -77,6 +78,7 @@ export interface Services {
   installation: InstallationInfo;
   updates: UpdateService;
   resetData(): Promise<void>;
+  importReleaseData(): Promise<void>;
   cancelSignIns(): void;
   github: GitHubAuth;
   gitlab: GitLabAuth;
@@ -414,6 +416,34 @@ export async function createServices(): Promise<Services> {
       remotes,
       avatars,
       cancelSignIns,
+      async importReleaseData() {
+        if (app.isPackaged || !process.env["VITE_DEV_SERVER_URL"])
+          throw new GitError({
+            kind: "invalid-input",
+            operation: t("operations.importReleaseData"),
+            message: errorText("main.appData.developmentOnly"),
+          });
+
+        const releasePath = join(app.getPath("appData"), "Eda");
+
+        const release = beginUpdateInstall();
+        try {
+          await backgroundFetch.stop();
+          if (operations.busy)
+            throw new GitError({
+              kind: "invalid-input",
+              operation: t("operations.importReleaseData"),
+              message: errorText("main.appData.finishOperations"),
+            });
+          await identity.serialize(async () => undefined);
+          await prepareReleaseDataImport(releasePath, app.getPath("userData"));
+          await restartApplication({ action: "import-release-data" });
+        } catch (error) {
+          release();
+          backgroundFetch.start();
+          throw error;
+        }
+      },
       async resetData() {
         await updates.discardDownload();
         operations.reset();

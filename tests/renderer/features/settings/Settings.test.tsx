@@ -35,6 +35,8 @@ it("mounts only the selected settings panel without starting unrelated IPC work"
     expect(container.querySelectorAll("section[id^='settings-']")).toHaveLength(1);
     expect(container.querySelector("#settings-debug-failures")).toBeNull();
     expect(container.querySelector("#settings-debug-reset")).not.toBeNull();
+    expect(container.querySelector("[aria-current='page']")?.textContent).toBe("App data");
+    expect(container.textContent).toContain("Copy release data and restart...");
     expect(unexpectedIpc).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());

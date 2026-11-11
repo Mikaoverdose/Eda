@@ -208,6 +208,7 @@ function setup() {
       install: vi.fn(),
     },
     resetData: vi.fn(async () => {}),
+    importReleaseData: vi.fn(async () => {}),
     gitlabSelfHosted: {
       profile: vi.fn(async (_profileId: string, baseUrl: string) => ({
         id: "7",
@@ -499,6 +500,28 @@ describe("IPC registration", () => {
     expect(electron.clearCache).toHaveBeenCalledOnce();
     expect(electron.reload).toHaveBeenCalledOnce();
     expect(electron.destroy).not.toHaveBeenCalled();
+  });
+
+  it("copies release data only after native confirmation and rejects subframes", async () => {
+    const mocks = setup();
+    electron.showMessageBox.mockResolvedValueOnce({ response: 0 });
+    expect(await invoke(IPC_CHANNELS.appDebug, "import-release-data")).toMatchObject({ ok: true });
+    expect(mocks.importReleaseData).not.toHaveBeenCalled();
+
+    const handler = handlers.get(IPC_CHANNELS.appDebug)!;
+    expect(
+      await handler(
+        { ...event, senderFrame: {} } as Electron.IpcMainInvokeEvent,
+        "import-release-data",
+      ),
+    ).toMatchObject({ ok: false });
+    expect(electron.showMessageBox).toHaveBeenCalledOnce();
+
+    electron.showMessageBox.mockResolvedValueOnce({ response: 1 });
+    expect(await invoke(IPC_CHANNELS.appDebug, "import-release-data")).toMatchObject({ ok: true });
+    expect(mocks.importReleaseData).toHaveBeenCalledOnce();
+    expect(mocks.resetData).not.toHaveBeenCalled();
+    expect(electron.reload).not.toHaveBeenCalled();
   });
 
   it("blocks stale requests during reset and releases the bridge after a failed reset", async () => {

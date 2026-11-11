@@ -2,7 +2,7 @@ import { ERROR_CODE, errorText } from "@shared/error-codes";
 import { AppError, ok } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
-import { BrowserWindow, clipboard, dialog } from "electron";
+import { app, BrowserWindow, clipboard, dialog } from "electron";
 import { detectEditors } from "../../application/detect-editors";
 import { detectMergeTools } from "../../application/detect-merge-tools";
 import { graphicsStatus } from "../../application/graphics";
@@ -34,7 +34,8 @@ export function registerApplicationHandlers(services: Services): void {
       action !== "open-dev-tools" &&
       action !== "ipc-error" &&
       action !== "renderer-crash" &&
-      action !== "reset-data"
+      action !== "reset-data" &&
+      action !== "import-release-data"
     )
       throw invalidRequest(errorText("main.applicationHandlers.unknownDebugAction"));
 
@@ -46,6 +47,27 @@ export function registerApplicationHandlers(services: Services): void {
       );
     if (action === "ipc-error") throw new AppError(ERROR_CODE.DEBUG_IPC_FAILURE);
     if (action === "open-dev-tools") event.sender.openDevTools({ mode: "detach" });
+
+    if (action === "import-release-data") {
+      if (app.isPackaged) throw invalidRequest(errorText("main.appData.developmentOnly"));
+      const { response } = await dialog.showMessageBox(window, {
+        type: "warning",
+        title: t("main.appData.importTitle"),
+        message: t("main.appData.importMessage"),
+        detail: t("main.appData.importDetail"),
+        buttons: [t("common.cancel"), t("main.appData.importAction")],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (
+        response === 1 &&
+        !window.isDestroyed() &&
+        !event.sender.isDestroyed() &&
+        event.senderFrame === event.sender.mainFrame
+      )
+        await services.importReleaseData();
+    }
 
     if (action === "reset-data") {
       const { response } = await dialog.showMessageBox(window, {

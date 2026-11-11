@@ -1,3 +1,5 @@
+import { DEVELOPMENT_RESTART } from "@shared/application";
+import { errorText } from "@shared/error-codes";
 import { redactDiagnostic } from "@shared/diagnostics";
 import { errorMessage, GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
@@ -18,6 +20,7 @@ import {
   parseRepositoryLink,
   type RepositoryNavigationQueue,
 } from "./repo/lifecycle/navigation";
+import { applyReleaseDataImport } from "./persistence/import-release-data";
 import { createServices } from "./services";
 import { migrateMacosKeychain } from "./secrets/migrate-macos-keychain";
 
@@ -141,9 +144,24 @@ if (!gotLock) {
 
 async function start(): Promise<void> {
   try {
+    const importIndex = process.argv.indexOf(DEVELOPMENT_RESTART.argument);
+    if (importIndex !== -1) {
+      process.argv.splice(importIndex, 1);
+      if (app.isPackaged || !process.env["VITE_DEV_SERVER_URL"])
+        throw new GitError({
+          kind: "invalid-input",
+          operation: t("operations.importReleaseData"),
+          message: errorText("main.appData.developmentOnly"),
+        });
+      applyReleaseDataImport(app.getPath("userData"));
+    }
     configureGraphics();
     await app.whenReady();
     setLocale(app.getPreferredSystemLanguages());
+    if (importIndex !== -1) {
+      await session.defaultSession.clearStorageData();
+      await session.defaultSession.clearCache();
+    }
     await migrateMacosKeychain();
 
     if (process.platform !== "darwin") Menu.setApplicationMenu(null);

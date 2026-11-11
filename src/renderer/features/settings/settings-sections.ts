@@ -10,7 +10,7 @@ import {
   PanelsTopLeftIcon as PanelsTopLeft,
   PlugIcon as Plug,
   SlidersHorizontalIcon as SlidersHorizontal,
-  Trash2Icon as Trash2,
+  DatabaseIcon as Database,
   UsersRoundIcon as UsersRound,
   type LucideIcon,
 } from "../../components/ui/icons";
@@ -175,10 +175,10 @@ export const SETTINGS_SECTIONS: {
   },
   {
     id: "debug-reset",
-    keywords: t("settings.debugResetDeleteClearAllDataRestartOnboardingFactorySettings"),
-    title: t("settings.resetAppData"),
-    description: t("settings.startFreshWithEda"),
-    icon: Trash2,
+    keywords: t("settings.appData.keywords"),
+    title: t("settings.appData.title"),
+    description: t("settings.appData.description"),
+    icon: Database,
     group: "debug",
   },
 ];

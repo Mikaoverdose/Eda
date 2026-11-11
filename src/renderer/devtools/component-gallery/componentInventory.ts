@@ -240,8 +240,8 @@ export const FEATURE_COMPONENTS = [
   {
     group: "Settings/debug",
     files: [
+      "features/settings/debug/AppDataSettings.tsx",
       "features/settings/debug/FailureSimulations.tsx",
-      "features/settings/debug/ResetDataSettings.tsx",
       "features/settings/debug/StateSimulations.tsx",
     ],
   },
@@ -396,6 +396,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
     "CircleCheckIcon",
     "Columns2Icon",
     "CopyIcon",
+    "DatabaseIcon",
     "DownloadIcon",
     "EllipsisIcon",
     "ExternalLinkIcon",
@@ -586,8 +587,8 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/settings/application/ApplicationPreferences.tsx": ["ApplicationPreferences"],
   "features/settings/application/GraphicsSettings.tsx": ["GraphicsSettings"],
   "features/settings/application/LanguageSettings.tsx": ["LanguageSettings"],
+  "features/settings/debug/AppDataSettings.tsx": ["AppDataSettings"],
   "features/settings/debug/FailureSimulations.tsx": ["FailureSimulations"],
-  "features/settings/debug/ResetDataSettings.tsx": ["ResetDataSettings"],
   "features/settings/debug/StateSimulations.tsx": ["StateSimulations"],
   "features/settings/git/CommitPrefixSettings.tsx": ["CommitPrefixSettings"],
   "features/settings/git/FetchSettings.tsx": ["FetchSettings"],

@@ -351,7 +351,8 @@ export interface EdaApi {
     installation(): Promise<Result<InstallationInfo>>;
     copyText(value: string): Promise<Result<void>>;
     debug(
-      action: "open-dev-tools" | "ipc-error" | "renderer-crash" | "reset-data",
+      action:
+        "open-dev-tools" | "ipc-error" | "renderer-crash" | "reset-data" | "import-release-data",
     ): Promise<Result<void>>;
     detectMergeTools(): Promise<Result<DetectedMergeTool[]>>;
     chooseMergeTool(): Promise<Result<string | null>>;

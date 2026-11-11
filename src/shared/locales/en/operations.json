@@ -321,5 +321,6 @@
   "operationTitles.redo": "Redo",
   "operationTitles.undo": "Undo",
   "operations.gitLabSignIn": "GitLab sign-in",
+  "operations.importReleaseData": "copy release app data",
   "operations.restartApp": "restart Eda"
 }

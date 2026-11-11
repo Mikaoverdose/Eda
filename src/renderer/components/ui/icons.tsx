@@ -29,6 +29,7 @@ export {
   CircleCheck as CircleCheckIcon,
   Columns2 as Columns2Icon,
   Copy as CopyIcon,
+  Database as DatabaseIcon,
   Download as DownloadIcon,
   Ellipsis as EllipsisIcon,
   ExternalLink as ExternalLinkIcon,

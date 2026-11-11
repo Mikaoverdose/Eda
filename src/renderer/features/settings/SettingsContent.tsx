@@ -14,7 +14,7 @@ import { AppearanceControls } from "./appearance/AppearanceControls";
 import { AboutSettings } from "./application/AboutSettings";
 import { ApplicationPreferences } from "./application/ApplicationPreferences";
 import { FailureSimulations } from "./debug/FailureSimulations";
-import { ResetDataSettings } from "./debug/ResetDataSettings";
+import { AppDataSettings } from "./debug/AppDataSettings";
 import { StateSimulations } from "./debug/StateSimulations";
 import { FetchSettings } from "./git/FetchSettings";
 import { GitEngineSettings } from "./git/GitEngineSettings";
@@ -126,7 +126,7 @@ export function SettingsContent({
     case "debug-failures":
       return <FailureSimulations />;
     case "debug-reset":
-      return <ResetDataSettings />;
+      return <AppDataSettings />;
     default:
       return null;
   }

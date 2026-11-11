@@ -988,5 +988,12 @@
   "main.homebrew.waitingForCask": "Eda {version} is not available through Homebrew yet. Check again later.",
   "main.homebrew.pinned": "Eda is pinned in Homebrew. Unpin it before updating.",
   "main.homebrew.failed": "Homebrew could not complete the update action. Check Homebrew in Terminal, then try again.",
-  "main.appData.restartUnavailable": "The development server could not prepare the restart. Restart pnpm dev and try again."
+  "main.appData.restartUnavailable": "The development server could not prepare the restart. Restart pnpm dev and try again.",
+  "main.appData.developmentOnly": "Copying release data is only available in a development app with a separate data folder.",
+  "main.appData.finishOperations": "Finish running Git operations before copying release data.",
+  "main.appData.importAction": "Copy and restart",
+  "main.appData.importDetail": "Development profiles, settings, saved credentials, and drafts will be replaced. Close the release app first. Release data and repository files stay untouched.",
+  "main.appData.importMessage": "Overwrite development data with data from the release build and restart?",
+  "main.appData.importTitle": "Replace development app data?",
+  "main.appData.releaseDataUnavailable": "Release app data is missing or invalid. Open the release build first, then close it and try again."
 }

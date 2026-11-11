@@ -7,6 +7,7 @@ const appData = "/eda-test-missing-user-data";
 
 const startup = vi.hoisted(() => ({
   createServices: vi.fn(),
+  applyReleaseDataImport: vi.fn(),
   migrateMacosKeychain: vi.fn(),
   showErrorBox: vi.fn(),
   showMessageBox: vi.fn(),
@@ -30,6 +31,9 @@ vi.mock("node:fs", async (importOriginal) => ({
 vi.mock("@main/git/execution/shell-path", () => ({
   restoreShellPath: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@main/persistence/import-release-data", () => ({
+  applyReleaseDataImport: startup.applyReleaseDataImport,
+}));
 vi.mock("@main/services", () => ({ createServices: startup.createServices }));
 vi.mock("@main/secrets/migrate-macos-keychain", () => ({
   migrateMacosKeychain: startup.migrateMacosKeychain,
@@ -51,7 +55,11 @@ vi.mock("electron", () => ({
   dialog: { showErrorBox: startup.showErrorBox, showMessageBox: startup.showMessageBox },
   Menu: { setApplicationMenu: vi.fn() },
   session: {
-    defaultSession: { webRequest: { onHeadersReceived: vi.fn(), onBeforeRequest: vi.fn() } },
+    defaultSession: {
+      clearStorageData: vi.fn(),
+      clearCache: vi.fn(),
+      webRequest: { onHeadersReceived: vi.fn(), onBeforeRequest: vi.fn() },
+    },
   },
   shell: {},
 }));
@@ -165,4 +173,36 @@ it("offers startup recovery for migration history mismatches instead of an exit-
     }),
   );
   expect(startup.showErrorBox).not.toHaveBeenCalled();
+});
+
+it("installs the staged release snapshot before opening the development database", async () => {
+  vi.stubEnv("VITE_DEV_SERVER_URL", "http://localhost:5173");
+  const argv = [...process.argv];
+  process.argv.push("--eda-import-release-data");
+  try {
+    await import("@main/index");
+    await vi.waitFor(() => expect(startup.createServices).toHaveBeenCalled());
+    expect(startup.applyReleaseDataImport).toHaveBeenCalledWith(appData);
+    expect(startup.applyReleaseDataImport.mock.invocationCallOrder[0]).toBeLessThan(
+      startup.createServices.mock.invocationCallOrder[0]!,
+    );
+    expect(process.argv).not.toContain("--eda-import-release-data");
+  } finally {
+    process.argv.splice(0, process.argv.length, ...argv);
+  }
+});
+
+it("rejects the import startup argument outside a development session", async () => {
+  const argv = [...process.argv];
+  process.argv.push("--eda-import-release-data");
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await import("@main/index");
+    await vi.waitFor(() => expect(startup.exit).toHaveBeenCalledWith(1));
+    expect(startup.applyReleaseDataImport).not.toHaveBeenCalled();
+    expect(startup.createServices).not.toHaveBeenCalled();
+  } finally {
+    process.argv.splice(0, process.argv.length, ...argv);
+    log.mockRestore();
+  }
 });
