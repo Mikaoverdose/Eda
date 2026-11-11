@@ -157,8 +157,21 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
           ? session.session.views[repositoryId]?.selection
           : null;
 
-      if (selection?.kind === "commit") await loadDiff(selection);
-      else if (
+      if (selection?.kind === "commit") {
+        await loadDiff(selection);
+
+        if (
+          get().generation === generation &&
+          get().repositoryId === repositoryId &&
+          get().selection === selection &&
+          get().error?.code === "main.git.gitService.theCommitIsNoLongerAvailable"
+        ) {
+          set({ selection: null, error: null });
+
+          if (useSessionStore.getState().snapshot?.context.profileId === identityId)
+            useSessionStore.getState().setView(repositoryId, { selection: null });
+        }
+      } else if (
         selection?.kind === "change" &&
         categorizeChanges(changes)[selection.area].some((change) => change.path === selection.path)
       )

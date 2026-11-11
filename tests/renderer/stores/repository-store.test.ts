@@ -91,6 +91,55 @@ describe("repository read store", () => {
     expect(useRepositoryStore.getState().historyError?.message).toBe("Missing object");
   });
 
+  it.each(["available", "missing", "corrupt"] as const)(
+    "handles a saved commit that is %s, clearing only a missing selection after recloning",
+    async (availability) => {
+      const selection = { kind: "commit" as const, oid: "a".repeat(40) };
+      const setView = vi.fn();
+      const session = vi.spyOn(useSessionStore, "getState").mockReturnValue({
+        ...useSessionStore.getState(),
+        setView,
+        snapshot: {
+          context: { profileId: "identity", windowId: "primary", generation: 1 },
+          session: {
+            ...emptySession(),
+            views: { repo: { ...emptyView(), selection } },
+          },
+          drafts: {},
+          recovery: null,
+        },
+      });
+      const failure = errorFixture({
+        kind: availability === "missing" ? "invalid-input" : "repository-corrupt",
+        code:
+          availability === "missing"
+            ? "main.git.gitService.theCommitIsNoLongerAvailable"
+            : "main.git.errorMapping.thisRepositoryHasCorruptOrMissingObjects",
+        message: availability,
+      });
+      const eda = api(async () => ok({ commits: [makeCommit(0)], nextOffset: null }));
+      eda.repository.commitDiff = async () =>
+        availability === "available" ? ok({ files: [] }) : { ok: false, error: failure };
+      Object.defineProperty(window, "eda", { configurable: true, value: eda });
+
+      try {
+        await useRepositoryStore.getState().open("repo", "identity", true);
+
+        const state = useRepositoryStore.getState();
+        expect(state.phase).toBe("ready");
+        expect(state.pages[0]?.commits).toEqual([makeCommit(0)]);
+        expect(state.selection).toEqual(availability === "missing" ? null : selection);
+        expect(state.error).toEqual(availability === "corrupt" ? failure : null);
+
+        if (availability === "missing")
+          expect(setView).toHaveBeenLastCalledWith("repo", { selection: null });
+        else expect(setView).not.toHaveBeenCalledWith("repo", { selection: null });
+      } finally {
+        session.mockRestore();
+      }
+    },
+  );
+
   it("jumps to an uncached commit with bounded ancestry pages and restores the saved graph on refresh", async () => {
     const read = vi.fn(async ({ refs }: { refs?: string[] }) =>
       ok({ commits: [{ ...makeCommit(0), oid: refs?.[0] ?? "head" }], nextOffset: null }),

@@ -696,7 +696,27 @@ export class GitService {
         operation: t("operations.readCommitDiff"),
         ...DIFF_OUTPUT_LIMITS,
       },
-    );
+    ).catch((error: unknown) => {
+      if (
+        error instanceof GitError &&
+        error.kind === "repository-corrupt" &&
+        error.rawStderr?.trim() === `fatal: bad object ${oid}`
+      ) {
+        throw new GitError({
+          kind: "invalid-input",
+          operation: t("operations.readCommitDiff"),
+          repositoryPath: path,
+          message: errorText("main.git.gitService.theCommitIsNoLongerAvailable"),
+          suggestedAction: errorText(
+            "main.git.gitService.refreshReferencesAndSelectAnAvailableCommit",
+          ),
+          ...(error.exitCode !== undefined && { exitCode: error.exitCode }),
+          rawStderr: error.rawStderr,
+        });
+      }
+
+      throw error;
+    });
 
     return parseOutput(parseUnifiedDiff, stdoutBytes, path, t("operations.readCommitDiff"));
   }

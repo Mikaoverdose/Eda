@@ -216,6 +216,19 @@ describe("GitService against real Git", () => {
     expect(rootDiff.files[0]).toMatchObject({ status: "added", newPath: "root.txt" });
     expect(workingDiff.files[0]).toMatchObject({ status: "added", newPath: "untracked.txt" });
   });
+
+  it("reports a missing selected commit without claiming the repository is corrupt", async () => {
+    repo = await createTempRepo();
+    await repo.writeFile("root.txt", "root\n");
+    await repo.commit("Root");
+
+    await expect(repo.git.commitDiff(repo.path, "a".repeat(40))).rejects.toMatchObject({
+      kind: "invalid-input",
+      code: "main.git.gitService.theCommitIsNoLongerAvailable",
+    });
+
+    expect(await repo.run(["fsck", "--full"])).toBe("");
+  });
 });
 
 describe("GitService command construction", () => {
@@ -409,6 +422,18 @@ describe("GitService command construction", () => {
       service(runner).workingDiff("/repo", { area: "staged", paths: ["../outside"] }),
     ).rejects.toMatchObject({ kind: "invalid-input" });
     expect(runner.calls).toHaveLength(0);
+  });
+
+  it.each([
+    "fatal: unable to read tree bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "error: object file .git/objects/aa/object is empty\nfatal: bad object aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  ])("preserves corruption diagnostics when reading a commit diff: %s", async (stderr) => {
+    const runner = new FakeProcessRunner().otherwise({ exitCode: 128, stderr });
+
+    await expect(service(runner).commitDiff("/repo", "a".repeat(40))).rejects.toMatchObject({
+      kind: "repository-corrupt",
+      code: "main.git.errorMapping.thisRepositoryHasCorruptOrMissingObjects",
+    });
   });
 
   it("disables external diff and textconv and separates user paths", async () => {
