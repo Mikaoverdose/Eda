@@ -75,7 +75,9 @@ function createWindow(zoom = 100): BrowserWindow {
     minWidth: 940,
     minHeight: 600,
     show: false,
-    frame: false,
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, titleBarOverlay: true }
+      : { frame: false }),
     backgroundColor: "#0E1014",
     webPreferences: {
       preload: join(__dirname, "../preload/preload.mjs"),

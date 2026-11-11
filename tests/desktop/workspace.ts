@@ -115,24 +115,34 @@ try {
 
   assert.ok(app);
 
-  await page.getByRole("button", { name: "Maximize window", exact: true }).click();
-  await page.getByRole("button", { name: "Restore window", exact: true }).waitFor();
+  if (process.platform === "darwin") {
+    assert.equal(await page.locator(".window-controls").count(), 0);
+    assert.ok(
+      await page.locator(".window-titlebar").evaluate((element) => {
+        return parseFloat(getComputedStyle(element).paddingLeft) >= 70;
+      }),
+      "The macOS title bar reserves space for native traffic lights.",
+    );
+  } else {
+    await page.getByRole("button", { name: "Maximize window", exact: true }).click();
+    await page.getByRole("button", { name: "Restore window", exact: true }).waitFor();
 
-  assert.equal(
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMaximized()),
-    true,
-  );
+    assert.equal(
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMaximized()),
+      true,
+    );
 
-  await page.getByRole("button", { name: "Restore window", exact: true }).click();
-  await page.getByRole("button", { name: "Maximize window", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Minimize window", exact: true }).click();
+    await page.getByRole("button", { name: "Restore window", exact: true }).click();
+    await page.getByRole("button", { name: "Maximize window", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Minimize window", exact: true }).click();
 
-  assert.equal(
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMinimized()),
-    true,
-  );
+    assert.equal(
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMinimized()),
+      true,
+    );
 
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.restore());
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.restore());
+  }
   await page.getByRole("button", { name: "Get started", exact: true }).click();
   await page.getByRole("textbox", { name: /^Profile name/ }).fill("Work");
   await page.getByRole("textbox", { name: /^Git author name/ }).fill("Eda");
@@ -440,10 +450,16 @@ try {
   await page.getByRole("button", { name: "Hide branches and tags", exact: true }).click();
   await page.getByRole("button", { name: "Show branches and tags", exact: true }).waitFor();
 
-  const closed = app.waitForEvent("close");
-
-  await page.getByRole("button", { name: "Close window", exact: true }).click();
-  await closed;
+  if (process.platform === "darwin") {
+    const closed = page.waitForEvent("close");
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+    await closed;
+    await app.close();
+  } else {
+    const closed = app.waitForEvent("close");
+    await page.getByRole("button", { name: "Close window", exact: true }).click();
+    await closed;
+  }
   page = await launch();
   await page.getByRole("button", { name: "Show branches and tags", exact: true }).waitFor();
 

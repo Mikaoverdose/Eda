@@ -73,9 +73,12 @@ export function WindowControls() {
 }
 
 export function WindowTitlebar({ children }: { children?: ReactNode }) {
+  const platform = window.eda.app.platform;
+
   return (
     <header
       data-tour="titlebar"
+      data-platform={platform}
       className="window-titlebar app-surface-chrome flex h-toolbar shrink-0 items-center gap-2 border-b border-border-subtle bg-bg-inset pl-3"
     >
       <span className="flex shrink-0 items-center gap-2 pr-3 text-sm font-semibold text-text-secondary">
@@ -84,7 +87,7 @@ export function WindowTitlebar({ children }: { children?: ReactNode }) {
       </span>
 
       {children ?? <div className="min-w-0 flex-1" />}
-      <WindowControls />
+      {platform !== "mac" && <WindowControls />}
     </header>
   );
 }

@@ -7,6 +7,11 @@
   user-select: none;
 }
 
+.window-titlebar[data-platform="mac"] {
+  padding-left: calc(env(titlebar-area-x, 80px) + var(--space-2));
+  padding-right: var(--space-5);
+}
+
 .window-titlebar button,
 .window-titlebar input,
 .window-titlebar [draggable="true"],
