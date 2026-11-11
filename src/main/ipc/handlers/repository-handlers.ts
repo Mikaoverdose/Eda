@@ -382,20 +382,25 @@ export function registerRepositoryHandlers(services: Services): void {
     );
   });
 
-  handle(IPC_CHANNELS.repositoryInspectCommit, async (_e, id, oid) => {
-    const repository = repositories.resolveActiveRepository(requireId(id));
+  handle(IPC_CHANNELS.repositoryInspectCommit, async (_e, id, oid, refreshSignature) => {
+    if (refreshSignature !== undefined && typeof refreshSignature !== "boolean")
+      throw invalidRequest(
+        errorText("main.repositoryHandlers.chooseWhetherToVerifySignatureAgain"),
+      );
 
     return ok(
-      await git.inspectCommit(repository.path, requireString(oid, t("fields.commitObjectId"), 64)),
+      await services.commitSignatures.inspect(
+        requireId(id),
+        requireString(oid, t("fields.commitObjectId"), 64),
+        refreshSignature === true,
+      ),
     );
   });
 
   handle(IPC_CHANNELS.repositoryCommitSignature, async (_e, id, oid) => {
-    const repository = repositories.resolveActiveRepository(requireId(id));
-
     return ok(
-      await git.commitSignature(
-        repository.path,
+      await services.commitSignatures.read(
+        requireId(id),
         requireString(oid, t("fields.commitObjectId"), 64),
       ),
     );

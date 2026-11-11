@@ -3,11 +3,16 @@ import { ProfileAvatar } from "../../components/ui/display/ProfileAvatar";
 import { ButtonBase } from "../../components/ui/actions/ButtonBase";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { GraphColumn } from "@shared/preferences/graph-view";
-import type { CommitDecoration } from "@shared/repository/repository-read";
+import type {
+  CommitDecoration,
+  CommitSignatureVerification,
+} from "@shared/repository/repository-read";
 import type { DagRow } from "../../repository/dag-layout";
 import { ROW_HEIGHT, edgePath, laneColor, laneX } from "../../repository/graph-geometry";
 import { referenceLabel } from "../../repository/reference-label";
 import { TagIcon } from "../../components/ui/index";
+import { CommitSignatureIcon } from "../../components/ui/display/CommitSignatureIcon";
+import { useCommitSignature } from "../../repository/hooks/useCommitSignature";
 
 export function CommitRow({
   row,
@@ -15,6 +20,8 @@ export function CommitRow({
   gutter,
   selected,
   related,
+  vigilantMode = false,
+  signature,
   onSelect,
   onContextMenu,
 }: {
@@ -23,6 +30,8 @@ export function CommitRow({
   gutter: number;
   selected: boolean;
   related: boolean;
+  vigilantMode?: boolean;
+  signature?: CommitSignatureVerification;
   onSelect: () => void;
   onContextMenu: (event: ReactMouseEvent) => void;
 }) {
@@ -121,13 +130,27 @@ export function CommitRow({
               ) : column.id === "date" ? (
                 formatDate(row.commit.committerTimestamp)
               ) : (
-                row.commit.oid.slice(0, 7)
+                <span className="flex min-w-0 items-center gap-1">
+                  {vigilantMode &&
+                    (signature ? (
+                      <CommitSignatureIcon signature={signature} focusable={false} />
+                    ) : (
+                      <HistorySignatureIcon oid={row.commit.oid} />
+                    ))}
+                  <span className="mono truncate">{row.commit.oid.slice(0, 7)}</span>
+                </span>
               )}
             </span>
           ))}
       </div>
     </ButtonBase>
   );
+}
+
+function HistorySignatureIcon({ oid }: { oid: string }) {
+  const signature = useCommitSignature(oid);
+
+  return <CommitSignatureIcon signature={signature} verifying={!signature} focusable={false} />;
 }
 
 function Decorations({ decorations }: { decorations: CommitDecoration[] }) {

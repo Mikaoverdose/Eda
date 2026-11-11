@@ -20,6 +20,7 @@ import { applyIdentityHue, applyTheme, BUILT_IN_THEMES } from "../styles/themes"
 const PREFERENCE_KEYS = [
   "developerSettingsEnabled",
   "conventionalCommitsEnabled",
+  "vigilantMode",
   "commitPrefixes",
   "accentHue",
   "editorExecutable",

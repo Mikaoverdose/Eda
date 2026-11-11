@@ -13,6 +13,7 @@ describe("history visibility and inspection", () => {
       await repo.commit("Unsigned commit\n\ngpgsig -----BEGIN SSH SIGNATURE-----");
       const unsigned = (await repo.run(["rev-parse", "HEAD"])).trim();
       expect((await repo.git.inspectCommit(repo.path, unsigned)).signed).toBe(false);
+      expect((await repo.git.commitSignature(repo.path, unsigned)).status).toBe("unsigned");
 
       const key = join(repo.home, "signing-key");
       await new SshService(new NodeProcessRunner(), repo.home).generateKey({
@@ -36,6 +37,8 @@ describe("history visibility and inspection", () => {
       const inspection = await repo.git.inspectCommit(repo.path, signed);
       expect(inspection.signed).toBe(true);
       expect(inspection.signature.status).toBe("unverified");
+      expect(await repo.git.commitSignature(repo.path, signed)).toEqual(inspection.signature);
+      await expect(repo.git.commitSignature(repo.path, "--all")).rejects.toThrow();
       expect((await repo.git.inspectCommit(repo.path, unsigned)).signed).toBe(false);
     } finally {
       await repo.cleanup();

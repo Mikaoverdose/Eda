@@ -1,8 +1,11 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { stateLabel } from "@shared/i18n/labels";
-import type { CommitInspection } from "@shared/repository/repository-read";
-import { useEffect, useState } from "react";
+import {
+  UNVERIFIED_COMMIT_SIGNATURE,
+  type CommitInspection,
+} from "@shared/repository/repository-read";
+import { useEffect, useRef, useState } from "react";
 import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { FileStatusIcon, fileStatusTone } from "../../components/ui/display/FileStatusIcon";
@@ -17,9 +20,11 @@ import {
 } from "../../components/ui/index";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { CommitDetails } from "../diff/CommitDetails";
+import { cacheCommitSignature } from "../../repository/hooks/useCommitSignature";
 
 export function CommitChangesPanel() {
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
+  const identityId = useRepositoryStore((state) => state.identityId);
   const generation = useRepositoryStore((state) => state.generation);
   const selection = useRepositoryStore((state) => state.selection);
   const oid = selection?.kind === "commit" ? selection.oid : null;
@@ -34,6 +39,7 @@ export function CommitChangesPanel() {
   const truncatedChanges = useRepositoryStore((state) => state.truncatedChanges);
   const [query, setQuery] = useState("");
   const [verificationRevision, setVerificationRevision] = useState(0);
+  const verifiedRevision = useRef(0);
 
   const [details, setDetails] = useState<{
     oid: string;
@@ -49,25 +55,54 @@ export function CommitChangesPanel() {
 
   useEffect(() => {
     let alive = true;
+    const refreshSignature = verificationRevision !== verifiedRevision.current;
+    verifiedRevision.current = verificationRevision;
 
     setDetails(null);
 
     if (repositoryId && oid) {
-      void window.eda.repository.inspectCommit(repositoryId, oid).then((result) => {
-        if (!alive) return;
+      const cacheRevision = refreshSignature
+        ? cacheCommitSignature(repositoryId, identityId, oid, null)
+        : undefined;
 
-        setDetails(
-          result.ok
-            ? { oid, inspection: result.value }
-            : { oid, error: errorMessage(result.error) },
-        );
-      });
+      void window.eda.repository
+        .inspectCommit(repositoryId, oid, refreshSignature)
+        .then((result) => {
+          if (!alive && cacheRevision === undefined) return;
+
+          cacheCommitSignature(
+            repositoryId,
+            identityId,
+            oid,
+            result.ok ? result.value.signature : UNVERIFIED_COMMIT_SIGNATURE,
+            { expectedRevision: cacheRevision, failed: !result.ok },
+          );
+
+          if (!alive) return;
+
+          setDetails(
+            result.ok
+              ? { oid, inspection: result.value }
+              : { oid, error: errorMessage(result.error) },
+          );
+        })
+        .catch((error: unknown) => {
+          if (!alive && cacheRevision === undefined) return;
+
+          cacheCommitSignature(repositoryId, identityId, oid, UNVERIFIED_COMMIT_SIGNATURE, {
+            expectedRevision: cacheRevision,
+            failed: true,
+          });
+
+          if (!alive) return;
+          setDetails({ oid, error: errorMessage(error) });
+        });
     }
 
     return () => {
       alive = false;
     };
-  }, [repositoryId, generation, oid, verificationRevision]);
+  }, [repositoryId, identityId, generation, oid, verificationRevision]);
 
   const inspection = details?.oid === oid ? (details.inspection ?? null) : null;
   const commit =

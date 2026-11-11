@@ -124,6 +124,13 @@ export const UNSIGNED_COMMIT_SIGNATURE: Readonly<CommitSignatureVerification> = 
   diagnostics: "",
 });
 
+export const UNVERIFIED_COMMIT_SIGNATURE: Readonly<CommitSignatureVerification> = Object.freeze({
+  status: "unverified",
+  format: null,
+  reasonCode: "verification-error",
+  diagnostics: "",
+});
+
 export type DiffLineType = "context" | "addition" | "deletion" | "no-newline";
 
 export interface DiffLine {

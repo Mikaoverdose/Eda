@@ -1,6 +1,8 @@
 import { RepositoryTrustStore } from "./persistence/repository-trust-store";
 import { RepositoryMemberships } from "./persistence/repository-memberships";
 import { ProfileRepository } from "./persistence/profile-repository";
+import { CommitSignatureRepository } from "./persistence/commit-signature-repository";
+import { CommitSignatureService } from "./repo/history/commit-signature-service";
 import { errorText } from "@shared/error-codes";
 import { PACKAGE_MANAGER_NAMES, type InstallationInfo } from "@shared/application";
 import { GitError } from "@shared/errors";
@@ -91,6 +93,7 @@ export interface Services {
   reset: ResetService;
   historyReversal: HistoryReversalService;
   historyRecovery: HistoryRecoveryService;
+  commitSignatures: CommitSignatureService;
   stashes: StashService;
   workflows: WorkflowService;
   conflicts: ConflictService;
@@ -398,6 +401,11 @@ export async function createServices(): Promise<Services> {
         recovery,
       ),
       historyRecovery: new HistoryRecoveryService(git, repositories, writer, journal),
+      commitSignatures: new CommitSignatureService(
+        git,
+        repositories,
+        new CommitSignatureRepository(db),
+      ),
       backgroundFetch,
       pull: new PullService(git, repositories, writer, remotes, workflows, rebase, preferences),
       rebase,

@@ -11,7 +11,11 @@ import {
   type SettingValues,
 } from "@shared/preferences/settings";
 import type { RepositorySummary } from "@shared/repository/repository";
-import type { RepositoryStatus, UnifiedDiff } from "@shared/repository/repository-read";
+import {
+  UNSIGNED_COMMIT_SIGNATURE,
+  type RepositoryStatus,
+  type UnifiedDiff,
+} from "@shared/repository/repository-read";
 import type { StashEntry } from "@shared/workflows/stashes";
 import { commits, containingDemoRefs, demoBranches, demoTags } from "./demo-history";
 export { commits } from "./demo-history";
@@ -104,6 +108,7 @@ export function createDemo() {
     list: async () => ok(demoRepositories),
     status: async () => ok(structuredClone(status)),
     history: async () => ok({ commits, nextOffset: null }),
+    commitSignature: async () => ok(UNSIGNED_COMMIT_SIGNATURE),
     workingDiff: async () => ok(demoDiff),
     commitDiff: async () => ok(demoDiff),
     inspectCommit: async (_id, oid) =>

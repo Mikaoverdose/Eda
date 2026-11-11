@@ -6,7 +6,7 @@ import {
   ArrowRightIcon as ArrowRight,
   GitCommitHorizontalIcon as GitCommitHorizontal,
 } from "../../components/ui/icons";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
@@ -15,6 +15,7 @@ import { ErrorDialog, IconButton, TextButton } from "../../components/ui/index";
 import { layoutCommitPages } from "../../repository/dag-layout";
 import { ROW_HEIGHT, graphColumnWidth } from "../../repository/graph-geometry";
 import { useRepositoryStore } from "../../stores/repository-store";
+import { usePreferencesStore } from "../../stores/preferences-store";
 import { useSessionStore } from "../../stores/session-store";
 import type { CommitMenuTarget } from "./CommitMenu";
 import { CommitRow } from "./CommitRow";
@@ -31,12 +32,32 @@ const GraphFilterDialog = lazy(() =>
 export function CommitGraph({ pending = false }: { pending?: boolean }) {
   const repositoryId = useRepositoryStore((state) => state.repositoryId);
   const identityId = useRepositoryStore((state) => state.identityId);
+  const vigilantMode = usePreferencesStore((state) => state.values.vigilantMode.value);
 
   const savedColumns = useSessionStore((state) =>
     repositoryId ? state.snapshot?.session.views[repositoryId]?.graphColumns : undefined,
   );
 
   const columns = savedColumns ?? defaultGraphColumns();
+  const shaColumnShown = columns.some((column) => column.id === "sha" && column.visible);
+  const shaHeader = useRef<HTMLSpanElement>(null);
+  const [shaColumnVisible, setShaColumnVisible] = useState(false);
+
+  useEffect(() => {
+    const header = shaHeader.current;
+    if (!vigilantMode || !shaColumnShown || !header) {
+      setShaColumnVisible(false);
+      return;
+    }
+
+    // Follow the column's container-query visibility without duplicating its CSS breakpoint.
+    const observer = new ResizeObserver(([entry]) => {
+      setShaColumnVisible(!!entry && entry.contentRect.width > 0 && entry.contentRect.height > 0);
+    });
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [vigilantMode, shaColumnShown]);
+
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
 
@@ -213,6 +234,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
             .map((column) => (
               <span
                 key={column.id}
+                ref={column.id === "sha" ? shaHeader : undefined}
                 style={{ width: column.width }}
                 className="hidden shrink-0 truncate @xl:block"
               >
@@ -290,6 +312,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
                 gutter={gutter}
                 selected={selection?.kind === "commit" && selection.oid === row.commit.oid}
                 related={related.has(row.commit.oid)}
+                vigilantMode={vigilantMode && shaColumnVisible}
                 onSelect={() => void selectCommit(row.commit.oid)}
                 onContextMenu={(event) => {
                   event.preventDefault();

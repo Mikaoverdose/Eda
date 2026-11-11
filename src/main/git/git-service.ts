@@ -473,10 +473,14 @@ export class GitService {
     return { commits, nextOffset: hasMore ? offset + limit : null };
   }
 
-  async inspectCommit(path: string, oid: string): Promise<CommitInspection> {
+  async inspectCommit(
+    path: string,
+    oid: string,
+    cachedSignature?: CommitSignatureVerification,
+  ): Promise<CommitInspection> {
     assertFullObjectId(oid, t("operations.inspectCommit"));
 
-    const [log, refs, shallow, object] = await Promise.all([
+    const [log, refs, shallow, signature] = await Promise.all([
       this.exec(["log", "-1", "--decorate=full", ...LOG_ARGUMENTS, oid, "--"], {
         cwd: path,
         operation: t("operations.inspectCommit"),
@@ -501,11 +505,7 @@ export class GitService {
         cwd: path,
         operation: t("operations.inspectHistoryBoundary"),
       }),
-      this.exec(["cat-file", "commit", oid], {
-        cwd: path,
-        operation: t("operations.inspectCommit"),
-        maxStdoutBytes: 1024 * 1024,
-      }),
+      cachedSignature ?? this.commitSignature(path, oid),
     ]);
 
     const commit = parseOutput(parseLog, log.stdoutBytes, path, t("operations.inspectCommit"))[0];
@@ -519,12 +519,6 @@ export class GitService {
           "main.git.gitService.refreshReferencesAndSelectAnAvailableCommit",
         ),
       });
-
-    const signature = await this.verifyCommitSignature(
-      path,
-      oid,
-      commitSignatureFormat(object.stdout),
-    );
 
     return {
       commit,

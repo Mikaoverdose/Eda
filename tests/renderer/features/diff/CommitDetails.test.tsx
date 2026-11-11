@@ -9,6 +9,8 @@ import type {
 import { CommitDetails } from "@renderer/features/diff/CommitDetails";
 import { CommitChangesPanel } from "@renderer/features/history/CommitChangesPanel";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
+import { CommitRow } from "@renderer/features/history/CommitRow";
+import { layoutCommitPage } from "@renderer/repository/dag-layout";
 
 const commit: HistoryCommit = {
   oid: "a".repeat(40),
@@ -136,6 +138,7 @@ it("rechecks trust without clearing the file filter and ignores a response for t
     expect(container.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe(
       "Checking signature",
     );
+    expect(container.querySelector('[role="img"] .animate-spin-fast')).not.toBeNull();
 
     await act(async () =>
       pending[0]!(
@@ -165,6 +168,7 @@ it("rechecks trust without clearing the file filter and ignores a response for t
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Verify signature again"]')!.click(),
     );
+    expect(window.eda.repository.inspectCommit).toHaveBeenLastCalledWith("repo", commit.oid, true);
 
     expect(filter.value).toBe("keep-filter");
 
@@ -174,6 +178,11 @@ it("rechecks trust without clearing the file filter and ignores a response for t
 
     await act(async () =>
       useRepositoryStore.setState({ selection: { kind: "commit", oid: "c".repeat(40) } }),
+    );
+    expect(window.eda.repository.inspectCommit).toHaveBeenLastCalledWith(
+      "repo",
+      "c".repeat(40),
+      false,
     );
 
     await act(async () =>
@@ -190,6 +199,96 @@ it("rechecks trust without clearing the file filter and ignores a response for t
     );
 
     expect(container.querySelector('[aria-label="Invalid signature"]')).toBeNull();
+  } finally {
+    await act(async () => useRepositoryStore.setState(previous));
+  }
+});
+
+it("ends the verification loading state when the inspection request rejects", async () => {
+  const previous = useRepositoryStore.getState();
+  vi.stubGlobal("eda", {
+    repository: { inspectCommit: vi.fn().mockRejectedValue(new Error("Transport closed")) },
+  });
+
+  try {
+    useRepositoryStore.setState({
+      repositoryId: "failed-inspection",
+      selection: { kind: "commit", oid: commit.oid },
+      pages: [{ commits: [commit], nextOffset: null }],
+      diff: { files: [] },
+      error: null,
+      diffLoading: false,
+    });
+
+    await act(async () => root.render(<CommitChangesPanel />));
+    expect(container.querySelector('[aria-label="Checking signature"]')).toBeNull();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+  } finally {
+    await act(async () => useRepositoryStore.setState(previous));
+  }
+});
+
+it("finishes a history row's recheck after selecting another commit", async () => {
+  const previous = useRepositoryStore.getState();
+  const pending: Array<(value: Result<CommitInspection>) => void> = [];
+  const verified: CommitSignatureVerification = {
+    status: "verified",
+    format: "ssh",
+    reasonCode: null,
+    diagnostics: "",
+  };
+  vi.stubGlobal("eda", {
+    repository: {
+      commitSignature: async () => ok(verified),
+      inspectCommit: () =>
+        new Promise<Result<CommitInspection>>((resolve) => pending.push(resolve)),
+    },
+  });
+
+  try {
+    useRepositoryStore.setState({
+      repositoryId: "refresh-row",
+      selection: { kind: "commit", oid: commit.oid },
+      pages: [{ commits: [commit], nextOffset: null }],
+      diff: { files: [] },
+      error: null,
+      diffLoading: false,
+    });
+    await act(async () =>
+      root.render(
+        <>
+          <CommitChangesPanel />
+          <CommitRow
+            row={layoutCommitPage([commit]).rows[0]!}
+            columns={[{ id: "sha", visible: true, width: 72 }]}
+            gutter={40}
+            selected={false}
+            related={false}
+            vigilantMode
+            onSelect={vi.fn()}
+            onContextMenu={vi.fn()}
+          />
+        </>,
+      ),
+    );
+    await act(async () => pending[0]!(ok(inspection(verified))));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("button[aria-controls]")!.click(),
+    );
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Verify signature again"]')!.click(),
+    );
+    const rowIcon = () => container.querySelector('[data-tour="history-commit"] [role="img"]');
+    expect(rowIcon()?.getAttribute("aria-label")).toBe("Checking signature");
+
+    await act(async () =>
+      useRepositoryStore.setState({ selection: { kind: "commit", oid: "c".repeat(40) } }),
+    );
+    await act(async () =>
+      pending[1]!(ok(inspection({ ...verified, status: "invalid", reasonCode: "bad-signature" }))),
+    );
+    expect(rowIcon()?.getAttribute("aria-label")).toBe("Invalid signature");
+    expect(rowIcon()?.querySelector(".animate-spin-fast")).toBeNull();
   } finally {
     await act(async () => useRepositoryStore.setState(previous));
   }

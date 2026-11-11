@@ -4,7 +4,10 @@ import { CredentialsSettings } from "@renderer/features/credentials/CredentialsS
 import { useAppStore } from "@renderer/stores/app-store";
 import type { ConnectionTestResult, SshKey } from "@shared/identity/ssh";
 
-vi.mock("@renderer/features/credentials/SigningSettings", () => ({ SigningSettings: () => null }));
+vi.mock("@renderer/features/credentials/SigningSettings", () => ({
+  SigningSettings: () => null,
+  VigilantModeSettings: () => null,
+}));
 
 it.each([
   [false, false],

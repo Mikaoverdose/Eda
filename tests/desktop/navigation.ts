@@ -4,6 +4,8 @@ import { trustFixture } from "./helpers/trust.ts";
 import { finishOnboarding } from "./helpers/onboarding.ts";
 import assert from "node:assert/strict";
 import { type ElectronApplication } from "playwright";
+import { expect } from "playwright/test";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -391,6 +393,44 @@ try {
   );
 
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await settings.click();
+  await page.locator('button[aria-controls="settings-credentials"]').click();
+
+  const vigilantMode = page.getByRole("checkbox", { name: "Vigilant mode", exact: true });
+  await vigilantMode.waitFor();
+  assert.equal(await vigilantMode.isChecked(), false);
+  await vigilantMode.click();
+  await expect(vigilantMode).toBeChecked();
+  await settings.click();
+
+  const graph = page.getByTestId("commit-graph");
+  const unsigned = graph.getByRole("img", { name: "Unsigned", exact: true });
+  await unsigned.waitFor({ state: "visible" });
+  assert.ok(await unsigned.boundingBox(), "The SHA signing icon must fit the visible column.");
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(graph.locator('[data-tour="history-commit"] [role="img"]')).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await unsigned.waitFor({ state: "visible" });
+
+  await settings.click();
+  await vigilantMode.waitFor();
+  await expect(vigilantMode).toBeChecked();
+  await vigilantMode.click();
+  await expect(vigilantMode).not.toBeChecked();
+  await settings.click();
+  await unsigned.waitFor({ state: "detached" });
+
+  const database = new DatabaseSync(join(root, "eda.db"));
+  try {
+    const saved = database
+      .prepare("SELECT value FROM commit_signatures WHERE repository_id = ?")
+      .all(repositoryId);
+    assert.equal(saved.length, 1, "Disabling vigilant mode must keep the saved verification.");
+  } finally {
+    database.close();
+  }
+
   await settings.click();
   await page.getByRole("button", { name: "About", exact: true }).click();
   await page.getByRole("checkbox", { name: "Enable developer settings", exact: true }).check();

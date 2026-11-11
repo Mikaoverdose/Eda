@@ -118,6 +118,11 @@ export const SETTING_DEFINITIONS = {
     scopes: profile,
     validate: boolean,
   }),
+  vigilantMode: define<boolean>({
+    defaultValue: false,
+    scopes: ["profile"],
+    validate: boolean,
+  }),
   commitPrefixes: define<string[]>({
     defaultValue: DEFAULT_COMMIT_PREFIXES,
     scopes: profile,

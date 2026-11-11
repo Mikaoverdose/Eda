@@ -51,6 +51,25 @@ function setup() {
 }
 
 describe("preference scopes", () => {
+  it("keeps vigilant mode off by default and persists it only for its profile", () => {
+    const { db, store, work, home } = setup();
+    const scope = { kind: "profile", profileId: work.id } as const;
+
+    expect(store.resolve("vigilantMode", { profileId: work.id }).value).toBe(false);
+    store.set("vigilantMode", scope, true);
+
+    const reloaded = new SettingsRepository(db);
+    expect(
+      reloaded.resolve("vigilantMode", { profileId: work.id, repositoryId: "repo" }).value,
+    ).toBe(true);
+    expect(reloaded.resolve("vigilantMode", { profileId: home.id }).value).toBe(false);
+    expect(() => store.set("vigilantMode", { kind: "application" }, true)).toThrow();
+    expect(() => store.set("vigilantMode", scope, "true")).toThrow();
+
+    store.reset("vigilantMode", scope);
+    expect(store.resolve("vigilantMode", { profileId: work.id }).value).toBe(false);
+  });
+
   it("keeps developer settings disabled by default and persists the application opt-in", () => {
     const { db, store, work, home } = setup();
     const scope = { kind: "application" } as const;

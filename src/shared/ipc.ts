@@ -92,6 +92,7 @@ import type {
 import type {
   CommitDiffRequest,
   CommitInspection,
+  CommitSignatureVerification,
   HistoryPage,
   HistoryPageRequest,
   RepositoryStatus,
@@ -395,7 +396,12 @@ export interface EdaApi {
   repository: {
     referenceUrl(id: string, kind: ReferenceLinkKind, name: string): Promise<Result<string | null>>;
     previewCommit(id: string): Promise<Result<CommitPreview>>;
-    inspectCommit(id: string, oid: string): Promise<Result<CommitInspection>>;
+    inspectCommit(
+      id: string,
+      oid: string,
+      refreshSignature?: boolean,
+    ): Promise<Result<CommitInspection>>;
+    commitSignature(id: string, oid: string): Promise<Result<CommitSignatureVerification>>;
     ignoredFiles(id: string): Promise<Result<{ paths: string[]; truncated: boolean }>>;
     openEditor(id: string): Promise<Result<void>>;
     openDropped(file: File): Promise<Result<RepositorySummary>>;
@@ -667,6 +673,7 @@ export const IPC_CHANNELS = {
   repositoryPreviewCommit: "repository:previewCommit",
   repositoryForgetRecovery: "repository:forgetRecovery",
   repositoryInspectCommit: "repository:inspectCommit",
+  repositoryCommitSignature: "repository:commitSignature",
   repositoryWorkingDiff: "repository:workingDiff",
   repositoryCommitDiff: "repository:commitDiff",
   repositoryImagePreview: "repository:imagePreview",

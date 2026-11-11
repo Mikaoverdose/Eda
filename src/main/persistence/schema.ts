@@ -67,6 +67,25 @@ export const repositories = sqliteTable(
   ],
 );
 
+export const commitSignatures = sqliteTable(
+  "commit_signatures",
+  {
+    profileId: text("profile_id").notNull(),
+    repositoryId: text("repository_id").notNull(),
+    oid: text("oid").notNull(),
+    version: integer("version").notNull().default(1),
+    value: text("value").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.repositoryId, table.oid] }),
+    foreignKey({
+      columns: [table.profileId, table.repositoryId],
+      foreignColumns: [repositories.identityId, repositories.id],
+    }).onDelete("cascade"),
+    check("commit_signatures_value_json", sql`json_valid(${table.value})`),
+  ],
+);
+
 export const settings = sqliteTable(
   "settings",
   { key: text("key").notNull(), value: text("value").notNull() },

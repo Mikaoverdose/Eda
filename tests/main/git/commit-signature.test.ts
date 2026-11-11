@@ -154,6 +154,7 @@ it("verifies real SSH signatures, rejects tampering and reports missing trust or
       trustLevel: "fully",
     });
     expect(verified.signature.fingerprint).toMatch(/^SHA256:/);
+    expect(await repo.git.commitSignature(repo.path, oid)).toEqual(verified.signature);
     expect(await repo.run(["show-ref"])).toBe(before);
     expect(await repo.run(["status", "--porcelain"])).toBe("");
 
