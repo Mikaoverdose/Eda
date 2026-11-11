@@ -36,7 +36,7 @@ export interface UpdateOptions {
   homebrew?: {
     check(version: string): Promise<string | null>;
     install(version: string): Promise<void>;
-    restart(): void;
+    restart(): void | Promise<void>;
   };
   prepareInstall: () => Promise<() => void>;
   now?: () => number;
@@ -307,7 +307,7 @@ export class UpdateService {
 
         await this.options.homebrew.install(version);
         this.installingHomebrew = false;
-        this.options.homebrew.restart();
+        await this.options.homebrew.restart();
       } else {
         const driver = await this.native();
 

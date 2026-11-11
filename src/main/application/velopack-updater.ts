@@ -17,7 +17,7 @@ export async function createVelopackUpdater(
   platform: UpdatePlatform,
   arch: string,
   currentVersion: string,
-  quit: () => void,
+  restart: () => void | Promise<void>,
 ): Promise<VelopackUpdater> {
   const { HttpSource, UpdateManager } = await import("velopack");
   const manager = new UpdateManager(new HttpSource(feedUrl, { TimeoutMilliseconds: 120_000 }), {
@@ -29,7 +29,7 @@ export async function createVelopackUpdater(
   if (manager.getAppId() !== UPDATE_PACKAGE_ID || manager.getCurrentVersion() !== currentVersion)
     throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
 
-  return new VelopackUpdater(manager, quit, (asset) =>
+  return new VelopackUpdater(manager, restart, (asset) =>
     verifyPublishedPackage(asset, updateChannel(platform, arch)),
   );
 }
@@ -84,7 +84,7 @@ export class VelopackUpdater implements UpdateDriver {
       | "waitExitThenApplyUpdate"
       | "getCurrentVersion"
     >,
-    private readonly quit: () => void,
+    private readonly restart: () => void | Promise<void>,
     private readonly verifyPackage: (asset: VelopackAsset) => Promise<void>,
   ) {}
 
@@ -130,10 +130,10 @@ export class VelopackUpdater implements UpdateDriver {
     this.verified = false;
   }
 
-  install(): void {
+  install(): void | Promise<void> {
     if (!this.update || !this.verified) throw new AppError(ERROR_CODE.UPDATER_UNAVAILABLE);
 
     this.manager.waitExitThenApplyUpdate(this.update, false, true);
-    this.quit();
+    return this.restart();
   }
 }

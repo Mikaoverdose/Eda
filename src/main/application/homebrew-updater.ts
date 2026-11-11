@@ -15,7 +15,7 @@ export class HomebrewUpdater {
     private readonly executable: string,
     private readonly directory: string,
     private readonly currentVersion: string,
-    readonly restart: () => void,
+    readonly restart: () => void | Promise<void>,
     environment: NodeJS.ProcessEnv = process.env,
   ) {
     this.environment = buildGitEnvironment(

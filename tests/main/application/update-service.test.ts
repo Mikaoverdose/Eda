@@ -424,3 +424,18 @@ it("never offers a Homebrew update after a failed cask check or when the release
   expect(service.snapshot().phase).toBe("current");
   expect(homebrew.check).toHaveBeenCalledOnce();
 });
+
+it("restores app operations and reports an asynchronous Homebrew restart failure", async () => {
+  const { service, homebrew, rollback } = homebrewFixture();
+  await service.check();
+  homebrew.restart.mockRejectedValueOnce(new Error("fixture restart failure"));
+  await service.install();
+  expect(homebrew.install).toHaveBeenCalledExactlyOnceWith(release.version);
+  expect(rollback).toHaveBeenCalledOnce();
+  expect(service.blocksQuit).toBe(false);
+  expect(service.snapshot()).toMatchObject({
+    phase: "idle",
+    release: null,
+    error: expect.any(String),
+  });
+});

@@ -16,3 +16,12 @@ export interface GraphicsStatus {
   enabledAtStartup: boolean;
   compositing: "hardware" | "software" | "pending";
 }
+
+export const DEVELOPMENT_RESTART = {
+  request: "eda:development:restart",
+  importRequest: "eda:import-release-data:restart",
+  ready: "eda:development:restart-ready",
+  argument: "--eda-import-release-data",
+} as const;
+
+export type DevelopmentRestartAction = "restart" | "import-release-data";

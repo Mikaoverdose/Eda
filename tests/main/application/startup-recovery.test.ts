@@ -8,11 +8,14 @@ const recovery = vi.hoisted(() => ({
   showErrorBox: vi.fn(),
   clearStartupData: vi.fn(),
   clearStorageData: vi.fn(),
-  relaunch: vi.fn(),
+  restartApplication: vi.fn(),
   exit: vi.fn(),
 }));
+vi.mock("@main/application/restart", () => ({
+  restartApplication: recovery.restartApplication,
+}));
 vi.mock("electron", () => ({
-  app: { getPath: () => "/eda-data", relaunch: recovery.relaunch, exit: recovery.exit },
+  app: { getPath: () => "/eda-data", exit: recovery.exit },
   dialog: { showMessageBox: recovery.showMessageBox, showErrorBox: recovery.showErrorBox },
   session: { defaultSession: { clearStorageData: recovery.clearStorageData } },
 }));
@@ -37,7 +40,7 @@ it("offers recovery for migration mismatches with a safe default and preserves d
   );
   expect(recovery.clearStartupData).not.toHaveBeenCalled();
   expect(recovery.clearStorageData).not.toHaveBeenCalled();
-  expect(recovery.relaunch).not.toHaveBeenCalled();
+  expect(recovery.restartApplication).not.toHaveBeenCalled();
   expect(recovery.exit).toHaveBeenCalledWith(1);
 });
 
@@ -46,16 +49,14 @@ it("clears local app data and browser storage before relaunching after an explic
   await recoverMigrationStartup(new AppError(ERROR_CODE.MIGRATION_HISTORY_MISMATCH));
   expect(recovery.clearStartupData).toHaveBeenCalledExactlyOnceWith("/eda-data");
   expect(recovery.clearStorageData).toHaveBeenCalledOnce();
-  expect(recovery.relaunch).toHaveBeenCalledOnce();
-  expect(recovery.exit).toHaveBeenCalledWith(0);
+  expect(recovery.restartApplication).toHaveBeenCalledOnce();
+  expect(recovery.restartApplication).toHaveBeenCalledWith({ shutdown: "exit" });
+  expect(recovery.exit).not.toHaveBeenCalled();
   expect(recovery.clearStartupData.mock.invocationCallOrder[0]).toBeLessThan(
     recovery.clearStorageData.mock.invocationCallOrder[0]!,
   );
   expect(recovery.clearStorageData.mock.invocationCallOrder[0]).toBeLessThan(
-    recovery.relaunch.mock.invocationCallOrder[0]!,
-  );
-  expect(recovery.relaunch.mock.invocationCallOrder[0]).toBeLessThan(
-    recovery.exit.mock.invocationCallOrder[0]!,
+    recovery.restartApplication.mock.invocationCallOrder[0]!,
   );
 });
 
@@ -74,7 +75,7 @@ it.each(["files", "browser storage"])(
       "Eda could not clear its saved data",
       failure.message,
     );
-    expect(recovery.relaunch).not.toHaveBeenCalled();
+    expect(recovery.restartApplication).not.toHaveBeenCalled();
     expect(recovery.exit).toHaveBeenCalledWith(1);
   },
 );
@@ -86,4 +87,13 @@ it("does not offer destructive recovery for unrelated startup errors", async () 
   expect(recovery.showMessageBox).not.toHaveBeenCalled();
   expect(recovery.clearStartupData).not.toHaveBeenCalled();
   expect(recovery.exit).not.toHaveBeenCalled();
+});
+
+it("reports a failed restart without attempting another restart", async () => {
+  recovery.showMessageBox.mockResolvedValue({ response: 1 });
+  recovery.restartApplication.mockRejectedValue(new AppError(ERROR_CODE.DEBUG_IPC_FAILURE));
+  await recoverMigrationStartup(new AppError(ERROR_CODE.MIGRATION_HISTORY_MISMATCH));
+  expect(recovery.showErrorBox).toHaveBeenCalledOnce();
+  expect(recovery.restartApplication).toHaveBeenCalledExactlyOnceWith({ shutdown: "exit" });
+  expect(recovery.exit).toHaveBeenCalledExactlyOnceWith(1);
 });

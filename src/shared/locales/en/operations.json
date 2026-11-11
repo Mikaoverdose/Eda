@@ -320,5 +320,6 @@
   "operationTitles.rebase": "Rebase",
   "operationTitles.redo": "Redo",
   "operationTitles.undo": "Undo",
-  "operations.gitLabSignIn": "GitLab sign-in"
+  "operations.gitLabSignIn": "GitLab sign-in",
+  "operations.restartApp": "restart Eda"
 }

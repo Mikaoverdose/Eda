@@ -15,6 +15,7 @@ import { createVelopackUpdater, type VelopackUpdater } from "./application/velop
 import { detectInstallation } from "./application/installation";
 import { HomebrewUpdater } from "./application/homebrew-updater";
 import { checkReleaseFeed } from "./application/release-feed";
+import { restartApplication } from "./application/restart";
 import { clearDatabase } from "./persistence/reset-data";
 import { SshHostTrustPrompts } from "./application/ssh-host-trust";
 import { UpdateService } from "./application/update-service";
@@ -310,7 +311,7 @@ export async function createServices(): Promise<Services> {
           platform,
           process.arch,
           app.getVersion(),
-          () => app.quit(),
+          () => restartApplication({ relaunch: "external" }),
         );
 
         capability = "automatic";
@@ -342,16 +343,15 @@ export async function createServices(): Promise<Services> {
           installation.executable,
           neutralDirectory,
           app.getVersion(),
-          () => {
-            app.relaunch();
-            app.quit();
-          },
+          restartApplication,
         ),
       }),
       createDriver: (url) =>
         url === initialFeedUrl
           ? installedUpdater!
-          : createVelopackUpdater(url, platform, process.arch, app.getVersion(), () => app.quit()),
+          : createVelopackUpdater(url, platform, process.arch, app.getVersion(), () =>
+              restartApplication({ relaunch: "external" }),
+            ),
       prepareInstall: async () => {
         const release = beginUpdateInstall();
 

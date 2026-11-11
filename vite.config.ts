@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
+import { startup as electronStartup } from "vite-plugin-electron";
+import { watchDevelopmentRestart } from "./scripts/development-restart.ts";
+import { DEVELOPMENT_RESTART } from "./src/shared/application.ts";
 import type { ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { prepareGit } from "./scripts/prepare-git.ts";
@@ -36,14 +39,29 @@ export default defineConfig(async ({ command }) => {
         main: {
           entry: resolve("./src/main/index.ts"),
           onstart: async ({ startup }) => {
-            await startup([resolve(".")], {
-              env: devElectronEnv(),
-              stdio: ["inherit", "inherit", "pipe", "ipc"],
-            });
+            const launch = async (args: string[] = []) => {
+              await startup([resolve("."), ...args], {
+                env: devElectronEnv(),
+                stdio: ["inherit", "inherit", "pipe", "ipc"],
+              });
 
-            (process as NodeJS.Process & { electronApp?: ChildProcess }).electronApp?.stderr
-              ?.pipe(electronStderr(process.env["EDA_CHROMIUM_DIAGNOSTICS"] === "1"))
-              .pipe(process.stderr, { end: false });
+              const child = (process as NodeJS.Process & { electronApp?: ChildProcess })
+                .electronApp;
+              if (!child) return;
+              child.stderr
+                ?.pipe(electronStderr(process.env["EDA_CHROMIUM_DIAGNOSTICS"] === "1"))
+                .pipe(process.stderr, { end: false });
+              watchDevelopmentRestart(
+                child,
+                // Signal 0 registers a planned stop without interrupting Eda's save/quit handshake.
+                () => electronStartup.exit(0),
+                (action) =>
+                  launch(action === "import-release-data" ? [DEVELOPMENT_RESTART.argument] : []),
+                (error) => console.error("[Eda Development Restart]", error),
+              );
+            };
+
+            await launch();
           },
           vite: {
             resolve: {

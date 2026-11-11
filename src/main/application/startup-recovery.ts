@@ -2,6 +2,7 @@ import { ERROR_CODE } from "@shared/error-codes";
 import { AppError, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { app, dialog, session } from "electron";
+import { restartApplication } from "./restart";
 import { clearStartupData } from "../persistence/reset-data";
 
 export async function recoverMigrationStartup(error: unknown): Promise<boolean> {
@@ -25,8 +26,7 @@ export async function recoverMigrationStartup(error: unknown): Promise<boolean> 
     }
     clearStartupData(app.getPath("userData"));
     await session.defaultSession.clearStorageData();
-    app.relaunch();
-    app.exit(0);
+    await restartApplication({ shutdown: "exit" });
   } catch (failure) {
     dialog.showErrorBox(t("main.startupRecovery.resetFailed"), errorMessage(failure));
     app.exit(1);

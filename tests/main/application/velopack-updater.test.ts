@@ -122,3 +122,12 @@ it("binds the native download to the platform's published GitHub release digest"
   ).rejects.toThrow();
   expect(request).toHaveBeenCalledTimes(2);
 });
+
+it("propagates asynchronous restart failures after scheduling the native update helper", async () => {
+  const { driver, manager, quit } = fixture();
+  await driver.check();
+  await driver.download(vi.fn());
+  quit.mockRejectedValueOnce(new Error("fixture restart failure"));
+  await expect(driver.install()).rejects.toThrow("fixture restart failure");
+  expect(manager.waitExitThenApplyUpdate).toHaveBeenCalledExactlyOnceWith(update, false, true);
+});
