@@ -86,10 +86,9 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await finishOnboarding(page);
   await page.getByRole("button", { name: /Active profile: Work/ }).waitFor();
-  assert.equal(
-    (await page.evaluate((path) => window.eda.repository.open(path), repository)).ok,
-    true,
-  );
+  const opened = await page.evaluate((path) => window.eda.repository.open(path), repository);
+
+  assert.ok(opened.ok, JSON.stringify(opened));
 
   await page.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+p`);
 
@@ -201,6 +200,11 @@ try {
     '#!/bin/sh\necho "token=private-test-secret" >&2\nexit 1\n',
     { mode: 0o755 },
   );
+
+  const trust = await page.evaluate((id) => window.eda.repository.reviewTrust(id), opened.value.id);
+
+  assert.ok(trust.ok, JSON.stringify(trust));
+
   await page.getByRole("button", { name: "Stage file.txt", exact: true }).click();
   await draft.fill("Keep failed draft");
   await page.getByRole("button", { name: "Commit", exact: true }).click();

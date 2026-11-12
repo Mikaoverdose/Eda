@@ -116,6 +116,10 @@ try {
     { mode: 0o755 },
   );
 
+  const trust = await page.evaluate((id) => window.eda.repository.reviewTrust(id), repository.id);
+
+  assert.ok(trust.ok, JSON.stringify(trust));
+
   const commit = await page.evaluate(async (repositoryId) => {
     const result = await window.eda.repository.commit({
       repositoryId,

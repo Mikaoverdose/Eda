@@ -374,6 +374,11 @@ try {
 
   git(repository.path, "config", "gpg.program", gpg);
   git(repository.path, "config", "--global", "gpg.program", gpg);
+
+  const trust = await page.evaluate((id) => window.eda.repository.reviewTrust(id), repository.id);
+
+  assert.ok(trust.ok, JSON.stringify(trust));
+
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
     .getByRole("navigation", { name: "Settings sections" })

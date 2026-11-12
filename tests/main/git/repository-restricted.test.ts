@@ -1,4 +1,4 @@
-import { access, chmod } from "node:fs/promises";
+import { access, chmod, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { RepositoryTrust } from "@main/git/security/repository-trust";
 import { RepositoryExecutionInspector } from "@main/git/security/repository-execution";
@@ -64,7 +64,7 @@ it("keeps repository hooks disabled after declining and enables them only after 
     await f.repo.writeFile(".git/hooks/pre-commit", "#!/bin/sh\necho executed > marker\n");
     await chmod(join(f.repo.path, ".git/hooks/pre-commit"), 0o755);
     await f.trust.authorize(f.repo.path);
-    expect(f.confirm).toHaveBeenCalledWith(f.repo.path, ["hooks/pre-commit"]);
+    expect(f.confirm).toHaveBeenCalledWith(await realpath(f.repo.path), ["hooks/pre-commit"]);
     await f.git.exec(["commit", "--allow-empty", "-m", "restricted"], {
       cwd: f.repo.path,
       operation: "test",
@@ -94,7 +94,7 @@ it("detects globally configured filters activated by tracked attributes, permits
     await f.repo.commit("fixture");
     await f.repo.run(["config", "--global", "filter.fixture.clean", "echo executed > marker; cat"]);
     await f.trust.authorize(f.repo.path);
-    expect(f.confirm).toHaveBeenCalledWith(f.repo.path, ["filter.fixture"]);
+    expect(f.confirm).toHaveBeenCalledWith(await realpath(f.repo.path), ["filter.fixture"]);
     await f.git.status(f.repo.path);
     await expect(f.git.stageAll(f.repo.path)).rejects.toThrow(/disabled filters/);
     await expect(access(join(f.repo.path, "marker"))).rejects.toThrow();
@@ -141,7 +141,7 @@ it("inspects a clone before checkout and leaves filtered files absent when trust
     });
     await f.trust.rememberCreated(target);
     await f.trust.authorize(target);
-    expect(f.confirm).toHaveBeenCalledWith(target, ["filter.fixture"]);
+    expect(f.confirm).toHaveBeenCalledWith(await realpath(target), ["filter.fixture"]);
     await expect(
       f.git.exec(["reset", "--hard", "HEAD"], { cwd: target, operation: "test" }),
     ).rejects.toThrow(/disabled filters/);
@@ -203,7 +203,7 @@ it("detects tracked hook locations before checkout while ignoring inert script f
     });
     await f.trust.rememberCreated(target);
     await f.trust.authorize(target);
-    expect(f.confirm).toHaveBeenCalledWith(target, [".githooks/post-checkout"]);
+    expect(f.confirm).toHaveBeenCalledWith(await realpath(target), [".githooks/post-checkout"]);
     await f.git.exec(["read-tree", "-m", "-u", "HEAD"], { cwd: target, operation: "test" });
     await expect(access(join(target, "marker"))).rejects.toThrow();
   } finally {

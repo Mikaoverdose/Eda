@@ -272,7 +272,7 @@ try {
 
   await manage.getByRole("button", { name: "Close", exact: true }).click();
   await page.keyboard.press(`${modifier}+w`);
-  await page.getByRole("button", { name: "Rename foundations", exact: true }).click();
+  await page.getByRole("button", { name: "Edit foundations", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Repository display name", exact: true })
     .fill("Favourite project");
