@@ -1,4 +1,4 @@
-import { DEVELOPMENT_RESTART } from "@shared/application";
+import { DEVELOPMENT_DESKTOP, DEVELOPMENT_RESTART } from "@shared/application";
 import { errorText } from "@shared/error-codes";
 import { redactDiagnostic } from "@shared/diagnostics";
 import { errorMessage, GitError } from "@shared/errors";
@@ -62,6 +62,12 @@ if (!app.commandLine.hasSwitch("user-data-dir")) {
   app.setPath("userData", userData);
 }
 
+const liveDevelopment = isDev && !!process.env["VITE_DEV_SERVER_URL"];
+app.setName(liveDevelopment ? DEVELOPMENT_DESKTOP.name : "Eda");
+if (liveDevelopment && process.platform === "linux") app.setDesktopName(DEVELOPMENT_DESKTOP.file);
+if (process.platform === "win32")
+  app.setAppUserModelId(liveDevelopment ? DEVELOPMENT_DESKTOP.id : "cafe.kirameki.eda");
+
 const CSP = [
   "default-src 'self'",
   "style-src 'self' 'unsafe-inline'",
@@ -78,6 +84,7 @@ const CSP = [
 function createWindow(zoom = 100): BrowserWindow {
   const window = new BrowserWindow({
     icon: appIcon,
+    title: app.getName(),
     width: 1440,
     height: 900,
     minWidth: 940,

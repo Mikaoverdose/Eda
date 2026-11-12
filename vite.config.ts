@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import { startup as electronStartup } from "vite-plugin-electron";
+import { prepareDevelopmentDesktop } from "./scripts/development-desktop.ts";
 import { watchDevelopmentRestart } from "./scripts/development-restart.ts";
 import { DEVELOPMENT_RESTART } from "./src/shared/application.ts";
 import type { ChildProcess } from "node:child_process";
@@ -22,6 +23,8 @@ function devElectronEnv(): Record<string, string> {
 export default defineConfig(async ({ command }) => {
   await Promise.all([prepareGit(), prepareComponentInventory()]);
   const buildInfo = readBuildInfo();
+  if (command === "serve" && process.platform === "linux")
+    await prepareDevelopmentDesktop(resolve("."));
 
   return {
     root: resolve("./src/renderer"),

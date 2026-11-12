@@ -17,6 +17,12 @@ export interface GraphicsStatus {
   compositing: "hardware" | "software" | "pending";
 }
 
+export const DEVELOPMENT_DESKTOP = {
+  name: "Eda Dev",
+  id: "cafe.kirameki.eda.dev",
+  file: "cafe.kirameki.eda.dev.desktop",
+} as const;
+
 export const DEVELOPMENT_RESTART = {
   request: "eda:development:restart",
   importRequest: "eda:import-release-data:restart",

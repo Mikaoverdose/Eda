@@ -14,6 +14,8 @@ const startup = vi.hoisted(() => ({
   exit: vi.fn(),
   hasSwitch: vi.fn(() => false),
   setPath: vi.fn(),
+  setName: vi.fn(),
+  setDesktopName: vi.fn(),
   existsSync: vi.fn(() => false),
   mkdirSync: vi.fn(),
   renameSync: vi.fn(),
@@ -45,6 +47,10 @@ vi.mock("electron", () => ({
     commandLine: { hasSwitch: startup.hasSwitch },
     getPath: () => appData,
     setPath: startup.setPath,
+    setName: startup.setName,
+    setDesktopName: startup.setDesktopName,
+    setAppUserModelId: vi.fn(),
+    getName: () => "Eda",
     requestSingleInstanceLock: () => true,
     whenReady: () => Promise.resolve(),
     getPreferredSystemLanguages: () => ["en-US"],
@@ -205,4 +211,21 @@ it("rejects the import startup argument outside a development session", async ()
     process.argv.splice(0, process.argv.length, ...argv);
     log.mockRestore();
   }
+});
+
+it("identifies live development windows without changing the development profile path", async () => {
+  vi.stubEnv("VITE_DEV_SERVER_URL", "http://localhost:5173");
+  await import("@main/index");
+
+  expect(startup.setName).toHaveBeenCalledWith("Eda Dev");
+  if (process.platform === "linux")
+    expect(startup.setDesktopName).toHaveBeenCalledWith("cafe.kirameki.eda.dev.desktop");
+  expect(startup.setPath).toHaveBeenCalledWith("userData", join(appData, "Eda-Dev"));
+});
+
+it("keeps ordinary launches out of the live development desktop identity", async () => {
+  await import("@main/index");
+
+  expect(startup.setName).toHaveBeenCalledWith("Eda");
+  expect(startup.setDesktopName).not.toHaveBeenCalled();
 });
