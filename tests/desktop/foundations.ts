@@ -212,6 +212,10 @@ try {
   await command("Create branch at selection or HEAD");
   await page.getByRole("textbox", { name: "Branch name", exact: true }).fill("feature/new");
   await page.getByRole("textbox", { name: "Branch name", exact: true }).press("Enter");
+
+  await page
+    .getByRole("dialog", { name: "Create branch", exact: true })
+    .waitFor({ state: "hidden" });
   await page.getByRole("button", { name: /On branch feature\/new/ }).waitFor();
   assert.equal(git("branch", "--show-current").trim(), "feature/new");
 
