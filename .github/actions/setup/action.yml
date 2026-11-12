@@ -3,7 +3,7 @@ description: Install the project Node.js, pinned pnpm and locked dependencies
 
 inputs:
   cache-desktop:
-    description: Restore Electron and packaging downloads for desktop and build jobs
+    description: Restore Electron binaries and packaging downloads for desktop and build jobs
     required: false
     default: "true"
   target-arch:
@@ -37,4 +37,18 @@ runs:
           desktop-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-arch }}-
 
     - run: pnpm install --frozen-lockfile
+      shell: bash
+
+    - name: Cache installed Electron binary
+      if: inputs.cache-desktop == 'true'
+      uses: actions/cache@v5
+      with:
+        path: |
+          node_modules/electron/dist
+          node_modules/electron/path.txt
+        key: electron-binary-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Ensure Electron binary is installed
+      if: inputs.cache-desktop == 'true'
+      run: pnpm exec install-electron
       shell: bash
