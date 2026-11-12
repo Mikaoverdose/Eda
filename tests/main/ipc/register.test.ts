@@ -285,6 +285,7 @@ function setup() {
     sessions: { change: vi.fn(), open: vi.fn(), hasBinding: vi.fn(() => true), close: vi.fn() },
     writer: { stage: vi.fn(), clearLocalCommitConfig: vi.fn() },
     credentials: { unlockActiveKey: vi.fn() },
+    repositoryTrust: { current: vi.fn(() => null), respond: vi.fn(() => true) },
     sshHostTrust: { current: vi.fn(() => null), respond: vi.fn(() => true) },
     preferences: { set: vi.fn(), reset: vi.fn(), resolve: vi.fn(() => ({ value: 125 })) },
   };
@@ -460,6 +461,42 @@ describe("IPC registration", () => {
     sshHostTrust.respond.mockReturnValue(false);
 
     expect(await invoke(IPC_CHANNELS.sshRespondHostTrust, repositoryId, true)).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("accepts repository trust decisions only from the main frame with a valid request and boolean", async () => {
+    const { repositoryTrust } = setup();
+    expect(await invoke(IPC_CHANNELS.repositoryPendingTrust)).toEqual({ ok: true, value: null });
+    expect(repositoryTrust.current).toHaveBeenCalledWith(event.sender.id);
+    const handler = handlers.get(IPC_CHANNELS.repositoryRespondTrust)!;
+
+    expect(
+      await handler(
+        { ...event, senderFrame: {} } as Electron.IpcMainInvokeEvent,
+        repositoryId,
+        true,
+      ),
+    ).toMatchObject({ ok: false });
+
+    expect(await invoke(IPC_CHANNELS.repositoryRespondTrust, repositoryId, "yes")).toMatchObject({
+      ok: false,
+    });
+
+    expect(await invoke(IPC_CHANNELS.repositoryRespondTrust, "invalid", true)).toMatchObject({
+      ok: false,
+    });
+
+    expect(repositoryTrust.respond).not.toHaveBeenCalled();
+
+    expect(await invoke(IPC_CHANNELS.repositoryRespondTrust, repositoryId, true)).toMatchObject({
+      ok: true,
+    });
+
+    expect(repositoryTrust.respond).toHaveBeenCalledWith(event.sender.id, repositoryId, true);
+    repositoryTrust.respond.mockReturnValue(false);
+
+    expect(await invoke(IPC_CHANNELS.repositoryRespondTrust, repositoryId, true)).toMatchObject({
       ok: false,
     });
   });

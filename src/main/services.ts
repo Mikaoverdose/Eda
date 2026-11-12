@@ -9,7 +9,7 @@ import { GitError } from "@shared/errors";
 import { setLocale, t } from "@shared/i18n";
 import { IPC_EVENTS } from "@shared/ipc";
 import { updateFeedUrl, type UpdateCapability, type UpdatePlatform } from "@shared/updates";
-import { app, dialog, net, powerMonitor } from "electron";
+import { app, net, powerMonitor } from "electron";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,9 @@ import { checkReleaseFeed } from "./application/release-feed";
 import { restartApplication } from "./application/restart";
 import { prepareReleaseDataImport } from "./persistence/import-release-data";
 import { clearDatabase } from "./persistence/reset-data";
-import { SshHostTrustPrompts } from "./application/ssh-host-trust";
+import { WindowTrustPrompts } from "./application/window-trust-prompts";
+import type { SshHostPrompt } from "@shared/identity/ssh";
+import type { RepositoryTrustRequest } from "@shared/repository/repository";
 import { UpdateService } from "./application/update-service";
 import { AvatarCache } from "./avatars/avatar-cache";
 import { createGitLabInsecureFetch } from "./providers/gitlab-insecure-fetch";
@@ -35,6 +37,7 @@ import { NodeProcessRunner } from "./git/execution/node-process-runner";
 import { ExternalMergeTool } from "./git/external-merge-tool";
 import { GitService } from "./git/git-service";
 import { GpgKeyService } from "./git/security/gpg-keys";
+import { RepositoryExecutionInspector } from "./git/security/repository-execution";
 import { RepositoryTrust } from "./git/security/repository-trust";
 import { RepositoryVolumeIdentity } from "./git/security/repository-volume";
 import { SshAgent } from "./git/security/ssh-agent";
@@ -108,7 +111,8 @@ export interface Services {
   writer: RepositoryWriter;
   secrets: SecretStore;
   ssh: SshService;
-  sshHostTrust: SshHostTrustPrompts;
+  sshHostTrust: WindowTrustPrompts<SshHostPrompt>;
+  repositoryTrust: WindowTrustPrompts<Omit<RepositoryTrustRequest, "id">>;
   sshAgent: SshAgent;
   gpg: GpgKeyService;
   credentials: CredentialService;
@@ -148,31 +152,20 @@ export async function createServices(): Promise<Services> {
     sshAgent = new SshAgent(preferences.resolve("sshAgent").value, "ssh-agent", sshEnvironment);
     await sshAgent.start();
     const transportEnvironment = Object.assign(sshAgent.environment, sshEnvironment);
-    const sshHostTrust = new SshHostTrustPrompts();
+    const sshHostTrust = new WindowTrustPrompts<SshHostPrompt>(IPC_EVENTS.sshHostTrustChanged);
     const transportRunner = new SshHostTrustRunner(runner, sshHostTrust.confirm);
     const neutralDirectory = join(app.getPath("userData"), "git-cwd");
     await mkdir(neutralDirectory, { recursive: true, mode: 0o700 });
 
+    const repositoryTrust = new WindowTrustPrompts<Omit<RepositoryTrustRequest, "id">>(
+      IPC_EVENTS.repositoryTrustChanged,
+    );
     const trust = new RepositoryTrust(
       new RepositoryTrustStore(db),
-      async (path, source) => {
-        const result = await dialog.showMessageBox({
-          type: "warning",
-          title: t("main.repositoryTrust.title"),
-          message: t("main.repositoryTrust.message"),
-          detail: source
-            ? t("main.repositoryTrust.cloneDetail", { source, path })
-            : t("main.repositoryTrust.detail", { path }),
-          buttons: [t("common.cancel"), t("main.repositoryTrust.allow")],
-          defaultId: 0,
-          cancelId: 0,
-          noLink: true,
-        });
-
-        return result.response === 1;
-      },
+      (path, reasons) => repositoryTrust.confirm({ path, ...(reasons && { reasons }) }),
       neutralDirectory,
       new RepositoryVolumeIdentity(runner),
+      new RepositoryExecutionInspector(runner, engine, transportEnvironment),
     );
 
     const git = new GitService(transportRunner, engine, transportEnvironment, operations, trust);
@@ -485,6 +478,7 @@ export async function createServices(): Promise<Services> {
       secrets,
       ssh,
       sshHostTrust,
+      repositoryTrust,
       sshAgent,
       gpg: new GpgKeyService(runner, git, { ...engine.environment, ...transportEnvironment }),
       credentials,

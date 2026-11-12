@@ -7,6 +7,7 @@ import { initializeLocalization } from "./i18n/initialize";
 import { RendererFailureBoundary } from "./app/RendererFailure";
 import { IconDefaults } from "./components/ui/index";
 import { SshHostTrustDialog } from "./features/credentials/SshHostTrustDialog";
+import { RepositoryTrustDialog } from "./features/repositories/RepositoryTrustDialog";
 import "./styles/base.css";
 
 const container = document.getElementById("root");
@@ -29,7 +30,12 @@ createRoot(container).render(
     <RendererFailureBoundary>
       <IconDefaults>
         <Root />
-        {!tutorial && <SshHostTrustDialog />}
+        {!tutorial && (
+          <>
+            <SshHostTrustDialog />
+            <RepositoryTrustDialog />
+          </>
+        )}
       </IconDefaults>
     </RendererFailureBoundary>
   </StrictMode>,

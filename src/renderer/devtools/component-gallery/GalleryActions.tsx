@@ -134,6 +134,13 @@ export function GalleryActions({
               {t("settings.componentGallery.viewDetails")}
             </TextButton>
 
+            <TextButton
+              tone="warning"
+              onClick={() => setFeedback(t("settings.componentGallery.textActionTriggered"))}
+            >
+              {t("repositoryOverview.untrusted")}
+            </TextButton>
+
             <ProfileButton
               profileName={t("settings.componentGallery.edaExample")}
               aria-label={t("settings.componentGallery.exampleProfileButton")}

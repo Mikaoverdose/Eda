@@ -29,6 +29,31 @@ import {
 export function registerRepositoryHandlers(services: Services): void {
   const { git, repositories } = services;
 
+  handle(IPC_CHANNELS.repositoryReviewTrust, async (_event, rawId) => {
+    const repository = repositories.resolveActiveRepository(requireId(rawId));
+    await services.identity.serialize(async () => {
+      repositories.resolveActiveRepository(repository.id);
+      await git.trust?.authorize(repository.path, false, true);
+    });
+    broadcast(IPC_EVENTS.repositoryChanged, repository.id);
+    broadcast(IPC_EVENTS.repositoriesChanged);
+    return ok(undefined);
+  });
+
+  handle(IPC_CHANNELS.repositoryPendingTrust, async (event) => {
+    if (event.senderFrame !== event.sender.mainFrame)
+      throw invalidRequest(errorText("main.repositoryTrust.invalidResponse"));
+    return ok(services.repositoryTrust.current(event.sender.id));
+  });
+
+  handle(IPC_CHANNELS.repositoryRespondTrust, async (event, rawId, rawTrust) => {
+    if (event.senderFrame !== event.sender.mainFrame || typeof rawTrust !== "boolean")
+      throw invalidRequest(errorText("main.repositoryTrust.invalidResponse"));
+    if (!services.repositoryTrust.respond(event.sender.id, requireId(rawId), rawTrust))
+      throw invalidRequest(errorText("main.repositoryTrust.expiredRequest"));
+    return ok(undefined);
+  });
+
   handle(IPC_CHANNELS.repositoryReferenceUrl, async (_e, rawId, kind, rawName) => {
     const repository = repositories.resolveActiveRepository(requireId(rawId));
 

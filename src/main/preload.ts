@@ -197,6 +197,9 @@ const api: EdaApi = {
   },
 
   repository: {
+    reviewTrust: (id) => ipcRenderer.invoke(IPC_CHANNELS.repositoryReviewTrust, id),
+    pendingTrust: () => ipcRenderer.invoke(IPC_CHANNELS.repositoryPendingTrust),
+    respondTrust: (id, trust) => ipcRenderer.invoke(IPC_CHANNELS.repositoryRespondTrust, id, trust),
     ignoredFiles: (id) => ipcRenderer.invoke(IPC_CHANNELS.repositoryIgnoredFiles, id),
     openEditor: (id) => ipcRenderer.invoke(IPC_CHANNELS.repositoryOpenEditor, id),
     openDropped: (file) =>
@@ -306,6 +309,7 @@ const api: EdaApi = {
 
   events: {
     onUpdateChanged: (handler) => subscribe(IPC_EVENTS.updateChanged, handler),
+    onRepositoryTrustChanged: (handler) => subscribe(IPC_EVENTS.repositoryTrustChanged, handler),
     onSshHostTrustChanged: (handler) => subscribe(IPC_EVENTS.sshHostTrustChanged, handler),
     onNavigation: (handler) => subscribe(IPC_EVENTS.navigation, handler),
     onOperationsChanged: (handler) => subscribe(IPC_EVENTS.operationsChanged, handler),

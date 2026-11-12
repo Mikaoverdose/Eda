@@ -22,7 +22,10 @@ import {
 } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { useShellStore } from "../../stores/shell-store";
+import { RemoveRepositoryButton } from "./RemoveRepositoryButton";
 import { InitRepositoryDialog } from "./InitRepositoryDialog";
+
+import { RepositoryTrustButton } from "./RepositoryTrustButton";
 
 const CloneRepositoryDialog = lazy(() =>
   import("../repository-dialogs").then((module) => ({ default: module.CloneRepositoryDialog })),
@@ -151,8 +154,8 @@ export function RepositoryHome() {
                 />
 
                 <IconButton
-                  aria-label={t("repositoryHome.rename", { name: repository.name })}
-                  title={t("repositoryHome.editDisplayName")}
+                  aria-label={t("repositoryHome.editRepository", { name: repository.name })}
+                  title={t("repositoryHome.repositorySettings")}
                   onClick={() => {
                     setEditing(repository);
                     setAlias(repository.name);
@@ -183,6 +186,8 @@ export function RepositoryHome() {
                   }
                   icon={<SquareArrowOutUpRight size={15} />}
                 />
+
+                <RemoveRepositoryButton repository={repository} compact disabled={busy} />
               </div>
             ))}
           </div>
@@ -222,16 +227,27 @@ export function RepositoryHome() {
 
       {editing && (
         <Dialog
-          title={t("repositoryHome.repositoryDisplayName")}
+          title={t("repositoryHome.repositorySettings")}
+          busy={busy}
           description={t("repositoryHome.thisAliasBelongsToThisProfileTheFolderOnDiskKeepsItsName")}
           onClose={() => setEditing(null)}
           footer={
-            <Button
-              disabled={busy || !alias.trim()}
-              onClick={() => void update(editing, alias, editing.favourite)}
-            >
-              {t("repositoryHome.saveName")}
-            </Button>
+            <>
+              <RepositoryTrustButton
+                key={editing.id}
+                repositoryId={editing.id}
+                disabled={busy || !editing.available}
+                onBusyChange={setBusy}
+              />
+
+              <Button
+                variant="primary"
+                disabled={busy || !alias.trim()}
+                onClick={() => void update(editing, alias, editing.favourite)}
+              >
+                {t("repositoryHome.saveName")}
+              </Button>
+            </>
           }
         >
           <Input

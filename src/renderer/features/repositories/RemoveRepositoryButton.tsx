@@ -10,9 +10,11 @@ import { useSessionStore } from "../../stores/session-store";
 export function RemoveRepositoryButton({
   repository,
   compact = false,
+  disabled = false,
 }: {
   repository: RepositorySummary;
   compact?: boolean;
+  disabled?: boolean;
 }) {
   const [profileId, setProfileId] = useState<string | undefined>(undefined);
   const [confirm, setConfirm] = useState(false);
@@ -57,6 +59,7 @@ export function RemoveRepositoryButton({
   return (
     <>
       <Button
+        disabled={disabled}
         variant="quiet"
         size={compact ? "icon-sm" : "sm"}
         aria-label={t("removeRepositoryButton.removeFromProfile", { name: repository.name })}

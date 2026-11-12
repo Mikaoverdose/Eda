@@ -207,6 +207,8 @@ export const FEATURE_COMPONENTS = [
       "features/repositories/RepositoryOverview.tsx",
       "features/repositories/RepositoryPicker.tsx",
       "features/repositories/RepositoryTabs.tsx",
+      "features/repositories/RepositoryTrustButton.tsx",
+      "features/repositories/RepositoryTrustDialog.tsx",
     ],
   },
   {
@@ -575,6 +577,11 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/repositories/RepositoryOverview.tsx": ["RepositoryOverview"],
   "features/repositories/RepositoryPicker.tsx": ["RepositoryPicker"],
   "features/repositories/RepositoryTabs.tsx": ["RepositoryTabs"],
+  "features/repositories/RepositoryTrustButton.tsx": ["RepositoryTrustButton"],
+  "features/repositories/RepositoryTrustDialog.tsx": [
+    "RepositoryTrustDialog",
+    "RepositoryTrustPrompt",
+  ],
   "features/settings/ScopedPreferences.tsx": ["ScopedPreferences"],
   "features/settings/Settings.tsx": ["Settings"],
   "features/settings/SettingsContent.tsx": ["SettingsContent"],

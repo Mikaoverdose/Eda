@@ -6,6 +6,7 @@ export interface RepositorySummary {
   favourite: boolean;
   lastOpenedAt?: string;
   available: boolean;
+  trusted?: boolean;
 }
 
 export interface InitRepositoryOptions {
@@ -13,4 +14,10 @@ export interface InitRepositoryOptions {
   readme: boolean;
   ignore: "none" | "node" | "python";
   license: "none" | "MIT";
+}
+
+export interface RepositoryTrustRequest {
+  id: string;
+  path: string;
+  reasons?: string[];
 }

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const suites = [
   "onboarding",
+  "repository-trust",
   "tutorial",
   "commands",
   "debug",

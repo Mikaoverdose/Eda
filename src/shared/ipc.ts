@@ -71,7 +71,11 @@ import type {
   IdentitySwitchReport,
   SigningConfiguration,
 } from "./identity/identity";
-import type { RepositorySummary, InitRepositoryOptions } from "./repository/repository";
+import type {
+  RepositorySummary,
+  InitRepositoryOptions,
+  RepositoryTrustRequest,
+} from "./repository/repository";
 import type {
   DuplicateProfileOptions,
   ProfileDeletePreview,
@@ -394,6 +398,9 @@ export interface EdaApi {
   };
 
   repository: {
+    reviewTrust(id: string): Promise<Result<void>>;
+    pendingTrust(): Promise<Result<RepositoryTrustRequest | null>>;
+    respondTrust(id: string, trust: boolean): Promise<Result<void>>;
     referenceUrl(id: string, kind: ReferenceLinkKind, name: string): Promise<Result<string | null>>;
     previewCommit(id: string): Promise<Result<CommitPreview>>;
     inspectCommit(
@@ -515,6 +522,7 @@ export interface EdaApi {
 
   events: {
     onUpdateChanged(handler: (state: UpdateState) => void): () => void;
+    onRepositoryTrustChanged(handler: (request: RepositoryTrustRequest | null) => void): () => void;
     onSshHostTrustChanged(handler: (request: SshHostTrustRequest | null) => void): () => void;
     onNavigation(handler: () => void): () => void;
     onOperationsChanged(handler: () => void): () => void;
@@ -663,6 +671,9 @@ export const IPC_CHANNELS = {
   identityConfigureSigning: "identity:configureSigning",
 
   repositoryList: "repository:list",
+  repositoryReviewTrust: "repository:reviewTrust",
+  repositoryPendingTrust: "repository:pendingTrust",
+  repositoryRespondTrust: "repository:respondTrust",
   repositoryOpen: "repository:open",
   repositoryRelocate: "repository:relocate",
   repositoryInit: "repository:init",
@@ -723,6 +734,7 @@ export const IPC_CHANNELS = {
 
 export const IPC_EVENTS = {
   updateChanged: "updates:changed",
+  repositoryTrustChanged: "event:repositoryTrustChanged",
   sshHostTrustChanged: "event:sshHostTrustChanged",
   navigation: "app:navigation",
   operationsChanged: "event:operationsChanged",
@@ -737,6 +749,7 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
 type EventSubscriptions = {
   [IPC_EVENTS.updateChanged]: EdaApi["events"]["onUpdateChanged"];
+  [IPC_EVENTS.repositoryTrustChanged]: EdaApi["events"]["onRepositoryTrustChanged"];
   [IPC_EVENTS.sshHostTrustChanged]: EdaApi["events"]["onSshHostTrustChanged"];
   [IPC_EVENTS.navigation]: EdaApi["events"]["onNavigation"];
   [IPC_EVENTS.operationsChanged]: EdaApi["events"]["onOperationsChanged"];

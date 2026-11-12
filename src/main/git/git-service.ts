@@ -138,6 +138,11 @@ export class GitService {
   }
 
   async exec(args: readonly string[], options: GitExecOptions): Promise<GitExecResult> {
+    let commandIndex = 0;
+    while (args[commandIndex]?.startsWith("-")) {
+      commandIndex += args[commandIndex] === "-c" || args[commandIndex] === "-C" ? 2 : 1;
+    }
+    const command = args[commandIndex] ?? "";
     const redact = (text: string) =>
       (options.redactValues ?? []).reduce(
         (value, secret) => (secret ? value.split(secret).join("[redacted]") : value),
@@ -175,7 +180,62 @@ export class GitService {
             "init.templateDir=",
           );
         } else {
-          const repository = await this.trust.checked(options.cwd);
+          const repository = await this.trust.checked(options.cwd, signal);
+          if (!repository.trusted) {
+            repositoryArgs.push(
+              ...(repository.execution?.restrictions ?? ["-c", "core.hooksPath=/dev/null"]),
+            );
+            const readOnly = new Set([
+              "status",
+              "diff",
+              "log",
+              "show",
+              "rev-parse",
+              "ls-files",
+              "ls-tree",
+              "cat-file",
+              "for-each-ref",
+              "config",
+              "remote",
+              "check-attr",
+              "symbolic-ref",
+            ]);
+            if (
+              [
+                "checkout",
+                "switch",
+                "reset",
+                "merge",
+                "rebase",
+                "read-tree",
+                "cherry-pick",
+                "revert",
+              ].includes(command)
+            ) {
+              for (const argument of args.slice(commandIndex + 1)) {
+                if (argument === "--") break;
+                if (argument.startsWith("-")) continue;
+                const target = await this.trust.checked(options.cwd, signal, argument);
+                if (target.execution?.blocksWrites)
+                  throw new GitError({
+                    kind: "invalid-input",
+                    operation: options.operation,
+                    message: errorText("main.repositoryTrust.writesBlocked"),
+                  });
+              }
+            }
+            if (!readOnly.has(command)) {
+              for (let i = 0; i < repositoryArgs.length; i++)
+                if (/^filter\..+\.required=false$/.test(repositoryArgs[i]!))
+                  repositoryArgs[i] = repositoryArgs[i]!.replace(/false$/, "true");
+            }
+            if (repository.execution?.blocksWrites && !readOnly.has(command))
+              throw new GitError({
+                kind: "invalid-input",
+                operation: options.operation,
+                message: errorText("main.repositoryTrust.writesBlocked"),
+              });
+          }
           // Let Git discover the approved metadata so its native ownership check still runs.
           cwd = repository.root;
           env["GIT_CEILING_DIRECTORIES"] = dirname(repository.root);

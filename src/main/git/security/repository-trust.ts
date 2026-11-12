@@ -1,3 +1,4 @@
+import type { RepositoryExecutionInspector } from "./repository-execution";
 import { errorText } from "@shared/error-codes";
 import { GitError } from "@shared/errors";
 import { t } from "@shared/i18n";
@@ -52,9 +53,10 @@ async function metadata(root: string, bare: boolean, volumes: RepositoryVolumeId
 export class RepositoryTrust {
   constructor(
     private readonly store: RepositoryTrustStore,
-    private readonly confirm: (path: string, source?: string) => Promise<boolean>,
+    private readonly confirm: (path: string, reasons?: string[]) => Promise<boolean>,
     readonly neutralDirectory: string,
     private readonly volumes: RepositoryVolumeIdentity,
+    private readonly inspector?: RepositoryExecutionInspector,
   ) {}
 
   async findRoot(path: string) {
@@ -81,31 +83,45 @@ export class RepositoryTrust {
     }
   }
 
-  async authorize(root: string, bare = false) {
+  async authorize(root: string, bare = false, review = false) {
     const record = await metadata(await realpath(root), bare, this.volumes);
-    if (this.store.matches(record.root, record.fingerprint)) return;
-    if (!(await this.confirm(record.root))) throw refused();
+    if (!review && this.store.matches(record.root, record.fingerprint)) return;
+    const execution = await this.inspector?.inspect(record.root, record.gitDir);
+    const trusted = execution
+      ? (review || execution.reasons.length > 0) &&
+        (await this.confirm(record.root, execution.reasons))
+      : await this.confirm(record.root);
+    if (!trusted && !this.inspector) throw refused();
     if (
       (await metadata(await realpath(root), bare, this.volumes)).fingerprint !== record.fingerprint
     )
       throw refused();
-    this.store.remember(record.root, record.fingerprint);
-  }
-
-  async approveCreation(path: string, source?: string) {
-    if (!(await this.confirm(path, source))) throw refused();
+    this.store.remember(
+      record.root,
+      trusted ? record.fingerprint : `untrusted:${record.fingerprint}`,
+    );
   }
 
   async rememberCreated(path: string) {
     const record = await metadata(await realpath(path), false, this.volumes);
-    this.store.remember(record.root, record.fingerprint);
+    this.store.remember(record.root, `untrusted:${record.fingerprint}`);
   }
 
-  async checked(root: string) {
+  async isTrusted(root: string): Promise<boolean> {
+    const record = await metadata(await realpath(root), false, this.volumes);
+    return this.store.matches(record.root, record.fingerprint);
+  }
+
+  async checked(root: string, signal?: AbortSignal, revision?: string) {
     try {
       const record = await metadata(await realpath(root), false, this.volumes);
-      if (!this.store.matches(record.root, record.fingerprint)) throw refused();
-      return record;
+      const trusted = this.store.matches(record.root, record.fingerprint);
+      if (!trusted && !this.store.matches(record.root, `untrusted:${record.fingerprint}`))
+        throw refused();
+      const execution = !trusted
+        ? await this.inspector?.inspect(record.root, record.gitDir, signal, revision)
+        : undefined;
+      return { ...record, trusted, execution };
     } catch (error) {
       if (missing(error)) throw refused();
       throw error;

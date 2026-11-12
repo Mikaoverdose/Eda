@@ -533,7 +533,6 @@ export class RemoteService {
             throw remoteError(errorText("main.remoteService.theCloneParentMustBeADirectory"));
 
           const destination = join(await realpath(request.parent), request.name);
-          await this.git.trust?.approveCreation(destination, request.url);
 
           try {
             await mkdir(destination);
@@ -550,6 +549,7 @@ export class RemoteService {
               [
                 "clone",
                 "--no-local",
+                ...(this.git.trust ? ["--no-checkout"] : []),
                 "--upload-pack=git-upload-pack",
                 "--progress",
                 "--no-recurse-submodules",
@@ -564,7 +564,21 @@ export class RemoteService {
             );
 
             await this.git.trust?.rememberCreated(destination);
-            return await this.repositories.open(destination, captured);
+            const repository = await this.repositories.open(destination, captured);
+            if (this.git.trust) {
+              const policy = await this.git.trust.checked(destination);
+              const head = await this.git.exec(["rev-parse", "--verify", "HEAD"], {
+                cwd: destination,
+                operation: t("operations.cloneRepository"),
+                allowedExitCodes: [0, 128],
+              });
+              if (head.exitCode === 0 && !policy.execution?.blocksWrites)
+                await this.git.exec(["read-tree", "-m", "-u", "HEAD"], {
+                  cwd: destination,
+                  operation: t("operations.cloneRepository"),
+                });
+            }
+            return repository;
           } catch (error) {
             this.operations.progress(
               t(

@@ -15,6 +15,8 @@ import { BranchMenu } from "../references/BranchMenu";
 import { RepositorySyncActions } from "../sync/RepositorySyncActions";
 import { RepositoryWorkflowActions } from "../workflows/RepositoryWorkflowActions";
 
+import { RepositoryTrustButton } from "./RepositoryTrustButton";
+
 const RemotesDialog = lazy(() =>
   import("../repository-dialogs").then((module) => ({ default: module.RemotesDialog })),
 );
@@ -57,6 +59,15 @@ export function RepositoryOverview({
           <h1 title={repository.path} className="max-w-32 truncate font-medium">
             {repository.name}
           </h1>
+          {repository.trusted === false && (
+            <RepositoryTrustButton
+              key={repository.id}
+              repositoryId={repository.id}
+              badge
+              disabled={pending || writing}
+            />
+          )}
+
           <span className="text-text-tertiary">/</span>
 
           {pending ? (

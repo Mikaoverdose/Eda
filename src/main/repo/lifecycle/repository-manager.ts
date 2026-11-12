@@ -36,10 +36,7 @@ export class RepositoryManager {
     const rows = this.memberships.list(active.id);
 
     return Promise.all(
-      rows.map(async (row) => ({
-        ...toSummary(row),
-        available: await this.git.isRepository(row.path),
-      })),
+      rows.map(async (row) => this.summary(row, await this.git.isRepository(row.path))),
     );
   }
 
@@ -137,7 +134,6 @@ export class RepositoryManager {
           });
       }
 
-      await this.git.trust?.approveCreation(path);
       await this.git.exec(["init", "-b", options.branch], {
         cwd: path,
         operation: t("operations.createRepository"),
@@ -210,7 +206,7 @@ export class RepositoryManager {
 
       this.memberships.relocate(id, updated.path, updated.name);
 
-      return { ...toSummary(updated), available: true };
+      return this.summary(updated, true);
     });
   }
 
@@ -241,7 +237,15 @@ export class RepositoryManager {
   private async register(root: string, identity: Identity): Promise<RepositorySummary> {
     const row = this.memberships.register(root, identity.id);
 
-    return { ...toSummary(row), available: true };
+    return this.summary(row, true);
+  }
+
+  private async summary(row: RepositoryRow, available: boolean): Promise<RepositorySummary> {
+    return {
+      ...toSummary(row),
+      available,
+      ...(available && this.git.trust ? { trusted: await this.git.trust.isTrusted(row.path) } : {}),
+    };
   }
 
   updateMetadata(id: string, name: string, favourite: boolean): void {

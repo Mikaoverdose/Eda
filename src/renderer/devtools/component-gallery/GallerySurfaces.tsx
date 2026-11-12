@@ -14,13 +14,14 @@ import {
   ModalSurface,
   ModalTitle,
 } from "../../components/ui/overlays/ModalSurface";
+import { RepositoryTrustPrompt } from "../../features/repositories/RepositoryTrustDialog";
 import { Name, Sample } from "./GallerySample";
 
 export function GallerySurfaces({ setFeedback }: { setFeedback: (message: string) => void }) {
   const modalDescriptionId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
-  const [modal, setModal] = useState<"dialog" | "drawer" | "surface" | null>(null);
+  const [modal, setModal] = useState<"dialog" | "drawer" | "surface" | "trust" | null>(null);
 
   return (
     <>
@@ -32,6 +33,7 @@ export function GallerySurfaces({ setFeedback }: { setFeedback: (message: string
           <Button onClick={() => setModal("drawer")}>
             {t("settings.componentGallery.openRightDialog")}
           </Button>
+          <Button onClick={() => setModal("trust")}>{t("main.repositoryTrust.title")}</Button>
           <Button onClick={() => setModal("surface")}>
             {t("settings.componentGallery.openModalSurface")}
           </Button>
@@ -86,6 +88,17 @@ export function GallerySurfaces({ setFeedback }: { setFeedback: (message: string
           {t("settings.componentGallery.dialogModalSurfaceModalTitleModalDescriptionPopover")}
         </Name>
       </Sample>
+
+      {modal === "trust" && (
+        <RepositoryTrustPrompt
+          request={{
+            id: "preview",
+            path: "/home/user/Projects/example",
+            reasons: ["hooks/pre-commit", "hooks/pre-push", "filter.lfs"],
+          }}
+          respond={() => setModal(null)}
+        />
+      )}
 
       {modal === "dialog" && (
         <Dialog

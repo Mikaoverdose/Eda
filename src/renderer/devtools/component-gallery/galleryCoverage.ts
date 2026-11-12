@@ -38,6 +38,7 @@ export const PREVIEW_ANCHORS: Record<string, string> = {
   "components/ui/actions/TextButton.tsx": "gallery-actions",
   "components/ui/actions/WindowControlButton.tsx": "gallery-actions",
   "components/ui/icons.tsx": "gallery-icons",
+  "features/repositories/RepositoryTrustDialog.tsx": "gallery-surfaces",
   "features/changes/ChangeRows.tsx": "gallery-repository",
   "features/diff/CommitDetails.tsx": "gallery-repository",
   "features/diff/DiffContent.tsx": "gallery-diff",
