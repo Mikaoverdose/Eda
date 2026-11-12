@@ -61,7 +61,10 @@ beforeEach(() => {
     },
     remotes: { clone },
     repository: { chooseFolder: vi.fn().mockResolvedValue(ok("/repos")) },
-    operations: { list: vi.fn().mockResolvedValue(ok([])) },
+    operations: {
+      list: vi.fn().mockResolvedValue(ok([])),
+      cancel: vi.fn().mockResolvedValue(ok(undefined)),
+    },
     events: { onOperationsChanged: () => () => {} },
   });
 
@@ -107,7 +110,9 @@ it("uses a connected account, filters repositories, suggests the folder and clon
     document.querySelector<HTMLButtonElement>('[aria-label="Browse folders..."]')!.click(),
   );
 
-  expect(document.body.textContent).toContain("/repos/eda");
+  expect(field("Clone parent folder").value).toBe("/repos");
+  expect(document.body.textContent).not.toContain("/repos/eda");
+  expect(document.body.textContent).not.toContain("Destination path");
   await act(async () => button("Clone repository").click());
 
   expect(clone).toHaveBeenCalledWith({
@@ -295,4 +300,47 @@ it("browses multiple self-hosted instances separately even when account and proj
 
   expect(document.body.textContent).toContain("team/second");
   expect(document.body.textContent).not.toContain("team/first");
+});
+
+it("shows only compact cloning controls without logs or a repeated destination", async () => {
+  let finish!: () => void;
+  clone.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve(ok({ id: "cloned" }));
+      }),
+  );
+  vi.mocked(window.eda.operations.list).mockResolvedValue(
+    ok([
+      {
+        id: "clone-operation",
+        profileId: profile.id,
+        repositoryId: "cloning",
+        repositoryName: "eda",
+        kind: "Clone repository",
+        kindKey: "operationTitles.cloneRepository",
+        state: "running",
+        startedAt: "now",
+        updatedAt: "now",
+        durationMs: 0,
+        cancellable: true,
+        retryable: false,
+        message: "Receiving objects",
+        output: "Cloning into '/repos/eda'...",
+      },
+    ]),
+  );
+  await act(async () => root.render(<CloneRepositoryDialog onClose={onClose} />));
+  await act(async () => button("team/eda").click());
+  await fill(field("Clone parent folder"), "/repos");
+  await act(async () => button("Clone repository").click());
+  expect(field("Clone parent folder").disabled).toBe(true);
+  expect(document.body.textContent).toContain("Cloning");
+  expect(document.body.textContent).not.toContain("Receiving objects");
+  expect(document.body.textContent).not.toContain("Cloning into");
+  expect(document.body.textContent).not.toContain("Destination path");
+  expect(document.body.textContent).not.toContain("/repos/eda");
+  await act(async () => button("Cancel operation").click());
+  expect(window.eda.operations.cancel).toHaveBeenCalledExactlyOnceWith("clone-operation");
+  await act(async () => finish());
 });

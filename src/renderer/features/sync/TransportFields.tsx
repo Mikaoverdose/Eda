@@ -82,9 +82,11 @@ export function TransportFields({ value, onChange, disabled }: CredentialFieldsP
 export function TransferProgress({
   repositoryId,
   kindKey,
+  showDetails = true,
 }: {
   repositoryId?: string;
   kindKey: MessageKey;
+  showDetails?: boolean;
 }) {
   const { records } = useOperationRecords();
   const [error, setError] = useState<string | null>(null);
@@ -97,10 +99,13 @@ export function TransferProgress({
   );
 
   return (
-    <div role="status" className="space-y-2 text-xs text-text-secondary">
-      <p>{record?.message ?? t("transportFields.preparingOperation")}</p>
+    <div
+      role={showDetails ? "status" : undefined}
+      className="space-y-2 text-xs text-text-secondary"
+    >
+      {showDetails && <p>{record?.message ?? t("transportFields.preparingOperation")}</p>}
 
-      {record?.output && (
+      {showDetails && record?.output && (
         <CodeBlock label={t("transportFields.transferOutput")} wrap className="max-h-32">
           {record.output}
         </CodeBlock>

@@ -12,7 +12,6 @@ import {
 import { useEffect, useState } from "react";
 import {
   Button,
-  CodeBlock,
   Dialog,
   ErrorDialog,
   Field,
@@ -72,11 +71,6 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
     ...(Object.keys(connections ?? {}) as Exclude<Source, "url">[]),
     "url",
   ];
-
-  const destination =
-    parent.trim() && name.trim()
-      ? `${parent.trim().replace(/[\\/]+$/, "")}${parent.includes("\\") ? "\\" : "/"}${name.trim()}`
-      : null;
 
   useEffect(() => {
     let active = true;
@@ -216,6 +210,12 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
+          {busy && (
+            <div className="mr-auto">
+              <TransferProgress kindKey="operationTitles.cloneRepository" showDetails={false} />
+            </div>
+          )}
+
           <Button variant="quiet" onClick={onClose}>
             {t("common.close")}
           </Button>
@@ -421,24 +421,8 @@ export function CloneRepositoryDialog({ onClose }: { onClose: () => void }) {
                 />
               )}
             </Field>
-
-            <div className="mt-auto space-y-2 border-t border-border-subtle pt-4">
-              <p className="text-xs font-medium text-text-secondary">
-                {t("cloneRepositoryDialog.destinationPath")}
-              </p>
-
-              <CodeBlock
-                label={t("cloneRepositoryDialog.destinationPath")}
-                wrap
-                className="text-text-secondary"
-              >
-                {destination ?? t("cloneRepositoryDialog.destinationHint")}
-              </CodeBlock>
-            </div>
           </section>
         </div>
-
-        {busy && <TransferProgress kindKey="operationTitles.cloneRepository" />}
 
         <ErrorDialog onDismiss={() => setError(null)}>{error}</ErrorDialog>
       </div>
