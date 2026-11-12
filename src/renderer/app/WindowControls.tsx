@@ -1,9 +1,9 @@
+import appIcon from "../assets/branding/Eda-icon.svg";
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { EdaApi } from "@shared/ipc";
 import {
   CopyIcon as Copy,
-  BranchIcon as GitBranch,
   MinusIcon as Minus,
   SquareIcon as Square,
   CloseIcon as X,
@@ -100,7 +100,7 @@ export function WindowTitlebar({ children }: { children?: ReactNode }) {
       className="window-titlebar app-surface-chrome flex h-toolbar shrink-0 items-center gap-2 border-b border-border-subtle bg-bg-inset pl-3"
     >
       <span className="flex shrink-0 items-center gap-2 pr-3 text-sm font-semibold text-text-secondary">
-        <GitBranch size={15} aria-hidden="true" />
+        <img src={appIcon} width={20} height={20} alt="" className="shrink-0" draggable={false} />
         <span>
           {t("windowControls.eda")}
           {development && (

@@ -1,3 +1,4 @@
+import appIcon from "../../../assets/branding/Eda-icon.svg";
 import { PACKAGE_MANAGER_NAMES, type InstallationInfo } from "@shared/application";
 import { t, type MessageKey } from "@shared/i18n";
 import {
@@ -82,14 +83,18 @@ export function AboutSettings() {
   return (
     <div className="space-y-6">
       <section aria-labelledby="about-eda-heading" className="space-y-4">
-        <div>
-          <h2 id="about-eda-heading" className="text-2xl font-semibold tracking-tight">
-            {t("settings.aboutSettings.eda")}
-          </h2>
+        <div className="flex items-center gap-4">
+          <img src={appIcon} width={64} height={64} alt="" className="shrink-0" draggable={false} />
 
-          <p className="mt-2 text-sm text-text-secondary">
-            {t("settings.aboutSettings.aModernOpenSourceGitClient")}
-          </p>
+          <div className="min-w-0">
+            <h2 id="about-eda-heading" className="text-2xl font-semibold tracking-tight">
+              {t("settings.aboutSettings.eda")}
+            </h2>
+
+            <p className="mt-2 text-sm text-text-secondary">
+              {t("settings.aboutSettings.aModernOpenSourceGitClient")}
+            </p>
+          </div>
         </div>
 
         <dl className="flex flex-wrap gap-x-6 gap-y-3 rounded-md border border-border-subtle bg-bg-surface px-3 py-2.5 text-xs">

@@ -18,6 +18,7 @@ export default {
   directories: { output: "release" },
   files: ["dist/**/*", "package.json"],
   extraResources: [
+    { from: "build/icon.png", to: "icon.png" },
     { from: "vendor/git/${os}-${arch}", to: "git", filter: ["**/*"] },
     { from: "LICENSE", to: "LICENSE" },
     {
@@ -33,12 +34,13 @@ export default {
     if (!arch) throw new Error("Eda packages support x64 and arm64.");
     await prepareGit(context.electronPlatformName, arch);
   },
-  win: { target: "dir" },
+  win: { target: "dir", icon: "build/icon.ico" },
   mac: {
+    icon: "build/icon.icns",
     target: "dir",
     identity: null,
     hardenedRuntime: false,
     category: "public.app-category.developer-tools",
   },
-  linux: { target: "dir", category: "Development" },
+  linux: { target: "dir", category: "Development", icon: "build/icon.png" },
 } satisfies Configuration;

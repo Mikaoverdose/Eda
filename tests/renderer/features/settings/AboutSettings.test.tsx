@@ -134,7 +134,7 @@ it.each([
       expect(container.querySelector(".profile-avatar")?.textContent).toBe(
         publicProfile ? "FM" : "Y",
       );
-      expect(container.querySelector("img")).toBeNull();
+      expect(container.querySelector(".profile-avatar img")).toBeNull();
       expect(github.maintainerProfile).toHaveBeenCalledOnce();
 
       if (publicProfile) {

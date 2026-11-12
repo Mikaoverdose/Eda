@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #174d25;
+      }
+
+      .cls-2 {
+        fill: #c8f793;
+      }
+    </style>
+  </defs>
+  <g id="Background">
+    <g id="Background-2" data-name="Background">
+      <rect class="cls-2" width="1024" height="1024"/>
+    </g>
+  </g>
+  <g id="Seedling">
+    <path id="Seedling-2" data-name="Seedling" class="cls-1" d="M464,832h96v-128c0-72,32-96,96-112,160-40,208-160,208-400-224,0-336,128-368,352-32-160-160-192-336-192,0,192,80,268,240,288,48,6,64,32,64,96V832Z"/>
+  </g>
+</svg>

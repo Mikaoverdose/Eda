@@ -3,8 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { VelopackAsset } from "velopack";
 import configuration from "../electron-builder.config.ts";
 import { UPDATE_PACKAGE_ID, updateChannel, type UpdatePlatform } from "../src/shared/updates.ts";
@@ -87,21 +86,24 @@ if (!args.includes("--dir")) {
   ];
 
   if (platform === "linux") {
-    const require = createRequire(import.meta.url);
-    const builderRequire = createRequire(require.resolve("electron-builder/package.json"));
-    const builderRoot = dirname(builderRequire.resolve("app-builder-lib/package.json"));
-
     packArgs.push(
       "--mainExe",
       "eda",
       "--categories",
       "Development",
       "--icon",
-      join(builderRoot, "templates/icons/electron-linux/256x256.png"),
+      resolve("build/icon.png"),
     );
   } else if (platform === "win") {
     // Electron's bootstrap lives in JS/N-API rather than the stock Electron executable.
-    packArgs.push("--mainExe", "Eda.exe", "--skipVeloAppCheck", "--noPortable");
+    packArgs.push(
+      "--mainExe",
+      "Eda.exe",
+      "--skipVeloAppCheck",
+      "--noPortable",
+      "--icon",
+      resolve("build/icon.ico"),
+    );
   } else {
     packArgs.push(
       "--noInst",

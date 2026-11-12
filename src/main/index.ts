@@ -42,6 +42,9 @@ app.on("open-url", (event, url) => {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+const appIcon = app.isPackaged
+  ? join(process.resourcesPath, "icon.png")
+  : join(__dirname, "../../build/icon.png");
 
 if (!app.commandLine.hasSwitch("user-data-dir")) {
   const name = isDev && process.env["VITE_DEV_SERVER_URL"] ? "Eda-Dev" : "Eda";
@@ -74,6 +77,7 @@ const CSP = [
 
 function createWindow(zoom = 100): BrowserWindow {
   const window = new BrowserWindow({
+    icon: appIcon,
     width: 1440,
     height: 900,
     minWidth: 940,
@@ -157,6 +161,7 @@ async function start(): Promise<void> {
     }
     configureGraphics();
     await app.whenReady();
+    if (isDev && process.platform === "darwin") app.dock?.setIcon(appIcon);
     setLocale(app.getPreferredSystemLanguages());
     if (importIndex !== -1) {
       await session.defaultSession.clearStorageData();
