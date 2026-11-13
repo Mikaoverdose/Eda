@@ -263,20 +263,12 @@ try {
   assert.equal(created.ok, true);
 
   await page.getByRole("button", { name: /On branch feature\/ssh/ }).waitFor();
-  await page.getByRole("button", { name: "Remotes", exact: true }).click();
-
-  const dialog = page.getByRole("dialog", { name: "Remotes", exact: true });
-
-  await dialog.getByRole("tab", { name: "Push", exact: true }).click();
-  await dialog.getByRole("button", { name: "Review push", exact: true }).click();
-  await dialog.getByRole("button", { name: "Confirm push", exact: true }).click();
-  await dialog
+  await page.getByRole("button", { name: "Push", exact: true }).click();
+  await page
     .getByRole("status")
     .filter({ hasText: /new branch/ })
     .waitFor();
   assert.equal(git(remote, "rev-parse", "feature/ssh"), git(repository.path, "rev-parse", "HEAD"));
-
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
 
   const allowed = join(root, "allowed-signers");
 

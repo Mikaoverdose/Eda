@@ -12,7 +12,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRepositoryStore } from "../../../stores/repository-store";
 import { useTransportOperation } from "./useTransportOperation";
 
-export function useDirectPush(repositoryId: string, afterCommit: boolean) {
+export interface PushTagTarget {
+  name: string;
+  remote?: string;
+}
+
+export function useDirectPush(repositoryId: string, autoStart: boolean, tag?: PushTagTarget) {
   const { busy, begin } = useTransportOperation(repositoryId);
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,16 +83,18 @@ export function useDirectPush(repositoryId: string, afterCommit: boolean) {
       if (!current()) return;
       if (!inspected.ok) return fail(inspected.error);
       const head = inspected.value.branches.find((branch) => branch.isHead && !branch.remote);
+      const source = tag?.name ?? head?.name;
 
-      if (!head) {
+      if (!source) {
         setError(t("directPush.checkOutALocalBranchBeforePushing"));
         return;
       }
 
-      const upstreamRemote = remoteForTrackingRef(inspected.value.remotes, head.upstream);
+      const upstreamRemote = remoteForTrackingRef(inspected.value.remotes, head?.upstream);
       const remote = upstreamRemote?.name;
-      const destination = remote ? head.upstream!.slice(remote.length + 1) : head.name;
-      const targetRemote = preferredRemote(inspected.value);
+      const targetRemote = tag?.remote
+        ? inspected.value.remotes.find((remote) => remote.name === tag.remote)
+        : preferredRemote(inspected.value);
 
       if (!targetRemote) {
         setError(t("directPush.noRemoteIsConfiguredAddOneInSettingsRepoThenRetry"));
@@ -102,12 +109,18 @@ export function useDirectPush(repositoryId: string, afterCommit: boolean) {
 
       setGitHubRemote(destinations.length === 1 && isGitHubHttps(destinations[0]!));
 
+      const destination =
+        !tag && remote === target && head?.upstream
+          ? head.upstream.slice(target.length + 1)
+          : source;
+
       const request: PushRequest = {
         repositoryId,
         remote: target,
-        branch: head.name,
-        destination: remote === target ? destination : head.name,
-        setUpstream: !head.upstream,
+        branch: source,
+        destination,
+        setUpstream: !tag && !head?.upstream,
+        ...(tag ? { refKind: "tag" } : {}),
         mode,
         ...(auth ? { credentials: auth } : {}),
       };
@@ -148,11 +161,11 @@ export function useDirectPush(repositoryId: string, afterCommit: boolean) {
   };
 
   useEffect(() => {
-    if (afterCommit && !started.current) {
+    if (autoStart && !started.current) {
       started.current = true;
       void runPush("normal");
     }
-  }, [afterCommit]);
+  }, [autoStart]);
 
   const confirmLease = async () => {
     if (!preview) return;

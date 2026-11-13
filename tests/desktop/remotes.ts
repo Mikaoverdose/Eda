@@ -269,46 +269,17 @@ try {
   await page.getByRole("button", { name: "Remotes", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Remotes", exact: true });
 
-  await dialog.getByRole("tab", { name: "Tracking", exact: true }).click();
+  await expect(dialog.getByRole("tab")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Review push", exact: true })).toHaveCount(0);
   await chooseSelect(dialog.getByLabel("Upstream", { exact: true }), "refs/remotes/origin/topic");
   await dialog.getByRole("button", { name: "Set upstream", exact: true }).click();
   await dialog.getByText(/origin\/topic up to date/).waitFor();
   assert.equal(git(clientPath, "config", "branch.main.merge"), "refs/heads/topic");
 
-  await dialog.getByRole("tab", { name: "Push", exact: true }).click();
-  await dialog.getByText("HTTPS authentication", { exact: true }).click();
-  await dialog.getByLabel("HTTPS username").fill("fixture");
-  await dialog.getByLabel("HTTPS token").fill(token);
-  await dialog.getByLabel("Destination branch").fill("published");
-  await dialog.getByRole("button", { name: "Review push", exact: true }).click();
-  await dialog.getByRole("button", { name: "Confirm push", exact: true }).waitFor();
-  assert.match(await dialog.innerText(), /refs\/heads\/published/);
-
-  await dialog.getByRole("button", { name: "Confirm push", exact: true }).click();
-  await dialog
-    .getByRole("status")
-    .filter({ hasText: /new branch/ })
-    .waitFor();
-  assert.equal(git(remote, "rev-parse", "published"), git(clientPath, "rev-parse", "main"));
-
-  await chooseSelect(dialog.getByLabel("Push mode"), "delete");
-  await dialog.getByLabel("HTTPS token").fill(token);
-  await dialog.getByLabel("HTTPS username").fill("fixture");
-  await dialog.getByRole("button", { name: "Review push", exact: true }).click();
-
-  const confirmDelete = dialog.getByRole("button", { name: "Confirm deletion", exact: true });
-
-  await confirmDelete.waitFor();
-  assert.equal(await confirmDelete.isEnabled(), false);
-
-  await dialog.getByLabel("Confirm remote ref").fill("refs/heads/published");
-  await confirmDelete.click();
-  await dialog
-    .getByRole("status")
-    .filter({ hasText: /deleted/ })
-    .waitFor();
-  assert.equal(git(remote, "branch", "--list", "published"), "");
-  assert.equal(git(clientPath, "branch", "--show-current"), "main");
+  await chooseSelect(dialog.getByLabel("Upstream", { exact: true }), "refs/remotes/origin/main");
+  await dialog.getByRole("button", { name: "Set upstream", exact: true }).click();
+  await dialog.getByText(/origin\/main up to date/).waitFor();
+  assert.equal(git(clientPath, "config", "branch.main.merge"), "refs/heads/main");
 
   git(clientPath, "tag", "-a", "release", "-m", "release notes");
   git(clientPath, "tag", "unpublished");
@@ -332,24 +303,18 @@ try {
     page.getByRole("menuitem", { name: "Verify tag signature...", exact: true }).locator("svg"),
   ).toHaveCount(1);
   await page.screenshot({ path: join(tmpdir(), "eda-tag-menu.png") });
-  await page.getByRole("menuitem", { name: "Push tag...", exact: true }).click();
-  await expect(dialog.getByLabel("Local tag", { exact: true })).toContainText("release");
-  await expect(dialog.getByLabel("Destination tag", { exact: true })).toHaveValue("release");
-  await dialog.getByText("HTTPS authentication", { exact: true }).click();
-  await dialog.getByLabel("HTTPS username").fill("fixture");
-  await dialog.getByLabel("HTTPS token").fill(token);
-  await dialog.getByRole("button", { name: "Review push", exact: true }).click();
-  await dialog.getByRole("button", { name: "Confirm push", exact: true }).click();
-  await dialog
-    .getByRole("status")
-    .filter({ hasText: /new tag/ })
-    .waitFor();
+  await page.getByRole("menuitem", { name: "Push tag", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await httpsAuthentication.getByLabel("Username", { exact: true }).fill("fixture");
+  await httpsAuthentication.getByLabel("Access token", { exact: true }).fill(token);
+  await httpsAuthentication.getByRole("button", { name: "Retry push", exact: true }).click();
+  await httpsAuthentication.waitFor({ state: "hidden" });
+  await expect.poll(() => git(remote, "tag", "--list", "release")).toBe("release");
   assert.equal(
     git(remote, "rev-parse", "refs/tags/release"),
     git(clientPath, "rev-parse", "refs/tags/release"),
   );
 
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   const tagsSection = page
     .locator("details")
     .filter({ has: page.locator("summary").getByText("Tags", { exact: true }) });
@@ -449,40 +414,31 @@ try {
     .getByRole("textbox", { name: "Commit title", exact: true })
     .fill("Commit and push acceptance");
   await page.getByRole("button", { name: "Commit and Push", exact: true }).click();
-  // Commit and Push attempts the upstream immediately. Switch to the reviewed
-  // push flow so the fixture can advance the remote after the preview.
-  await httpsAuthentication.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Remotes", exact: true }).click();
-  await chooseSelect(dialog.getByLabel("Remote", { exact: true }), "origin");
+  await httpsAuthentication.waitFor();
 
   const committedHead = git(clientPath, "rev-parse", "HEAD");
 
   assert.equal(git(clientPath, "log", "-1", "--format=%s"), "Commit and push acceptance");
 
-  await dialog.getByText("HTTPS authentication", { exact: true }).click();
-  await dialog.getByLabel("HTTPS username").fill("fixture");
-  await dialog.getByLabel("HTTPS token").fill(token);
-  await dialog.getByRole("button", { name: "Review push", exact: true }).click();
-  await dialog.getByRole("button", { name: "Confirm push", exact: true }).waitFor();
   git(remote, "config", "receive.denyNonFastForwards", "true");
   git(clientPath, "branch", "--set-upstream-to=origin/main", "main");
   await writeFile(join(source, "concurrent.txt"), "concurrent remote change\n");
   git(source, "add", ".");
   git(source, "commit", "-m", "concurrent update");
   git(source, "push", "origin", "main");
-  await dialog.getByRole("button", { name: "Confirm push", exact: true }).click();
-  await page
-    .getByRole("dialog", { name: "Could not complete the action", exact: true })
+  await httpsAuthentication.getByLabel("Username", { exact: true }).fill("fixture");
+  await httpsAuthentication.getByLabel("Access token", { exact: true }).fill(token);
+  await httpsAuthentication.getByRole("button", { name: "Retry push", exact: true }).click();
+  const forcePush = page.getByRole("dialog", { name: "Force push?", exact: true });
+  await forcePush.getByRole("button", { name: "Force with lease", exact: true }).click();
+  const pushFailure = page.getByRole("dialog", { name: "Push failed", exact: true });
+  await pushFailure
     .getByRole("alert")
+    .filter({ hasText: /rejected/ })
     .waitFor();
-  await page.getByRole("button", { name: "Dismiss", exact: true }).click();
   assert.equal(git(clientPath, "rev-parse", "HEAD"), committedHead);
   assert.equal(git(clientPath, "status", "--porcelain"), "");
-
-  await dialog
-    .getByText("Use Pull in the toolbar to integrate upstream changes, then retry the push.")
-    .waitFor();
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await pushFailure.getByRole("button", { name: "Close", exact: true }).click();
   assert.equal(
     await page.getByRole("textbox", { name: "Commit title", exact: true }).inputValue(),
     "",

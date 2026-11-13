@@ -39,7 +39,7 @@ import {
 import { branchDeleteTargets } from "../../repository/branch-delete-targets";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { copyText } from "../../utils/clipboard";
-import { RemotesDialog } from "../sync/RemotesDialog";
+import { DirectPush } from "../sync/DirectPush";
 import { CredentialFields } from "../sync/TransportFields";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { RebaseDialog } from "../workflows/RebaseDialog";
@@ -67,7 +67,7 @@ const actionTitleKeys = {
     tag: "referenceMenu.createLocalTagTitle",
   },
   verify: { branch: "referenceMenu.verifyBranchTitle", tag: "referenceMenu.verifyTagTitle" },
-  push: { branch: "remotesDialog.pushTab", tag: "referenceMenu.pushTag" },
+  push: { branch: "directPush.push", tag: "referenceMenu.pushTag" },
 } as const;
 
 export function ReferenceMenu({
@@ -232,11 +232,10 @@ export function ReferenceMenu({
 
   if (mode === "push" && target.kind === "tag")
     return (
-      <RemotesDialog
+      <DirectPush
         repositoryId={repositoryId}
-        initialTag={target.ref.name}
+        tag={{ name: target.ref.name, ...(target.remoteName ? { remote: target.remoteName } : {}) }}
         onChanged={onChanged}
-        {...(target.remoteName ? { initialRemote: target.remoteName } : {})}
         onClose={onClose}
       />
     );

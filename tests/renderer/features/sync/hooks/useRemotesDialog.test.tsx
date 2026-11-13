@@ -13,7 +13,6 @@ const state = (branch: string): RemoteState => ({
   branches: [{ name: branch, oid: "a".repeat(40), remote: false, isHead: true, upstreamState: "" }],
 });
 const inspect = vi.fn();
-const listTags = vi.fn();
 function View({ repositoryId }: { repositoryId: string }) {
   api = useRemotesDialog(repositoryId);
   return null;
@@ -22,8 +21,7 @@ function View({ repositoryId }: { repositoryId: string }) {
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   inspect.mockReset().mockResolvedValue(ok(state("main")));
-  listTags.mockReset().mockResolvedValue(ok([]));
-  vi.stubGlobal("eda", { remotes: { inspect }, repository: { listTags } });
+  vi.stubGlobal("eda", { remotes: { inspect } });
   vi.spyOn(useRepositoryStore.getState(), "syncFromDisk").mockResolvedValue();
   useRepositoryStore.setState({ repositoryId: "repo" });
   container = document.createElement("div");
@@ -78,29 +76,19 @@ it("handles rejected initial loads without an unhandled promise", async () => {
   expect(api.error).toBeTruthy();
 });
 
-it("clears the old repository's review, credentials, and destination when the target changes", async () => {
+it("clears the old repository's tracking and remote edits when the target changes", async () => {
   await act(async () => {
-    api.setMode("force");
     api.setBranch("old-branch");
-    api.setDestination("old-destination");
-    api.setAuth({ username: "old-user", password: "secret" });
-    api.setPreview({
-      token: "old-token",
-      url: "old-url",
-      source: "old",
-      destination: "old",
-      localOid: null,
-      remoteOid: null,
-      mode: "normal",
-    });
+    api.setUpstream("refs/remotes/old/branch");
+    api.setEdit({ kind: "remove", name: "old-remote" });
+    api.setRemove("old-remote");
   });
   inspect.mockResolvedValueOnce(ok(state("develop")));
   await act(async () => root.render(<View repositoryId="other" />));
   expect(api.branch).toBe("develop");
-  expect(api.destination).toBe("develop");
-  expect(api.preview).toBeNull();
-  expect(api.mode).toBe("normal");
-  expect(api.auth).toEqual({ username: "", password: "" });
+  expect(api.upstream).toBe("");
+  expect(api.edit).toEqual({ kind: "add", name: "origin", url: "" });
+  expect(api.remove).toBeNull();
 });
 
 it("does not refresh the new repository from a completed action's stale reload", async () => {

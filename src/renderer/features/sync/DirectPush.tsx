@@ -1,21 +1,29 @@
 import { t } from "@shared/i18n";
+import { useEffect } from "react";
 import { ArrowUpIcon as ArrowUp } from "../../components/ui/icons";
 import { DialogActions, Button, Dialog } from "../../components/ui/index";
 import { openSettings } from "../../stores/shell-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { CredentialFields, TransferProgress } from "./TransportFields";
-import { useDirectPush } from "./hooks/useDirectPush";
+import { useDirectPush, type PushTagTarget } from "./hooks/useDirectPush";
 import { ProviderIcon } from "../connections/ProviderIcon";
 
 export function DirectPush({
   repositoryId,
   afterCommit = false,
   disabled = false,
+  tag,
+  onClose,
+  onChanged,
 }: {
   repositoryId: string;
   afterCommit?: boolean;
   disabled?: boolean;
+  tag?: PushTagTarget;
+  onClose?: () => void;
+  onChanged?: (() => void) | undefined;
 }) {
+  const autoStart = afterCommit || !!tag;
   const {
     busy,
     preview,
@@ -34,9 +42,22 @@ export function DirectPush({
     closeAuthentication,
     runPush,
     confirmLease,
-  } = useDirectPush(repositoryId, afterCommit);
+  } = useDirectPush(repositoryId, autoStart, tag);
 
   const writing = useRepositoryStore((state) => state.writing);
+
+  useEffect(() => {
+    if (tag && message && !busy) {
+      onChanged?.();
+      onClose?.();
+    }
+  }, [tag, message, busy, onChanged, onClose]);
+
+  const close = () => {
+    setPreview(null);
+    closeAuthentication();
+    onClose?.();
+  };
 
   const credentialFields = needsAuth && (
     <div className="mt-3 space-y-3">
@@ -56,7 +77,7 @@ export function DirectPush({
             disabled={busy}
             icon={<ProviderIcon provider="GitHub" />}
             onClick={() => {
-              closeAuthentication();
+              close();
               openSettings("integrations");
             }}
           >
@@ -69,7 +90,7 @@ export function DirectPush({
 
   return (
     <>
-      {!afterCommit && (
+      {!autoStart && (
         <Button
           variant="ghost"
           size="sm"
@@ -90,13 +111,13 @@ export function DirectPush({
         {busy ? t("directPush.pushing") : (error ?? message)}
       </span>
 
-      {error && !preview && (showError || needsAuth || afterCommit) && (
+      {error && !preview && (showError || needsAuth || autoStart) && (
         <Dialog
           title={needsAuth ? t("directPush.hTtpsAuthentication") : t("directPush.pushFailed")}
           {...(needsAuth
             ? { description: t("directPush.enterYourGitUsernameAndAccessTokenToRetry") }
             : {})}
-          onClose={closeAuthentication}
+          onClose={close}
           footer={
             needsAuth ? (
               <Button
@@ -111,7 +132,7 @@ export function DirectPush({
                 {t("directPush.retryPush")}
               </Button>
             ) : (
-              <Button variant="quiet" onClick={() => setError(null)}>
+              <Button variant="quiet" onClick={close}>
                 {t("common.close")}
               </Button>
             )
@@ -128,11 +149,11 @@ export function DirectPush({
         <Dialog
           title={t("directPush.forcePush")}
           description={t("directPush.thisPushReplacesRemoteHistoryForceWithLease")}
-          onClose={() => setPreview(null)}
+          onClose={close}
           busy={busy}
           footer={
             <DialogActions
-              onClose={() => setPreview(null)}
+              onClose={close}
               onConfirm={() => void confirmLease()}
               confirmLabel={
                 needsAuth ? t("directPush.retryForceWithLease") : t("directPush.forceWithLease")

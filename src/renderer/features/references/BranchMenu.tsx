@@ -134,11 +134,7 @@ export function BranchMenu({ head }: { head: string }) {
 
       {tracking && (
         <Suspense fallback={null}>
-          <RemotesDialog
-            repositoryId={repositoryId}
-            initialTab="tracking"
-            onClose={() => setTracking(false)}
-          />
+          <RemotesDialog repositoryId={repositoryId} onClose={() => setTracking(false)} />
         </Suspense>
       )}
 

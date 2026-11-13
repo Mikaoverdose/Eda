@@ -11,6 +11,7 @@ import { ReferenceSidebar } from "@renderer/features/references/ReferenceSidebar
 import { useAppStore } from "@renderer/stores/app-store";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
 import { useSessionStore } from "@renderer/stores/session-store";
+import { ACTION_FEEDBACK } from "@renderer/motion";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -51,6 +52,8 @@ const push = vi.fn();
 const renameBranch = vi.fn();
 const close = vi.fn();
 const refresh = vi.fn();
+const syncFromDisk = vi.fn();
+const changed = vi.fn();
 
 const button = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -83,6 +86,8 @@ beforeEach(() => {
   });
 
   refresh.mockReset().mockResolvedValue(undefined);
+  syncFromDisk.mockReset().mockResolvedValue(undefined);
+  changed.mockReset();
 
   useRepositoryStore.setState({
     repositoryId: "repo",
@@ -91,6 +96,7 @@ beforeEach(() => {
     writing: false,
     status: null,
     refresh,
+    syncFromDisk,
     selection: null,
   });
 
@@ -144,6 +150,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -564,6 +571,7 @@ const renderTag = (options: { remoteName?: string; local?: boolean; remoteOid?: 
         repositoryId="repo"
         target={{ kind: "tag", ref: { name: "v1", oid: local.oid }, ...options, x: 100, y: 100 }}
         onClose={close}
+        onChanged={changed}
       />,
     ),
   );
@@ -685,27 +693,145 @@ it("does not delete either tag if the profile changes during preview", async () 
   expect(deleteTag).not.toHaveBeenCalled();
 });
 
-it("preselects the tag in the push review without configuring branch upstream tracking", async () => {
+const finishPush = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ACTION_FEEDBACK.minimumPending);
+  });
+
+it("pushes the selected tag immediately without a modal or branch upstream tracking", async () => {
+  vi.useFakeTimers();
   await renderTag({ remoteName: "upstream" });
-  await click("Push tag...");
-  expect(document.querySelector('[aria-label="Local tag"]')?.textContent).toContain("v1");
+  await click("Push tag");
 
-  expect(document.querySelector<HTMLInputElement>('[aria-label="Destination tag"]')?.value).toBe(
-    "v1",
+  expect(preparePush).toHaveBeenCalledWith({
+    repositoryId: "repo",
+    branch: "v1",
+    destination: "v1",
+    refKind: "tag",
+    remote: "upstream",
+    mode: "normal",
+    setUpstream: false,
+  });
+  expect(push).toHaveBeenCalledExactlyOnceWith("repo", "delete-preview", undefined);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await finishPush();
+  expect(syncFromDisk).toHaveBeenCalledOnce();
+  expect(changed).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it.each([
+  { label: "upstream remote", branches: [{ ...local, isHead: true }], expected: "upstream" },
+  { label: "origin with detached HEAD", branches: [], expected: "origin" },
+])(
+  "pushes local tags to the $label without requiring a branch checkout",
+  async ({ branches, expected }) => {
+    vi.useFakeTimers();
+    inspect.mockResolvedValue(
+      ok({ branches, remotes: [{ ...remotes[0], name: "origin" }, ...remotes] }),
+    );
+    await renderTag();
+    await click("Push tag");
+    await finishPush();
+
+    expect(preparePush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        remote: expected,
+        branch: "v1",
+        destination: "v1",
+        refKind: "tag",
+        setUpstream: false,
+      }),
+    );
+    expect(push).toHaveBeenCalledOnce();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  },
+);
+
+it("keeps the tag's remote instead of using the current branch's default", async () => {
+  vi.useFakeTimers();
+  inspect.mockResolvedValue(
+    ok({ branches: [], remotes: [{ ...remotes[0], name: "origin" }, ...remotes] }),
   );
-
-  await click("Review push");
+  await renderTag({ remoteName: "upstream" });
+  await click("Push tag");
+  await finishPush();
 
   expect(preparePush).toHaveBeenCalledWith(
+    expect.objectContaining({ remote: "upstream", refKind: "tag" }),
+  );
+});
+
+it("requests credentials only after tag push authentication fails and retries the same tag", async () => {
+  vi.useFakeTimers();
+  push.mockResolvedValueOnce(
+    err(errorFixture({ kind: "auth-failed", message: "Authentication failed" })),
+  );
+  await renderTag({ remoteName: "upstream" });
+  await click("Push tag");
+  await finishPush();
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("HTTPS authentication");
+  expect(close).not.toHaveBeenCalled();
+
+  await act(async () => {
+    for (const [index, field] of [...dialog.querySelectorAll("input")].entries()) {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        field,
+        index === 0 ? "user" : "token",
+      );
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+  await click("Retry push");
+  await finishPush();
+
+  expect(preparePush).toHaveBeenLastCalledWith(
     expect.objectContaining({
+      remote: "upstream",
       branch: "v1",
       destination: "v1",
       refKind: "tag",
-      remote: "upstream",
-      mode: "normal",
-      setUpstream: false,
+      credentials: { username: "user", password: "token" },
     }),
   );
+  expect(push).toHaveBeenLastCalledWith("repo", "delete-preview", {
+    username: "user",
+    password: "token",
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("shows tag push failures and closes the action when dismissed", async () => {
+  vi.useFakeTimers();
+  push.mockResolvedValueOnce(
+    err(errorFixture({ kind: "remote-rejected", message: "Tag already exists" })),
+  );
+  await renderTag();
+  await click("Push tag");
+  await finishPush();
+
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Push failed");
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Tag already exists");
+  expect(preparePush).toHaveBeenCalledOnce();
+  expect(changed).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
+  await click("Close");
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("does not push a tag if the active repository changes during preparation", async () => {
+  vi.useFakeTimers();
+  preparePush.mockImplementationOnce(async () => {
+    useAppStore.setState({ selectedRepositoryId: "other" });
+    return ok({ token: "tag-preview" });
+  });
+  await renderTag();
+  await click("Push tag");
+  await finishPush();
+  expect(push).not.toHaveBeenCalled();
+  expect(changed).not.toHaveBeenCalled();
 });
 
 it("disables actions requiring a local copy for remote-only tags and deletes remotely", async () => {
@@ -713,7 +839,7 @@ it("disables actions requiring a local copy for remote-only tags and deletes rem
   await renderTag({ remoteName: "upstream", local: false });
   expect(button("Check out tag (detached HEAD)").disabled).toBe(true);
   expect(button("Verify tag signature...").disabled).toBe(true);
-  expect(button("Push tag...").disabled).toBe(true);
+  expect(button("Push tag").disabled).toBe(true);
   await click("Delete tag...");
   expect(document.querySelector('input[value="local"]')).toBeNull();
   expect(document.querySelector<HTMLInputElement>('input[value="remote"]')?.checked).toBe(true);

@@ -91,9 +91,9 @@ export const SHELL_COMMANDS: readonly ShellCommand[] = [
   },
   {
     id: "repository.remotes",
-    title: t("shellCommands.manageRemotesAndSynchronize"),
+    title: t("shellCommands.manageBranchTracking"),
     group: t("shellCommands.remotes"),
-    keywords: t("shellCommands.fetchPrunePushPublishUpstreamTrackingConfiguration"),
+    keywords: t("shellCommands.remotesUpstreamTrackingConfiguration"),
     requirement: "repository",
   },
   {
