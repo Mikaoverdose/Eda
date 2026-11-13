@@ -133,5 +133,10 @@ export function useTagReferences(
       tag.local && remoteStatusKnown && unknownRemotes.length === 0 && tag.remotes.length === 0;
   }
 
-  return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...merged.values()].sort((a, b) => {
+    const aDate = a.createdAt ? Date.parse(a.createdAt) : -Infinity;
+    const bDate = b.createdAt ? Date.parse(b.createdAt) : -Infinity;
+
+    return bDate - aDate || b.name.localeCompare(a.name, undefined, { numeric: true });
+  });
 }

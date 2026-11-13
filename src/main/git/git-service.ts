@@ -1104,7 +1104,7 @@ export class GitService {
     const fields = await this.execFields(
       [
         "for-each-ref",
-        "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(taggername)%00%(contents)%00",
+        "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(taggername)%00%(contents)%00%(creatordate:iso-strict)%00",
         "refs/tags",
       ],
       { cwd: path, operation: t("operations.listTags"), maxStdoutBytes: 4 * 1024 * 1024 },
@@ -1112,10 +1112,11 @@ export class GitService {
 
     const tags: TagSummary[] = [];
 
-    for (let index = 0; index + 5 < fields.length; index += 6) {
+    for (let index = 0; index + 6 < fields.length; index += 7) {
       tags.push({
         name: fields[index]!.replace(/^\n/, "").slice("refs/tags/".length),
         oid: fields[index + 2] || fields[index + 1]!,
+        ...(fields[index + 6] ? { createdAt: fields[index + 6]! } : {}),
         ...(fields[index + 3] === "tag"
           ? { annotated: true, tagger: fields[index + 4]!, message: fields[index + 5]! }
           : {}),

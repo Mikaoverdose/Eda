@@ -162,6 +162,7 @@ describe("tags against real Git", () => {
       {
         name: "annotated",
         oid: head,
+        createdAt: expect.any(String),
         annotated: true,
         tagger: "Eda",
         message: "Release notes\n",
@@ -188,6 +189,38 @@ describe("tags against real Git", () => {
 
     const tags = await repo.git.listTags(repo.path);
     expect(tags.map((t) => t.name)).toEqual(["v1.0.0"]);
+  });
+
+  it("reports tagger dates for annotated tags and committer dates for lightweight tags", async () => {
+    const repo = await seeded();
+    await repo.git.createTag(repo.path, "initial");
+    await repo.git.exec(["tag", "-a", "-m", "Later release of the initial commit", "annotated"], {
+      cwd: repo.path,
+      operation: "test setup",
+      env: { overrides: { GIT_COMMITTER_DATE: "2026-03-01T00:00:00+00:00" } },
+    });
+    await repo.git.exec(["commit", "--allow-empty", "-m", "Later commit"], {
+      cwd: repo.path,
+      operation: "test setup",
+      env: {
+        overrides: {
+          GIT_AUTHOR_DATE: "2026-01-15T00:00:00+00:00",
+          GIT_COMMITTER_DATE: "2026-02-01T00:00:00+00:00",
+        },
+      },
+    });
+    await repo.git.createTag(repo.path, "lightweight");
+
+    const tags = await repo.git.listTags(repo.path);
+    expect(
+      Object.fromEntries(
+        tags.map((tag) => [tag.name, tag.createdAt && new Date(tag.createdAt).toISOString()]),
+      ),
+    ).toEqual({
+      annotated: "2026-03-01T00:00:00.000Z",
+      initial: "2026-01-01T00:00:00.000Z",
+      lightweight: "2026-02-01T00:00:00.000Z",
+    });
   });
 
   it("preserves exact tag names when branches have the same names", async () => {

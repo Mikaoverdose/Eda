@@ -764,6 +764,38 @@ it("labels local and remote tags directly in one Tags list", async () => {
   expect(button("Check out tag (detached HEAD)").disabled).toBe(true);
 });
 
+it("sorts tags newest first and uses descending natural names for equal or unavailable dates", async () => {
+  listTags.mockResolvedValue(
+    ok([
+      { name: "0.0.1", oid: local.oid, createdAt: "2026-03-01T00:00:00Z" },
+      { name: "0.0.2", oid: local.oid, createdAt: "2026-01-01T00:00:00Z" },
+      { name: "0.0.9", oid: local.oid, createdAt: "2026-02-01T00:00:00Z" },
+      { name: "0.0.10", oid: local.oid, createdAt: "2026-01-31T19:00:00-05:00" },
+    ]),
+  );
+  remoteTags.mockResolvedValue(
+    ok([
+      { name: "0.0.1", oid: local.oid },
+      { name: "0.0.3", oid: local.oid },
+      { name: "0.0.11", oid: local.oid },
+    ]),
+  );
+
+  await act(async () => root.render(<ReferenceSidebar repositoryId="repo" />));
+
+  const tags = [...container.querySelectorAll('[aria-label^="Inspect tag "]')].map((row) =>
+    row.getAttribute("aria-label"),
+  );
+  expect(tags).toEqual([
+    "Inspect tag 0.0.1",
+    "Inspect tag 0.0.10",
+    "Inspect tag 0.0.9",
+    "Inspect tag 0.0.2",
+    "Inspect tag 0.0.11",
+    "Inspect tag 0.0.3",
+  ]);
+});
+
 it("leaves local tags usable and discloses unavailable remote status in the tooltip", async () => {
   remoteTags.mockResolvedValue(
     err(errorFixture({ kind: "auth-failed", message: "Authentication failed" })),
