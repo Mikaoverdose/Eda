@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="build/icon.png" alt="Eda icon" width="128" height="128" />
+
 # Eda 枝
 
 ### Your Git history, in full view.
