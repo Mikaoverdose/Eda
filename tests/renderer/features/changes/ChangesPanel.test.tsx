@@ -26,6 +26,7 @@ it("targets the right-clicked file, confirms discard, and dismisses menus on rep
   const session = useSessionStore.getState();
   const stage = vi.fn();
   const unstage = vi.fn();
+  const stash = vi.fn();
   const container = document.createElement("div");
 
   document.body.append(container);
@@ -56,6 +57,7 @@ it("targets the right-clicked file, confirms discard, and dismisses menus on rep
       writing: false,
       stage,
       unstage,
+      stash,
       status: {
         branch: { ahead: 0, behind: 0, detached: false, unborn: false },
         changes: [
@@ -67,6 +69,11 @@ it("targets the right-clicked file, confirms discard, and dismisses menus on rep
     await open();
     await act(async () => action("Stage").click());
     expect(stage).toHaveBeenCalledWith(["file.txt"]);
+
+    await open();
+    await act(async () => action("Stash file").click());
+    expect(stash).toHaveBeenCalledWith(["file.txt"]);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
 
     await open();
     await act(async () => action("Discard").click());
@@ -111,6 +118,7 @@ it("targets the right-clicked file, confirms discard, and dismisses menus on rep
       ),
     );
     expect(action("Discard")).toBeUndefined();
+    expect(action("Stash file").disabled).toBe(false);
 
     await act(async () => action("Unstage").click());
     expect(unstage).toHaveBeenCalledWith(["file.txt"]);

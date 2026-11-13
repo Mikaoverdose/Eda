@@ -13,6 +13,7 @@ import { categorizeChanges } from "../../repository/working-changes";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { BranchMenu } from "../references/BranchMenu";
 import { RepositorySyncActions } from "../sync/RepositorySyncActions";
+import { StashActions } from "../stashes/StashActions";
 import { RepositoryWorkflowActions } from "../workflows/RepositoryWorkflowActions";
 
 import { RepositoryTrustButton } from "./RepositoryTrustButton";
@@ -23,10 +24,6 @@ const RemotesDialog = lazy(() =>
 
 const ConflictDialog = lazy(() =>
   import("../repository-dialogs").then((module) => ({ default: module.ConflictDialog })),
-);
-
-const StashesDialog = lazy(() =>
-  import("../repository-dialogs").then((module) => ({ default: module.StashesDialog })),
 );
 
 export function RepositoryOverview({
@@ -40,7 +37,6 @@ export function RepositoryOverview({
 }) {
   const [remotesFor, setRemotesFor] = useState<string | null>(null);
   const [conflictsFor, setConflictsFor] = useState<string | null>(null);
-  const [stashesFor, setStashesFor] = useState<string | null>(null);
   const status = useRepositoryStore((state) => state.status);
   const writing = useRepositoryStore((state) => state.writing);
   const truncated = useRepositoryStore((state) => state.truncatedChanges);
@@ -127,18 +123,12 @@ export function RepositoryOverview({
 
       <RepositorySyncActions />
 
+      <StashActions pending={pending} />
+
       <div
         aria-label={t("repositoryOverview.repositoryActions")}
         className="flex min-w-0 flex-1 items-center justify-end gap-4 text-xs"
       >
-        <TextButton
-          className="text-text-secondary hover:text-text-primary"
-          data-tour="stashes"
-          onClick={() => setStashesFor(repository.id)}
-        >
-          {t("repositoryOverview.stashes")}
-        </TextButton>
-
         <TextButton
           className="text-text-secondary hover:text-text-primary"
           onClick={() => setRemotesFor(repository.id)}
@@ -220,16 +210,6 @@ export function RepositoryOverview({
             key={repository.id}
             repositoryId={repository.id}
             onClose={() => setConflictsFor(null)}
-          />
-        </Suspense>
-      )}
-
-      {stashesFor === repository.id && (
-        <Suspense fallback={null}>
-          <StashesDialog
-            key={repository.id}
-            repositoryId={repository.id}
-            onClose={() => setStashesFor(null)}
           />
         </Suspense>
       )}

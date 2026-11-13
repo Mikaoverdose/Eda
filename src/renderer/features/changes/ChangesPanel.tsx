@@ -3,6 +3,9 @@ import { t } from "@shared/i18n";
 import { MAX_FILE_VIEW_PATHS, defaultFileView, type FileView } from "@shared/preferences/file-view";
 import type { RepositoryChange } from "@shared/repository/repository-read";
 import {
+  ArchiveIcon as Archive,
+  CopyIcon as Copy,
+  DiffIcon as FileDiff,
   EyeOffIcon as EyeOff,
   HistoryIcon as History,
   MinusIcon as Minus,
@@ -49,6 +52,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
     area: ChangeArea;
     stagePaths: string[];
     unstagePaths: string[];
+    stashPaths: string[];
     x: number;
     y: number;
   } | null>(null);
@@ -61,6 +65,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
   const panel = usePanel("rail");
   const stage = useRepositoryStore((state) => state.stage);
   const unstage = useRepositoryStore((state) => state.unstage);
+  const stash = useRepositoryStore((state) => state.stash);
 
   const writing = useRepositoryStore(
     (state) => pending || state.writing || state.status?.capabilities?.write === false,
@@ -299,6 +304,9 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
                   ? [change.path]
                   : [],
               unstagePaths: batch ? checkedUnstage : area === "staged" ? [change.path] : [],
+              stashPaths: batch
+                ? [...new Set([...checkedStage, ...checkedUnstage])]
+                : [change.path],
               x: position.x,
               y: position.y,
             });
@@ -432,6 +440,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
               setMenu(null);
             }}
           >
+            <FileDiff size={14} />
             {t("changesPanel.inspectFile")}
           </MenuItem>
 
@@ -461,6 +470,26 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
             </MenuItem>
           )}
 
+          {menu.area !== "conflicted" && (
+            <MenuItem
+              disabled={
+                writing ||
+                !!status?.workflow ||
+                status?.branch.unborn ||
+                menu.stashPaths.length > 256
+              }
+              onClick={() => {
+                void stash(menu.stashPaths);
+                setMenu(null);
+              }}
+            >
+              <Archive size={14} />
+              {menu.stashPaths.length === 1
+                ? t("changesPanel.stashFile")
+                : t("changesPanel.stashSelectedFiles", { length: menu.stashPaths.length })}
+            </MenuItem>
+          )}
+
           {menu.stagePaths.length > 0 && (
             <MenuItem
               disabled={writing}
@@ -483,6 +512,7 @@ export function ChangesPanel({ pending = false }: { pending?: boolean }) {
               setMenu(null);
             }}
           >
+            <Copy size={14} />
             {t("changesPanel.copyFilePath")}
           </MenuItem>
         </ContextPopover>

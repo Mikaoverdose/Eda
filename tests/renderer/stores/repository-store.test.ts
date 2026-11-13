@@ -705,3 +705,115 @@ describe("repository read store", () => {
     expect(categorized.untracked).toHaveLength(1);
   });
 });
+
+describe("direct stash actions", () => {
+  const entry = { selector: "stash@{0}", oid: "a".repeat(40), message: "latest", timestamp: 1 };
+  const stashes = {
+    create: vi.fn(),
+    list: vi.fn(),
+    inspect: vi.fn(),
+    apply: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    useRepositoryStore.getState().clear();
+    vi.resetAllMocks();
+    stashes.create.mockResolvedValue(ok(undefined));
+    stashes.list.mockResolvedValue(ok({ entries: [entry], truncated: false }));
+    stashes.inspect.mockResolvedValue(ok({ token: "latest-review" }));
+    stashes.apply.mockResolvedValue(ok({ applied: true, kept: false }));
+    const eda = api(async () => ok({ commits: [], nextOffset: null }));
+    eda.stashes = stashes as unknown as EdaApi["stashes"];
+    Object.defineProperty(window, "eda", { configurable: true, value: eda });
+    await useRepositoryStore.getState().open("repo", "identity", true);
+    const status = useRepositoryStore.getState().status!;
+    useRepositoryStore.setState({
+      status: { ...status, branch: { ...status.branch, head: "main" } },
+    });
+  });
+
+  it("stashes all changes including untracked files with an automatic name, or only the selected paths", async () => {
+    await useRepositoryStore.getState().stash();
+    expect(stashes.create).toHaveBeenLastCalledWith("repo", "WIP on main", "untracked", undefined);
+    await useRepositoryStore.getState().stash(["selected.txt"]);
+    expect(stashes.create).toHaveBeenLastCalledWith("repo", expect.any(String), "untracked", {
+      paths: ["selected.txt"],
+    });
+  });
+
+  it("pops the latest stash even when older entries exist", async () => {
+    stashes.list.mockResolvedValue(
+      ok({
+        entries: [entry, { ...entry, selector: "stash@{1}", oid: "b".repeat(40) }],
+        truncated: false,
+      }),
+    );
+    await useRepositoryStore.getState().popStash();
+    expect(stashes.inspect).toHaveBeenCalledExactlyOnceWith("repo", entry.selector, entry.oid);
+    expect(stashes.apply).toHaveBeenCalledExactlyOnceWith("repo", "latest-review", true, false);
+    expect(useRepositoryStore.getState().stashNotice).toContain("latest stash removed");
+  });
+
+  it("reports conflicts with the source stash retained and refreshes repository state", async () => {
+    stashes.apply.mockResolvedValue(ok({ applied: false, kept: true }));
+    const status = vi.spyOn(window.eda.repository, "status");
+    await useRepositoryStore.getState().popStash();
+    expect(useRepositoryStore.getState().stashNotice).toContain("stash was kept");
+    expect(status).toHaveBeenCalledWith("repo");
+    expect(useRepositoryStore.getState().writing).toBe(false);
+  });
+
+  it("handles an empty stash list without applying anything", async () => {
+    stashes.list.mockResolvedValue(ok({ entries: [], truncated: false }));
+    await useRepositoryStore.getState().popStash();
+    expect(stashes.inspect).not.toHaveBeenCalled();
+    expect(stashes.apply).not.toHaveBeenCalled();
+    expect(useRepositoryStore.getState().stashNotice).toContain("no saved stashes");
+  });
+
+  it.each(["list", "inspect"] as const)(
+    "stops before applying if the repository changes during %s",
+    async (step) => {
+      let finish!: (result: unknown) => void;
+      stashes[step].mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const pending = useRepositoryStore.getState().popStash();
+      await vi.waitFor(() => expect(stashes[step]).toHaveBeenCalled());
+      useRepositoryStore.getState().clear();
+      finish(
+        step === "list"
+          ? ok({ entries: [entry], truncated: false })
+          : ok({ token: "stale-review" }),
+      );
+      await pending;
+      expect(stashes.apply).not.toHaveBeenCalled();
+      expect(useRepositoryStore.getState().stashNotice).toBeNull();
+      expect(useRepositoryStore.getState().writing).toBe(false);
+    },
+  );
+
+  it("blocks duplicate writes immediately and clears busy state after a rejected request", async () => {
+    let finish!: (value: Result<void>) => void;
+    stashes.create.mockImplementationOnce(
+      () =>
+        new Promise<Result<void>>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = useRepositoryStore.getState().stash();
+    await useRepositoryStore.getState().stash();
+    await useRepositoryStore.getState().popStash();
+    expect(stashes.create).toHaveBeenCalledOnce();
+    expect(stashes.list).not.toHaveBeenCalled();
+    finish(ok(undefined));
+    await pending;
+    stashes.create.mockRejectedValueOnce(new Error("Transport closed"));
+    await useRepositoryStore.getState().stash();
+    expect(useRepositoryStore.getState().writing).toBe(false);
+    expect(useRepositoryStore.getState().writeError).not.toBeNull();
+  });
+});

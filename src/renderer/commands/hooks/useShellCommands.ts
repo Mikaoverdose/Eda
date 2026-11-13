@@ -102,6 +102,12 @@ export function useShellCommands(navigation: ShellNavigation) {
 
         const perform = () => {
           switch (command) {
+            case "repository.stash":
+              void useRepositoryStore.getState().stash();
+              break;
+            case "repository.popStash":
+              void useRepositoryStore.getState().popStash();
+              break;
             case "repository.stageAll":
               void useRepositoryStore.getState().stage();
               break;
@@ -116,7 +122,6 @@ export function useShellCommands(navigation: ShellNavigation) {
               break;
             case "repository.references":
             case "repository.remotes":
-            case "repository.stashes":
             case "repository.graph":
             case "repository.recovery":
             case "repository.historyRecovery":

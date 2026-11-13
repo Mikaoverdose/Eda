@@ -62,6 +62,21 @@ describe("shell commands", () => {
     ).toBeNull();
   });
 
+  it("offers direct stash and pop commands and gates stashing on changes and write access", () => {
+    expect(commandReason(command("repository.stash"), ready)).toContain("no changes");
+    expect(commandReason(command("repository.stash"), { ...ready, stagedCount: 1 })).toBeNull();
+    expect(commandReason(command("repository.stash"), { ...ready, unstagedCount: 1 })).toBeNull();
+    expect(commandReason(command("repository.popStash"), ready)).toBeNull();
+    for (const id of ["repository.stash", "repository.popStash"] as const)
+      expect(commandReason(command(id), { ...ready, writeUnavailable: "Read only" })).toBe(
+        "Read only",
+      );
+    expect(searchCommands("stash").map((entry) => entry.id)).toEqual([
+      "repository.stash",
+      "repository.popStash",
+    ]);
+  });
+
   it("uses unique IDs and unambiguous shortcuts", () => {
     expect(new Set(SHELL_COMMANDS.map((entry) => entry.id)).size).toBe(SHELL_COMMANDS.length);
     const keys = SHELL_COMMANDS.flatMap((entry) =>

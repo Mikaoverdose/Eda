@@ -1,4 +1,5 @@
-import type { GitErrorData } from "@shared/errors";
+import { err, ok, type GitErrorData } from "@shared/errors";
+import { errorText } from "@shared/error-codes";
 import { t } from "@shared/i18n";
 import { HISTORY_PAGE_SIZE, type HistoryPage } from "@shared/repository/repository-read";
 import { create } from "zustand";
@@ -52,6 +53,7 @@ const emptyState = {
   writing: false,
   writeError: null,
   commitNotice: null,
+  stashNotice: null,
 };
 
 export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
@@ -367,6 +369,69 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     set({ navigation: next, navigationIndex: next.length - 1 });
   };
 
+  const runStash = async (pop: boolean, paths?: string[]) => {
+    const { generation, status, writing, phase } = get();
+
+    if (writing || phase !== "ready" || status?.capabilities?.write === false) return;
+
+    set({ stashNotice: null });
+
+    await runWrite(async (repositoryId) => {
+      try {
+        if (!pop)
+          return await window.eda.stashes.create(
+            repositoryId,
+            t("stashActions.defaultName", {
+              branch: status?.branch.head ?? status?.branch.oid?.slice(0, 7),
+            }),
+            "untracked",
+            paths ? { paths } : undefined,
+          );
+
+        const list = await window.eda.stashes.list(repositoryId);
+        if (!list.ok) return list;
+        if (get().generation !== generation) return ok(undefined);
+
+        const latest = list.value.entries[0];
+
+        if (!latest) {
+          set({ stashNotice: t("stashActions.noSavedStashes") });
+          return ok(undefined);
+        }
+
+        const inspected = await window.eda.stashes.inspect(
+          repositoryId,
+          latest.selector,
+          latest.oid,
+        );
+        if (!inspected.ok) return inspected;
+        if (get().generation !== generation) return ok(undefined);
+
+        const result = await window.eda.stashes.apply(
+          repositoryId,
+          inspected.value.token,
+          true,
+          false,
+        );
+
+        if (result.ok && get().generation === generation) {
+          let notice = t("stashActions.popped");
+          if (!result.value.applied) notice = t("stashActions.conflictsKept");
+          else if (result.value.kept) notice = t("stashActions.appliedKept");
+          set({ stashNotice: notice });
+        }
+
+        return result;
+      } catch {
+        return err({
+          kind: "unknown",
+          operation: t(pop ? "stashActions.pop" : "stashActions.stash"),
+          message: errorText("errors.unexpected"),
+        });
+      }
+    });
+  };
+
   return {
     ...emptyState,
     generation: 0,
@@ -461,6 +526,9 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
         window.eda.repository.unstage({ repositoryId, ...(paths ? { paths } : {}) }),
       );
     },
+
+    stash: (paths) => runStash(false, paths),
+    popStash: () => runStash(true),
 
     async commit(message, options = {}) {
       const generation = get().generation;

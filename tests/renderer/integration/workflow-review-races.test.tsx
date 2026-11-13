@@ -2,14 +2,13 @@ import { errorFixture } from "../../helpers/error";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ok } from "@shared/errors";
-import { StashFileRestoreDialog } from "@renderer/features/stashes/StashFileRestoreDialog";
 import { MergeStartDialog } from "@renderer/features/workflows/MergeStartDialog";
 import { MergeAbortDialog } from "@renderer/features/workflows/MergeAbortDialog";
 import { ReplayDialog } from "@renderer/features/workflows/ReplayDialog";
 import { IdentityDialog } from "@renderer/features/profiles/IdentityDialog";
 import { useAppStore } from "@renderer/stores/app-store";
 
-it.each(["stash", "merge", "merge-start", "replay"])(
+it.each(["merge", "merge-start", "replay"])(
   "ignores stale %s previews after the review target changes",
   async (kind) => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -47,7 +46,6 @@ it.each(["stash", "merge", "merge-start", "replay"])(
       .mockResolvedValueOnce(ok(preview("new-target")));
 
     vi.stubGlobal("eda", {
-      stashes: { prepareFile: prepare },
       workflows: { prepareAbort: prepare, prepareStart: prepare },
       replay: { prepare },
     });
@@ -59,15 +57,7 @@ it.each(["stash", "merge", "merge-start", "replay"])(
     const render = (id: string) => {
       const props = { repositoryId: id, onClose: vi.fn() };
 
-      return kind === "stash" ? (
-        <StashFileRestoreDialog
-          {...props}
-          stashToken={id}
-          area="tracked"
-          path={id}
-          onRestored={vi.fn()}
-        />
-      ) : kind === "merge-start" ? (
+      return kind === "merge-start" ? (
         <MergeStartDialog {...props} source={id} />
       ) : kind === "merge" ? (
         <MergeAbortDialog {...props} />

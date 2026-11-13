@@ -271,15 +271,7 @@ export const FEATURE_COMPONENTS = [
       "features/settings/repository/RepositorySyncSettings.tsx",
     ],
   },
-  {
-    group: "Stashes",
-    files: [
-      "features/stashes/StashBranchDialog.tsx",
-      "features/stashes/StashFileRestoreDialog.tsx",
-      "features/stashes/StashRenameDialog.tsx",
-      "features/stashes/StashesDialog.tsx",
-    ],
-  },
+  { group: "Stashes", files: ["features/stashes/StashActions.tsx"] },
   {
     group: "Sync",
     files: [
@@ -379,6 +371,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
     "IconDefaults",
     "ActivityIcon",
     "ArchiveIcon",
+    "ArchiveRestoreIcon",
     "ArrowDownIcon",
     "ArrowDownToLineIcon",
     "ArrowLeftIcon",
@@ -607,10 +600,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/settings/repository/RepositoryPullSettings.tsx": ["RepositoryPullSettings"],
   "features/settings/repository/RepositoryRemotesSettings.tsx": ["RepositoryRemotesSettings"],
   "features/settings/repository/RepositorySyncSettings.tsx": ["RepositorySyncSettings"],
-  "features/stashes/StashBranchDialog.tsx": ["StashBranchDialog"],
-  "features/stashes/StashFileRestoreDialog.tsx": ["StashFileRestoreDialog"],
-  "features/stashes/StashRenameDialog.tsx": ["StashRenameDialog"],
-  "features/stashes/StashesDialog.tsx": ["StashesDialog"],
+  "features/stashes/StashActions.tsx": ["StashActions"],
   "features/sync/BackgroundFetchPanel.tsx": ["BackgroundFetchPanel"],
   "features/sync/DirectFetchActions.tsx": ["DirectFetchActions"],
   "features/sync/DirectPush.tsx": ["DirectPush"],

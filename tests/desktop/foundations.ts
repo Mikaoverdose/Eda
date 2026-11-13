@@ -554,64 +554,29 @@ try {
   await writeFile(join(repository, "stash-untracked.txt"), "desktop_untracked_stash\n");
   await writeFile(join(repository, "scope-unrelated.txt"), "keep unrelated staged work\n");
   git("add", "scope-unrelated.txt");
-  await squashPage.keyboard.press(`${modifier}+Shift+p`);
-  await squashPage.getByRole("combobox", { name: "Search commands" }).fill("Manage stashes");
-  await squashPage.keyboard.press("Enter");
-
-  const stashes = squashPage.getByRole("dialog", { name: "Stashes", exact: true });
-
-  await stashes.getByRole("textbox", { name: "Stash name" }).fill("Desktop unfinished work");
-  await chooseSelect(stashes.getByRole("combobox", { name: "Stash contents" }), "untracked");
-  await chooseSelect(stashes.getByRole("combobox", { name: "Stash scope" }), "selected");
-  await stashes.getByRole("checkbox", { name: "Stash file.txt", exact: true }).check();
-  await stashes.getByRole("checkbox", { name: "Stash stash-untracked.txt", exact: true }).check();
-  await stashes.getByRole("button", { name: "Create stash", exact: true }).click();
-  await chooseSelect(stashes.getByRole("combobox", { name: "Saved stash" }), "stash@{0}");
-  await stashes.getByText("desktop_working_stash", { exact: true }).waitFor();
-  await chooseSelect(stashes.getByRole("combobox", { name: "Stash diff" }), "staged");
-  await stashes.getByText("desktop_staged_stash", { exact: true }).waitFor();
-
-  const beforeFileRestore = git("show", ":file.txt");
-
-  await chooseSelect(stashes.getByRole("combobox", { name: "Stash file to restore" }), "file.txt");
-  await stashes.getByRole("button", { name: "Restore file...", exact: true }).click();
-
-  const fileRestore = squashPage.getByRole("dialog", { name: "Restore stash file", exact: true });
-
-  await fileRestore.getByRole("button", { name: "Restore working file", exact: true }).click();
-  await fileRestore.waitFor({ state: "hidden" });
-  assert.equal(await readFile(join(repository, "file.txt"), "utf8"), "desktop_staged_stash\n");
-  assert.equal(git("show", ":file.txt"), beforeFileRestore);
-
-  await stashes.getByRole("button", { name: "Close", exact: true }).click();
-  await squashPage.keyboard.press(`${modifier}+Shift+p`);
-  await squashPage.getByRole("combobox", { name: "Search commands" }).fill("Recover local files");
-  await squashPage.keyboard.press("Enter");
-
-  const fileRecovery = squashPage.getByRole("dialog", { name: "Recover local files" });
-  const restoredFileRecord = fileRecovery
-    .locator("div")
-    .filter({ has: squashPage.getByText(/Stash file restore/) })
-    .filter({ has: squashPage.getByRole("button", { name: "Restore 1 files", exact: true }) })
-    .last();
-
-  await restoredFileRecord.getByRole("button", { name: "Restore 1 files", exact: true }).click();
-  await fileRecovery.waitFor({ state: "hidden" });
-  assert.equal(await readFile(join(repository, "file.txt"), "utf8"), beforeFileRestore);
-  assert.equal(git("show", ":file.txt"), beforeFileRestore);
-
-  await squashPage.keyboard.press(`${modifier}+Shift+p`);
-  await squashPage.getByRole("combobox", { name: "Search commands" }).fill("Manage stashes");
-  await squashPage.getByRole("option", { name: "Manage stashes Repository", exact: true }).click();
-  await chooseSelect(stashes.getByRole("combobox", { name: "Saved stash" }), "stash@{0}");
-  await chooseSelect(stashes.getByRole("combobox", { name: "Stash diff" }), "untracked");
-  await stashes.getByText("desktop_untracked_stash", { exact: true }).waitFor();
+  await squashPage.getByRole("button", { name: "Refresh repository", exact: true }).click();
+  await squashPage.getByRole("button", { name: "View changes", exact: true }).click();
+  await squashPage.getByRole("checkbox", { name: "Select unstaged file.txt", exact: true }).check();
+  await squashPage
+    .getByRole("checkbox", { name: "Select untracked stash-untracked.txt", exact: true })
+    .check();
+  await squashPage
+    .getByRole("button", { name: "Unstaged file.txt, status M", exact: true })
+    .click({ button: "right" });
+  await squashPage.getByRole("menuitem", { name: "Stash 2 selected files", exact: true }).click();
+  await expect(squashPage.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    squashPage.getByRole("button", { name: "Unstaged file.txt, status M", exact: true }),
+  ).toHaveCount(0);
   assert.equal(git("show", ":scope-unrelated.txt"), "keep unrelated staged work\n");
   assert.equal(git("diff", "--name-only", "stash@{0}^1", "stash@{0}"), "file.txt\n");
+  assert.equal(git("show", "stash@{0}^2:file.txt"), "desktop_staged_stash\n");
+  assert.equal(git("show", "stash@{0}:file.txt"), "desktop_working_stash\n");
+  assert.equal(git("show", "stash@{0}^3:stash-untracked.txt"), "desktop_untracked_stash\n");
 
   git("commit", "-m", "Retain unrelated staged work");
   assert.equal(git("status", "--porcelain"), "");
-  assert.match(git("stash", "list"), /Desktop unfinished work/);
+  assert.match(git("stash", "list"), /WIP on/);
 
   git("checkout", "-b", "stash-destination");
   await writeFile(join(repository, "file.txt"), "desktop_stash_destination\n");
@@ -620,11 +585,14 @@ try {
 
   const stashHead = git("rev-parse", "HEAD");
 
-  await stashes.getByRole("button", { name: "Pop stash", exact: true }).click();
-  await stashes.getByRole("status").filter({ hasText: "Application needs attention" }).waitFor();
-  assert.match(git("stash", "list"), /Desktop unfinished work/);
+  await squashPage.getByRole("button", { name: "Refresh repository", exact: true }).click();
+  await squashPage.getByRole("button", { name: "Pop", exact: true }).click();
+  await squashPage
+    .getByRole("status")
+    .filter({ hasText: "Stash application needs attention" })
+    .waitFor();
+  assert.match(git("stash", "list"), /WIP on/);
 
-  await stashes.getByRole("button", { name: "Close", exact: true }).click();
   await app.close();
   app = await electron.launch({ args: ["dist/main/index.js", `--user-data-dir=${root}`], env });
 
@@ -648,24 +616,10 @@ try {
     "desktop_untracked_stash\n",
   );
 
-  await stashPage.keyboard.press(`${modifier}+Shift+p`);
-  await stashPage.getByRole("combobox", { name: "Search commands" }).fill("Manage stashes");
-  await stashPage.keyboard.press("Enter");
-
-  const retainedStashes = stashPage.getByRole("dialog", { name: "Stashes", exact: true });
-
-  await chooseSelect(retainedStashes.getByRole("combobox", { name: "Saved stash" }), "stash@{0}");
-  await retainedStashes
-    .getByRole("checkbox", { name: "Remove this stash from Git’s stash list" })
-    .check();
-  await retainedStashes.getByRole("button", { name: "Drop selected stash", exact: true }).click();
-  await retainedStashes
-    .getByRole("button", { name: "Drop selected stash", exact: true })
-    .waitFor({ state: "hidden" });
+  git("stash", "drop");
   assert.equal(git("stash", "list"), "");
   assert.equal(git("show", ":file.txt"), "desktop_working_stash\n");
 
-  await retainedStashes.getByRole("button", { name: "Close", exact: true }).click();
   git("add", "--all");
   git("commit", "-m", "Preserve resolved stash");
   git("checkout", "-b", "rebase-base");
@@ -833,58 +787,41 @@ try {
   await writeFile(join(repository, "file.txt"), "branch_staged_version\n");
   git("add", "file.txt");
   await writeFile(join(repository, "file.txt"), "branch_working_version\n");
+  await rebasePage.getByRole("button", { name: "Refresh repository", exact: true }).click();
+  await rebasePage.getByRole("button", { name: "Stash", exact: true }).click();
+  await expect(rebasePage.getByRole("button", { name: "Stash", exact: true })).toBeDisabled();
+  await expect(rebasePage.getByRole("button", { name: "Pop", exact: true })).toBeEnabled();
+  await expect(rebasePage.getByRole("dialog")).toHaveCount(0);
+  assert.equal(git("status", "--porcelain"), "");
+  assert.equal(git("show", "stash@{0}^2:file.txt"), "branch_staged_version\n");
+  assert.equal(git("show", "stash@{0}:file.txt"), "branch_working_version\n");
+
+  await writeFile(join(repository, "latest-stash.txt"), "latest stash content\n");
+  await rebasePage.getByRole("button", { name: "Refresh repository", exact: true }).click();
   await rebasePage.keyboard.press(`${modifier}+Shift+p`);
-  await rebasePage.getByRole("combobox", { name: "Search commands" }).fill("Manage stashes");
-  await rebasePage.getByRole("option", { name: "Manage stashes Repository", exact: true }).click();
+  await rebasePage.getByRole("combobox", { name: "Search commands" }).fill("Stash all changes");
+  await rebasePage
+    .getByRole("option", { name: "Stash all changes Repository", exact: true })
+    .click();
+  await expect(rebasePage.getByRole("button", { name: "Stash", exact: true })).toBeDisabled();
+  await expect(rebasePage.getByRole("button", { name: "Pop", exact: true })).toBeEnabled();
+  assert.equal(git("stash", "list", "--format=%H").trim().split("\n").length, 2);
+  await rebasePage.getByRole("button", { name: "Pop", exact: true }).click();
+  await rebasePage.getByRole("status").filter({ hasText: "latest stash removed" }).waitFor();
+  assert.equal(
+    await readFile(join(repository, "latest-stash.txt"), "utf8"),
+    "latest stash content\n",
+  );
+  assert.equal(git("stash", "list", "--format=%H").trim().split("\n").length, 1);
+  assert.equal(git("diff", "--", "file.txt"), "");
+  await rm(join(repository, "latest-stash.txt"));
 
-  const branchStashes = rebasePage.getByRole("dialog", { name: "Stashes", exact: true });
-
-  await branchStashes.getByRole("textbox", { name: "Stash name" }).fill("Branch recovery");
-  await branchStashes.getByRole("button", { name: "Create stash", exact: true }).click();
-  await chooseSelect(branchStashes.getByRole("combobox", { name: "Saved stash" }), "stash@{0}");
-  await branchStashes.getByText("branch_working_version", { exact: true }).waitFor();
-  await writeFile(join(repository, "file.txt"), "original_branch_advanced\n");
-  git("add", "file.txt");
-  git("commit", "-m", "Advance original branch");
-  await branchStashes.getByRole("button", { name: "Create branch...", exact: true }).click();
-
-  const stashBranchDialog = rebasePage.getByRole("dialog", {
-    name: "Create branch from stash",
-    exact: true,
-  });
-
-  await stashBranchDialog
-    .getByRole("textbox", { name: "Stash branch name" })
-    .fill("stash-recovered");
-  await stashBranchDialog.getByRole("button", { name: "Review branch", exact: true }).click();
-  await stashBranchDialog.getByRole("button", { name: "Create and restore", exact: true }).click();
-  await stashBranchDialog.waitFor({ state: "hidden" });
-  await branchStashes
-    .getByRole("status")
-    .filter({ hasText: "Created stash-recovered and restored" })
-    .waitFor();
-  assert.equal(git("branch", "--show-current").trim(), "stash-recovered");
-  assert.equal(git("rev-parse", "HEAD").trim(), stashBranchBase);
-  assert.equal(git("show", ":file.txt"), "branch_staged_version\n");
-  assert.equal(await readFile(join(repository, "file.txt"), "utf8"), "branch_working_version\n");
-  assert.match(git("stash", "list"), /Branch recovery/);
-
-  const stashStructure = git("show", "-s", "--format=%T %P", "stash@{0}");
-
-  await branchStashes.getByRole("button", { name: "Rename...", exact: true }).click();
-
-  const renameStash = rebasePage.getByRole("dialog", { name: "Rename stash", exact: true });
-
-  await renameStash.getByRole("textbox", { name: "New stash description" }).fill("Recovered work");
-  await renameStash.getByRole("button", { name: "Rename stash", exact: true }).click();
-  await renameStash.waitFor({ state: "hidden" });
-  await branchStashes.getByRole("status").filter({ hasText: "Renamed stash and moved" }).waitFor();
-  assert.equal(git("stash", "list", "--format=%gs"), "Recovered work\n");
-  assert.equal(git("show", "-s", "--format=%T %P", "stash@{0}"), stashStructure);
-  assert.equal(git("show", ":file.txt"), "branch_staged_version\n");
-  assert.equal(await readFile(join(repository, "file.txt"), "utf8"), "branch_working_version\n");
-
-  await branchStashes.getByRole("button", { name: "Close", exact: true }).click();
+  git("checkout", "-b", "stash-recovered", stashBranchBase);
+  git("stash", "apply", "--index");
+  const stashOid = git("rev-parse", "stash@{0}").trim();
+  git("stash", "drop");
+  git("stash", "store", "--message", "Recovered work", stashOid);
+  await rebasePage.getByRole("button", { name: "Refresh repository", exact: true }).click();
   await rebasePage.getByTestId("commit-graph").press("Home");
   await rebasePage.getByRole("button", { name: /^stash@\{0\}: Recovered work\./ }).waitFor();
   await rebasePage.keyboard.press(`${modifier}+Shift+p`);
@@ -1771,7 +1708,7 @@ try {
   assert.equal(errors.length, 0, errors.join("\n"));
 
   console.log(
-    "Foundation desktop gate passed: repository/navigation/layout workflows, branch/tag actions, merge/squash completion after restart, abort/recovery, stash conflict/restart/finish, branch-from-stash, stash rename/graph visibility, interactive rebase conflict/edit/restart, large binary conflict resolution, cherry-pick selection/conflict/restart, ordered/merge-mainline revert, all reset modes with recovery after restart, hard-reset Undo/restart/Redo, and inspected history recovery to a new branch.",
+    "Foundation desktop gate passed: repository/navigation/layout workflows, branch/tag actions, merge/squash completion after restart, abort/recovery, stash conflict/restart/finish, direct stash/pop, selected-file stashing, stash graph visibility, interactive rebase conflict/edit/restart, large binary conflict resolution, cherry-pick selection/conflict/restart, ordered/merge-mainline revert, all reset modes with recovery after restart, hard-reset Undo/restart/Redo, and inspected history recovery to a new branch.",
   );
 } catch (error) {
   if (app) {

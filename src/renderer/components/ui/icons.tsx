@@ -10,6 +10,7 @@ export function IconDefaults({ children }: { children: ReactNode }) {
 export {
   Activity as ActivityIcon,
   Archive as ArchiveIcon,
+  ArchiveRestore as ArchiveRestoreIcon,
   ArrowDown as ArrowDownIcon,
   ArrowDownToLine as ArrowDownToLineIcon,
   ArrowLeft as ArrowLeftIcon,

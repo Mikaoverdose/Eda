@@ -14,7 +14,6 @@ export interface RepositoryReadState extends HistoryWindow {
   commandDialog: {
     kind:
       | "repository.remotes"
-      | "repository.stashes"
       | "repository.references"
       | "repository.graph"
       | "repository.recovery"
@@ -61,6 +60,9 @@ export interface RepositoryReadState extends HistoryWindow {
 
   stage: (paths?: string[]) => Promise<void>;
   unstage: (paths?: string[]) => Promise<void>;
+  stash: (paths?: string[]) => Promise<void>;
+  popStash: () => Promise<void>;
+  stashNotice: string | null;
   applyPartial: (token: string) => Promise<boolean>;
 
   commit: (

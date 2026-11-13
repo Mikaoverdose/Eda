@@ -6,7 +6,8 @@ export type { DesktopPlatform } from "@shared/application";
 export type ShellCommandId =
   | "repository.undoRedo"
   | "repository.historyRecovery"
-  | "repository.stashes"
+  | "repository.stash"
+  | "repository.popStash"
   | "repository.remotes"
   | "repository.stageAll"
   | "repository.unstageAll"
@@ -83,10 +84,17 @@ export const SHELL_COMMANDS: readonly ShellCommand[] = [
     requirement: "repository",
   },
   {
-    id: "repository.stashes",
-    title: t("shellCommands.manageStashes"),
+    id: "repository.stash",
+    title: t("stashActions.stashAllChanges"),
     group: t("shellCommands.repository"),
     keywords: t("shellCommands.saveUnfinishedWorkStash"),
+    requirement: "repository",
+  },
+  {
+    id: "repository.popStash",
+    title: t("stashActions.popLatestStash"),
+    group: t("shellCommands.repository"),
+    keywords: t("stashActions.restoreSavedWork"),
     requirement: "repository",
   },
   {
@@ -297,6 +305,8 @@ export function commandReason(command: ShellCommand, context: CommandContext): s
   if (
     context.writeUnavailable &&
     [
+      "repository.stash",
+      "repository.popStash",
       "repository.stageAll",
       "repository.unstageAll",
       "repository.createBranch",
@@ -304,6 +314,9 @@ export function commandReason(command: ShellCommand, context: CommandContext): s
     ].includes(command.id)
   )
     return context.writeUnavailable;
+
+  if (command.id === "repository.stash" && !context.stagedCount && !context.unstagedCount)
+    return t("stashActions.noChanges");
 
   if (command.id === "repository.editor" && !context.editorConfigured)
     return t("shellCommands.chooseAnEditorExecutableInApplicationPreferences");

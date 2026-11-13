@@ -5,11 +5,11 @@ import { Localized } from "@renderer/i18n/Localized";
 it("renders named rich text slots while escaping user-provided text", () => {
   const html = renderToStaticMarkup(
     <Localized
-      id="stashBranchDialog.createAtStashBase"
+      id="mergeStartDialog.intoAt"
       values={{ strong: <strong>{"<feature>"}</strong>, code2: <code>abc123</code> }}
     />,
   );
-  expect(html).toBe("Create <strong>&lt;feature&gt;</strong> at stash base <code>abc123</code>.");
+  expect(html).toBe("Into <strong>&lt;feature&gt;</strong> at <code>abc123</code>");
 });
 
 it("renders plural counts without requiring a duplicate slot value", () => {
@@ -21,7 +21,7 @@ it("renders plural counts without requiring a duplicate slot value", () => {
 it("keeps strings that resemble markup or interpolation tokens as literal React text", () => {
   const html = renderToStaticMarkup(
     <Localized
-      id="stashBranchDialog.leaveAt"
+      id="resetDialog.current"
       values={{ value1: "<code2/> {count} $t(common.close)", code2: <code>abc123</code> }}
     />,
   );
