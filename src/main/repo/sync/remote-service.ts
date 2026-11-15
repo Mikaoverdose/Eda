@@ -268,7 +268,8 @@ export class RemoteService {
             ...(request.tags ? ["--tags"] : ["--no-tags"]),
             "--",
             url,
-            refspec ?? `+refs/heads/*:refs/remotes/${name}/*`,
+            `+refs/heads/*:refs/remotes/${name}/*`,
+            ...(refspec ? [refspec] : []),
           ],
           {
             cwd: path,

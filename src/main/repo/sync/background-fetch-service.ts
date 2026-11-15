@@ -101,7 +101,15 @@ export class BackgroundFetchService {
         ),
       });
 
-    await this.remotes.fetch({ repositoryId, remote, prune: false, tags: false });
+    await this.remotes.fetch({
+      repositoryId,
+      remote,
+      prune: this.settings.resolve("fetchPrune", {
+        profileId: this.repositories.resolveActiveRepository(repositoryId).identityId,
+        repositoryId,
+      }).value,
+      tags: false,
+    });
     this.changed(repositoryId);
   }
 
@@ -147,7 +155,10 @@ export class BackgroundFetchService {
                 {
                   repositoryId,
                   remote: remote.name,
-                  prune: false,
+                  prune: this.settings.resolve("fetchPrune", {
+                    profileId: profile.id,
+                    repositoryId,
+                  }).value,
                   tags: false,
                 },
                 t("main.backgroundFetchService.backgroundFetch"),

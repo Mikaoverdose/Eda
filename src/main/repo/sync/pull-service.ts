@@ -110,7 +110,10 @@ export class PullService {
           {
             repositoryId: request.repositoryId,
             remote,
-            prune: false,
+            prune: this.settings.resolve("fetchPrune", {
+              profileId: identity.id,
+              repositoryId: request.repositoryId,
+            }).value,
             tags: false,
             ...(request.credentials ? { credentials: request.credentials } : {}),
           },

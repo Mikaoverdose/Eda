@@ -353,6 +353,112 @@ it("pulls a pinned upstream with fast-forward and rebase policies while preservi
   );
 }, 60_000);
 
+it.each([true, false])(
+  "refreshes all upstream remote branches during pull and respects pruning (prune: %s)",
+  async (prune) => {
+    const { service, source, client, run, pull, db, profile } = await setup();
+    if (!prune)
+      new SettingsRepository(db).set(
+        "fetchPrune",
+        { kind: "repository", profileId: profile.id, repositoryId: client.id },
+        false,
+      );
+
+    await source.run(["push", "origin", "main:obsolete"]);
+    await service.fetch({ repositoryId: client.id, remote: "origin", prune: false, tags: false });
+    await run(["branch", "obsolete", "origin/obsolete"]);
+    await run(["tag", "local-tag"]);
+    const head = await run(["rev-parse", "HEAD"]);
+    const index = await run(["ls-files", "--stage", "-z"]);
+    await writeFile(join(client.path, "file.txt"), "local work\n");
+    await source.run(["push", "origin", "--delete", "obsolete"]);
+    await source.run(["push", "origin", "main:new-branch"]);
+    await source.writeFile("remote.txt", "remote update\n");
+    await source.commit("remote update");
+    await source.run(["push", "origin", "main"]);
+
+    const preview = await pull.prepare({ repositoryId: client.id, strategy: "ff-only" });
+    const branches = (await service.inspect(client.id)).branches.map((branch) => branch.name);
+
+    expect(branches.includes("origin/obsolete")).toBe(!prune);
+    expect(branches).toContain("origin/new-branch");
+    expect(branches).toContain("obsolete");
+    expect(preview.source).toBe((await source.run(["rev-parse", "HEAD"])).trim());
+    expect(preview.behind).toBe(1);
+    expect(await run(["rev-parse", "HEAD"])).toBe(head);
+    expect(await run(["ls-files", "--stage", "-z"])).toBe(index);
+    expect(await run(["tag", "--list"])).toBe("local-tag\n");
+    expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("local work\n");
+    expect(await pull.execute(client.id, preview.token)).toBe("Pull completed.");
+    expect((await run(["rev-parse", "HEAD"])).trim()).toBe(preview.source);
+    expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("local work\n");
+  },
+);
+
+it("rejects pulling a deleted upstream instead of merging its stale tracking ref", async () => {
+  const { service, source, client, run, pull } = await setup();
+  await source.run(["push", "origin", "main:obsolete"]);
+  await service.fetch({ repositoryId: client.id, remote: "origin", prune: false, tags: false });
+  await service.track(client.id, "main", "refs/remotes/origin/obsolete");
+  await source.run(["push", "origin", "--delete", "obsolete"]);
+  const head = await run(["rev-parse", "HEAD"]);
+
+  await expect(
+    pull.prepare({ repositoryId: client.id, strategy: "ff-only" }),
+  ).rejects.toMatchObject({ rawStderr: expect.stringContaining("couldn't find remote ref") });
+  expect(await run(["rev-parse", "HEAD"])).toBe(head);
+});
+
+it.each(["scheduled", "retry"] as const)(
+  "prunes deleted remote branches on %s background fetch while preserving local work",
+  async (mode) => {
+    const { service, source, client, run, profile, identity, repositories, db } = await setup();
+    await source.run(["push", "origin", "main:obsolete"]);
+    await service.fetch({ repositoryId: client.id, remote: "origin", prune: false, tags: false });
+    await run(["branch", "obsolete", "origin/obsolete"]);
+    await source.run(["push", "origin", "--delete", "obsolete"]);
+    await writeFile(join(client.path, "file.txt"), "local work\n");
+    const head = await run(["rev-parse", "HEAD"]);
+    const sessions = new ProfileSessionRepository(db);
+    const settings = new SettingsRepository(db);
+    const changed = vi.fn();
+    const scheduler = new BackgroundFetchService(
+      identity,
+      sessions,
+      settings,
+      repositories,
+      service,
+      () => ({ online: true, suspended: false }),
+      changed,
+      () => Date.now() + 10 * 60_000,
+    );
+    sessions.change(profile.id, "main", {
+      kind: "tabs",
+      tabs: [client.id],
+      selectedRepositoryId: client.id,
+    });
+    const scope = { kind: "repository", profileId: profile.id, repositoryId: client.id } as const;
+    const fetch = () =>
+      mode === "scheduled" ? scheduler.tick() : scheduler.retry(client.id, "origin");
+
+    settings.set("fetchPrune", scope, false);
+    await fetch();
+    expect((await service.inspect(client.id)).branches.map((branch) => branch.name)).toContain(
+      "origin/obsolete",
+    );
+
+    settings.reset("fetchPrune", scope);
+    await fetch();
+    const branches = (await service.inspect(client.id)).branches.map((branch) => branch.name);
+    expect(branches).not.toContain("origin/obsolete");
+    expect(branches).toContain("obsolete");
+    expect(await run(["rev-parse", "HEAD"])).toBe(head);
+    expect(await readFile(join(client.path, "file.txt"), "utf8")).toBe("local work\n");
+    expect(changed).toHaveBeenCalledWith(client.id);
+    await scheduler.stop();
+  },
+);
+
 it("clones, configures multiple remotes, fetches/prunes and changes tracking without altering local work", async () => {
   const { service, source, server, client, run } = await setup();
 

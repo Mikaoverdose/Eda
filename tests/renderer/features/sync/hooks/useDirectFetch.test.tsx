@@ -3,6 +3,7 @@ import { errorFixture } from "../../../../helpers/error";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ok, err } from "@shared/errors";
+import { builtInSetting, type SettingKey } from "@shared/preferences/settings";
 import { useDirectFetch } from "@renderer/features/sync/hooks/useDirectFetch";
 import { RepositorySyncActions } from "@renderer/features/sync/RepositorySyncActions";
 import { useAppStore } from "@renderer/stores/app-store";
@@ -52,9 +53,7 @@ beforeEach(async () => {
     }),
   );
   fetchRemote.mockReset().mockResolvedValue(ok("Fetched."));
-  resolve
-    .mockReset()
-    .mockImplementation(async (key: string) => ok({ value: key === "fetchPrune" }));
+  resolve.mockReset().mockImplementation(async (key: SettingKey) => ok(builtInSetting(key)));
   vi.stubGlobal("eda", { remotes: { inspect, fetch: fetchRemote }, settings: { resolve } });
   container = document.createElement("div");
   document.body.append(container);
@@ -88,6 +87,16 @@ it("fetches all remotes sequentially", async () => {
   await perform(() => api.fetch(null));
   expect(fetchRemote.mock.calls.map(([request]) => request.remote)).toEqual(["origin", "team"]);
   expect(api.message).toBe("Fetched all remotes.");
+});
+it("honors the repository setting when pruning is disabled", async () => {
+  resolve.mockImplementation(async () => ok({ value: false }));
+  await perform(() => api.fetch());
+  expect(fetchRemote).toHaveBeenCalledExactlyOnceWith({
+    repositoryId: "repo",
+    remote: "team",
+    prune: false,
+    tags: false,
+  });
 });
 it("requests credentials only after an HTTPS auth failure and pins the retry", async () => {
   fetchRemote.mockResolvedValueOnce(

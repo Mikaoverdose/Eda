@@ -178,7 +178,7 @@ export const SETTING_DEFINITIONS = {
     validate: isMergeTool,
   }),
   fetchPrune: define<boolean>({
-    defaultValue: false,
+    defaultValue: true,
     scopes: repository,
     validate: boolean,
   }),

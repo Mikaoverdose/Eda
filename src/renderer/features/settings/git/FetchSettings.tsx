@@ -52,7 +52,7 @@ export function FetchSettings({ repositoryId }: { repositoryId?: string }) {
       </label>
       {repositoryId && (
         <div className="space-y-3 border-t border-border-subtle pt-4">
-          <h2 className="text-sm font-medium">{t("settings.fetchSettings.manualFetchDefaults")}</h2>
+          <h2 className="text-sm font-medium">{t("settings.fetchSettings.fetchDefaults")}</h2>
           <FetchCheckbox
             settingKey="fetchPrune"
             owner="repository"

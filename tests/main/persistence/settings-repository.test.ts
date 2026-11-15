@@ -169,7 +169,19 @@ describe("preference scopes", () => {
     store.set("fetchTags", scope, true);
     expect(store.resolve("fetchPrune", context).value).toBe(true);
     expect(store.resolve("fetchTags", context).value).toBe(true);
-    expect(store.resolve("fetchPrune", { profileId: work.id }).value).toBe(false);
+    expect(store.resolve("fetchPrune", { profileId: work.id }).value).toBe(true);
+  });
+
+  it("prunes deleted remote branches by default and preserves a repository opt-out", () => {
+    const { db, store, work } = setup();
+    const context = { profileId: work.id, repositoryId: "repo" };
+    const scope = { kind: "repository", ...context } as const;
+
+    expect(store.resolve("fetchPrune", context).value).toBe(true);
+    store.set("fetchPrune", scope, false);
+    expect(new SettingsRepository(db).resolve("fetchPrune", context).value).toBe(false);
+    store.reset("fetchPrune", scope);
+    expect(store.resolve("fetchPrune", context).value).toBe(true);
   });
 
   it("defaults to bundled Git and shares engine selection across profiles", () => {

@@ -1748,7 +1748,7 @@
   "settings.fetchSettings.everyMinutes": "Every {minutes} minutes",
   "settings.fetchSettings.fetchAllTags": "Fetch all tags",
   "settings.fetchSettings.fetchOpenRepositoriesInTheActiveProfileWhileEdaIsRunning": "Fetch open repositories in the active profile while Eda is running.",
-  "settings.fetchSettings.manualFetchDefaults": "Manual fetch defaults",
+  "settings.fetchSettings.fetchDefaults": "Fetch defaults",
   "settings.fetchSettings.off": "Off",
   "settings.fetchSettings.pruneDeletedRemoteTrackingBranches": "Prune deleted remote-tracking branches",
   "settings.fetchSettings.pruningRemovesStaleTrackingReferencesLocalBranchesArePreserved": "Pruning removes stale tracking references. Local branches are preserved.",
