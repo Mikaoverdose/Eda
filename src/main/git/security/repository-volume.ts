@@ -40,6 +40,24 @@ export class RepositoryVolumeIdentity {
           if (uuid) return `uuid:${uuid.toLowerCase()}`;
         }
       } else if (this.platform === "linux") {
+        const mount = await this.run("findmnt", [
+          "--noheadings",
+          "--raw",
+          "--output",
+          "FSTYPE,UUID",
+          "--target",
+          path,
+        ]);
+        const uuid = mount
+          ?.trim()
+          .match(/^btrfs ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)?.[1];
+        if (uuid) {
+          const subvolume = (await this.run("btrfs", ["inspect-internal", "rootid", path]))?.trim();
+          return subvolume && /^[0-9]+$/.test(subvolume)
+            ? `uuid:${uuid.toLowerCase()}:subvol:${subvolume}`
+            : String(device);
+        }
+
         const directory = "/dev/disk/by-uuid";
         const entries = await readdir(directory);
         if (entries.length <= 256) {
@@ -53,7 +71,6 @@ export class RepositoryVolumeIdentity {
     } catch (error) {
       // Unsupported volumes and unavailable system tools keep the strict device identity.
       if (
-        !(error instanceof ProcessSpawnError) &&
         !["ENOENT", "ENOTDIR", "EACCES", "EPERM", "ENODEV", "EIO"].includes(
           (error as NodeJS.ErrnoException).code ?? "",
         )
@@ -66,14 +83,20 @@ export class RepositoryVolumeIdentity {
   }
 
   private async run(executable: string, args: string[]): Promise<string | undefined> {
-    const result = await this.runner.run({
-      executable,
-      args,
-      env: { LANG: "C", LC_ALL: "C" },
-      signal: AbortSignal.timeout(3000),
-      maxStdoutBytes: 64 * 1024,
-      maxStderrBytes: 8 * 1024,
-    });
+    const result = await this.runner
+      .run({
+        executable,
+        args,
+        env: { LANG: "C", LC_ALL: "C" },
+        signal: AbortSignal.timeout(3000),
+        maxStdoutBytes: 64 * 1024,
+        maxStderrBytes: 8 * 1024,
+      })
+      .catch((error: unknown) => {
+        if (error instanceof ProcessSpawnError) return undefined;
+        throw error;
+      });
+    if (!result) return undefined;
     if (result.exitCode !== 0 || result.cancelled || result.outputLimitExceeded) return undefined;
     return result.stdout.toString("utf8");
   }

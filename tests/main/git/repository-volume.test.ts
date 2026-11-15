@@ -1,4 +1,5 @@
 import { RepositoryVolumeIdentity } from "@main/git/security/repository-volume";
+import { ProcessSpawnError } from "@main/git/execution/process-runner";
 import { readdir, stat } from "node:fs/promises";
 import type * as Fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -66,7 +67,7 @@ it("uses the UUID of the matching Linux block device across remounts", async () 
   info.rdev = 10n;
   vi.mocked(stat).mockResolvedValue(info);
   vi.mocked(readDirectoryNames).mockResolvedValue([uuid]);
-  const runner = new FakeProcessRunner();
+  const runner = new FakeProcessRunner().otherwise({ exitCode: 1 });
   expect(await new RepositoryVolumeIdentity(runner, "linux").identify("/data/repo", 10n)).toBe(
     `uuid:${uuid}`,
   );
@@ -79,14 +80,66 @@ it("uses the UUID of the matching Linux block device across remounts", async () 
   );
 });
 
+it("identifies Btrfs subvolumes across reboot device-number changes", async () => {
+  const runner = new FakeProcessRunner()
+    .on(["--noheadings"], { stdout: `btrfs ${uuid}\n` })
+    .on(["inspect-internal", "rootid"], { stdout: "257\n" });
+
+  expect(await new RepositoryVolumeIdentity(runner, "linux").identify("/home/repo", 54n)).toBe(
+    `uuid:${uuid}:subvol:257`,
+  );
+  expect(await new RepositoryVolumeIdentity(runner, "linux").identify("/home/repo", 55n)).toBe(
+    `uuid:${uuid}:subvol:257`,
+  );
+
+  const other = new FakeProcessRunner()
+    .on(["--noheadings"], { stdout: `btrfs ${uuid}\n` })
+    .on(["inspect-internal", "rootid"], { stdout: "258\n" });
+  expect(await new RepositoryVolumeIdentity(other, "linux").identify("/home/repo", 55n)).toBe(
+    `uuid:${uuid}:subvol:258`,
+  );
+});
+
+it.each([
+  { exitCode: 1 },
+  { cancelled: true },
+  { outputLimitExceeded: "stdout" as const },
+  { stdout: "invalid\n" },
+  { stdout: "257\n258\n" },
+])("keeps strict Btrfs matching when subvolume discovery fails: %j", async (response) => {
+  const runner = new FakeProcessRunner()
+    .on(["--noheadings"], { stdout: `btrfs ${uuid}\n` })
+    .on(["inspect-internal", "rootid"], response);
+
+  expect(await new RepositoryVolumeIdentity(runner, "linux").identify("/home/repo", 55n)).toBe(
+    "55",
+  );
+});
+
 it("keeps strict device matching on Linux when UUIDs are inaccessible", async () => {
   vi.mocked(readdir).mockRejectedValue(Object.assign(new Error("denied"), { code: "EACCES" }));
   expect(
-    await new RepositoryVolumeIdentity(new FakeProcessRunner(), "linux").identify(
-      "/data/repo",
-      10n,
-    ),
+    await new RepositoryVolumeIdentity(
+      new FakeProcessRunner().otherwise({ exitCode: 1 }),
+      "linux",
+    ).identify("/data/repo", 10n),
   ).toBe("10");
+});
+
+it("still identifies Linux block devices when findmnt is not installed", async () => {
+  const info = await stat(fileURLToPath(import.meta.url), { bigint: true });
+  info.isBlockDevice = () => true;
+  info.rdev = 10n;
+  vi.mocked(stat).mockResolvedValue(info);
+  vi.mocked(readDirectoryNames).mockResolvedValue([uuid]);
+  const runner = new FakeProcessRunner();
+  vi.spyOn(runner, "run").mockRejectedValue(
+    new ProcessSpawnError("findmnt", Object.assign(new Error("missing"), { code: "ENOENT" })),
+  );
+
+  expect(await new RepositoryVolumeIdentity(runner, "linux").identify("/data/repo", 10n)).toBe(
+    `uuid:${uuid}`,
+  );
 });
 
 it("preserves the Windows volume serial number", async () => {

@@ -16,57 +16,62 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return { ...fs, stat: vi.fn(fs.stat) };
 });
 
-it("keeps repository approval across reboot device-number changes while rejecting replacement metadata or volumes", async () => {
-  const repo = await createTempRepo();
-  const db = openInMemoryDatabase();
-  try {
-    const info = await stat(repo.path, { bigint: true });
-    vi.mocked(stat).mockResolvedValue(info);
-    const volume = (uuid = "cd699f81-2b43-4792-a146-6d38574df622") =>
-      new RepositoryVolumeIdentity(
-        new FakeProcessRunner()
-          .on(["-P"], { stdout: "Filesystem Mounted on\n/dev/disk3s1 /data\n" })
-          .on(["info"], { stdout: `<key>VolumeUUID</key><string>${uuid}</string>` }),
-        "darwin",
-      );
+it.each(["darwin", "linux"] as const)(
+  "keeps %s repository approval across reboot device-number changes while rejecting replacement metadata or volumes",
+  async (platform) => {
+    const repo = await createTempRepo();
+    const db = openInMemoryDatabase();
+    try {
+      const info = await stat(repo.path, { bigint: true });
+      vi.mocked(stat).mockResolvedValue(info);
+      const volume = (uuid = "cd699f81-2b43-4792-a146-6d38574df622") =>
+        new RepositoryVolumeIdentity(
+          new FakeProcessRunner()
+            .on(["-P"], { stdout: "Filesystem Mounted on\n/dev/disk3s1 /data\n" })
+            .on(["info"], { stdout: `<key>VolumeUUID</key><string>${uuid}</string>` })
+            .on(["--noheadings"], { stdout: `btrfs ${uuid}\n` })
+            .on(["inspect-internal", "rootid"], { stdout: "257\n" }),
+          platform,
+        );
 
-    const store = new RepositoryTrustStore(db);
-    const confirm = vi.fn(async () => true);
-    await new RepositoryTrust(store, confirm, repo.home, volume()).authorize(repo.path);
+      const store = new RepositoryTrustStore(db);
+      const confirm = vi.fn(async () => true);
+      await new RepositoryTrust(store, confirm, repo.home, volume()).authorize(repo.path);
 
-    info.dev += 1n;
-    const restarted = new RepositoryTrust(
-      new RepositoryTrustStore(db),
-      confirm,
-      repo.home,
-      volume(),
-    );
-    await expect(restarted.checked(repo.path)).resolves.toMatchObject({
-      root: await realpath(repo.path),
-    });
-    await restarted.authorize(repo.path);
-    expect(confirm).toHaveBeenCalledTimes(1);
-
-    info.ino += 1n;
-    await expect(restarted.checked(repo.path)).rejects.toThrow();
-    info.ino -= 1n;
-    info.birthtimeNs += 1n;
-    await expect(restarted.checked(repo.path)).rejects.toThrow();
-    info.birthtimeNs -= 1n;
-    await expect(
-      new RepositoryTrust(
-        store,
+      info.dev += 1n;
+      const restarted = new RepositoryTrust(
+        new RepositoryTrustStore(db),
         confirm,
         repo.home,
-        volume("cd699f81-2b43-4792-a146-6d38574df623"),
-      ).checked(repo.path),
-    ).rejects.toThrow();
-  } finally {
-    vi.mocked(stat).mockReset();
-    db.close();
-    await repo.cleanup();
-  }
-});
+        volume(),
+      );
+      await expect(restarted.checked(repo.path)).resolves.toMatchObject({
+        root: await realpath(repo.path),
+      });
+      await restarted.authorize(repo.path);
+      expect(confirm).toHaveBeenCalledTimes(1);
+
+      info.ino += 1n;
+      await expect(restarted.checked(repo.path)).rejects.toThrow();
+      info.ino -= 1n;
+      info.birthtimeNs += 1n;
+      await expect(restarted.checked(repo.path)).rejects.toThrow();
+      info.birthtimeNs -= 1n;
+      await expect(
+        new RepositoryTrust(
+          store,
+          confirm,
+          repo.home,
+          volume("cd699f81-2b43-4792-a146-6d38574df623"),
+        ).checked(repo.path),
+      ).rejects.toThrow();
+    } finally {
+      vi.mocked(stat).mockReset();
+      db.close();
+      await repo.cleanup();
+    }
+  },
+);
 
 it("blocks repository-selected programs before approval, including on background reads and directory replacement", async () => {
   const repo = await createTempRepo();
