@@ -1,0 +1,211 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { emptySession, emptyView } from "@shared/identity/profile-session";
+import { defaultGraphColumns } from "@shared/preferences/graph-view";
+import { CommitGraph } from "@renderer/features/history/CommitGraph";
+import { useRepositoryStore } from "@renderer/stores/repository-store";
+import { useSessionStore } from "@renderer/stores/session-store";
+
+let root: Root;
+let container: HTMLDivElement;
+let previousSession: ReturnType<typeof useSessionStore.getState>;
+let previousRepository: ReturnType<typeof useRepositoryStore.getState>;
+const setView = vi.fn();
+
+beforeEach(async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  previousSession = useSessionStore.getState();
+  previousRepository = useRepositoryStore.getState();
+  setView.mockReset().mockImplementation((id, patch) => {
+    const snapshot = useSessionStore.getState().snapshot!;
+    useSessionStore.setState({
+      snapshot: {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          views: {
+            ...snapshot.session.views,
+            [id]: { ...snapshot.session.views[id], ...patch },
+          },
+        },
+      },
+    });
+  });
+  useSessionStore.setState({
+    setView,
+    transitioning: false,
+    snapshot: {
+      context: { profileId: "profile", windowId: "main", generation: 1 },
+      session: {
+        ...emptySession(),
+        selectedRepositoryId: "repo",
+        views: { repo: { ...emptyView(), graphColumns: defaultGraphColumns() } },
+      },
+      drafts: {},
+      recovery: null,
+    },
+  });
+  useRepositoryStore.setState({
+    repositoryId: "repo",
+    identityId: "profile",
+    pages: [
+      {
+        commits: [
+          {
+            oid: "a".repeat(40),
+            subject: "Sample commit",
+            body: "",
+            parents: [],
+            decorations: [],
+            author: { name: "Sample", email: "sample@example.test", timestamp: "2026-11-06" },
+            committerTimestamp: "2026-11-06",
+          },
+        ],
+        nextOffset: null,
+      },
+    ],
+    dagBoundary: { lanes: [] },
+    baseOffset: 0,
+    nextOffset: null,
+    selection: null,
+  });
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => root.render(<CommitGraph />));
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  useSessionStore.setState(previousSession);
+  useRepositoryStore.setState(previousRepository);
+  vi.unstubAllGlobals();
+});
+
+const divider = (id = "author") =>
+  container.querySelector<HTMLElement>(`[role="separator"][aria-label="${id} column width"]`)!;
+const authorCell = () => container.querySelector<HTMLElement>('[title="sample@example.test"]')!;
+const savedColumns = () =>
+  useSessionStore.getState().snapshot!.session.views["repo"]!.graphColumns!;
+
+async function pointer(target: EventTarget, type: string, x: number, pointerId = 1) {
+  if (type === "pointerdown" && target instanceof HTMLElement)
+    Object.assign(target, { setPointerCapture: vi.fn(), hasPointerCapture: () => false });
+
+  await act(async () =>
+    target.dispatchEvent(new PointerEvent(type, { clientX: x, pointerId, bubbles: true })),
+  );
+}
+
+async function key(key: string, target = divider()) {
+  await act(async () => target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
+}
+
+async function click(label: string) {
+  const button = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent === label,
+  )!;
+  expect(button).toBeDefined();
+  await act(async () => button.click());
+}
+
+it("previews a dragged boundary in the header and rows, then saves once on release", async () => {
+  await pointer(divider(), "pointerdown", 200);
+  await pointer(window, "pointermove", 160);
+  await pointer(window, "pointermove", 152);
+
+  expect(divider().getAttribute("aria-valuenow")).toBe("144");
+  expect(authorCell().style.width).toBe("144px");
+  expect(savedColumns()[0]!.width).toBe(96);
+  expect(setView).not.toHaveBeenCalled();
+
+  await pointer(window, "pointerup", 152);
+  expect(setView).toHaveBeenCalledOnce();
+  expect(savedColumns()[0]!.width).toBe(144);
+  expect(authorCell().style.width).toBe("144px");
+
+  await act(async () => root.render(<CommitGraph key="reopened" />));
+  expect(divider().getAttribute("aria-valuenow")).toBe("144");
+});
+
+it.each(["pointercancel", "Escape", "blur"])("restores saved widths on %s", async (event) => {
+  await pointer(divider(), "pointerdown", 200);
+  await pointer(window, "pointermove", 120);
+  expect(authorCell().style.width).toBe("176px");
+
+  if (event === "Escape") await key("Escape");
+  else await act(async () => window.dispatchEvent(new PointerEvent(event, { pointerId: 1 })));
+  await pointer(window, "pointerup", 120);
+
+  expect(authorCell().style.width).toBe("96px");
+  expect(setView).not.toHaveBeenCalled();
+});
+
+it("ignores other pointers and keeps dragged widths within the saved limits", async () => {
+  await pointer(divider(), "pointerdown", 200);
+  await pointer(window, "pointermove", -1000, 2);
+  await pointer(window, "pointerup", -1000, 2);
+  expect(authorCell().style.width).toBe("96px");
+  expect(setView).not.toHaveBeenCalled();
+
+  await pointer(window, "pointermove", -1000);
+  expect(authorCell().style.width).toBe("320px");
+  await pointer(window, "pointermove", 1000);
+  expect(authorCell().style.width).toBe("48px");
+  await pointer(window, "pointerup", 1000);
+  expect(savedColumns()[0]!.width).toBe(48);
+});
+
+it("resizes with the keyboard without navigating commits", async () => {
+  const selectCommit = vi.spyOn(useRepositoryStore.getState(), "selectCommit").mockResolvedValue();
+  await key("ArrowLeft");
+  expect(savedColumns()[0]!.width).toBe(104);
+  await key("ArrowRight");
+  expect(savedColumns()[0]!.width).toBe(96);
+  await key("End");
+  expect(savedColumns()[0]!.width).toBe(320);
+  await key("Home");
+  expect(savedColumns()[0]!.width).toBe(48);
+  expect(selectCommit).not.toHaveBeenCalled();
+  selectCommit.mockRestore();
+});
+
+it.each(["profile", "repository", "pending"])(
+  "cancels a drag when the %s changes",
+  async (change) => {
+    await pointer(divider(), "pointerdown", 200);
+    await pointer(window, "pointermove", 120);
+
+    await act(async () => {
+      if (change === "profile") {
+        const snapshot = useSessionStore.getState().snapshot!;
+        useSessionStore.setState({
+          snapshot: { ...snapshot, context: { ...snapshot.context, generation: 2 } },
+        });
+      } else if (change === "repository") useRepositoryStore.setState({ repositoryId: "other" });
+      else root.render(<CommitGraph pending />);
+    });
+    await pointer(window, "pointerup", 120);
+    expect(setView).not.toHaveBeenCalled();
+    expect(savedColumns()[0]!.width).toBe(96);
+  },
+);
+
+it("keeps column visibility, order, and reset available without a modal or width sliders", async () => {
+  await click("Columns...");
+  const menu = document.querySelector('[role="dialog"][aria-label="History columns"]')!;
+  expect(menu.getAttribute("aria-modal")).not.toBe("true");
+  expect(menu.querySelector('input[type="range"]')).toBeNull();
+
+  await act(async () => menu.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  expect(savedColumns()[0]!.visible).toBe(false);
+  expect(divider()).toBeNull();
+
+  await act(async () =>
+    menu.querySelector<HTMLButtonElement>('[aria-label="Move sha column left"]')!.click(),
+  );
+  expect(savedColumns()[1]!.id).toBe("sha");
+  await click("Reset columns");
+  expect(savedColumns()).toEqual(defaultGraphColumns());
+});

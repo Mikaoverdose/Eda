@@ -1,6 +1,5 @@
 import { errorAction, errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
-import { defaultGraphColumns } from "@shared/preferences/graph-view";
 import {
   ArrowLeftIcon as ArrowLeft,
   ArrowRightIcon as ArrowRight,
@@ -16,10 +15,10 @@ import { layoutCommitPages } from "../../repository/dag-layout";
 import { ROW_HEIGHT, graphColumnWidth } from "../../repository/graph-geometry";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { usePreferencesStore } from "../../stores/preferences-store";
-import { useSessionStore } from "../../stores/session-store";
 import type { CommitMenuTarget } from "./CommitMenu";
 import { CommitRow } from "./CommitRow";
-import { GraphColumnsDialog } from "./GraphColumnsDialog";
+import { GraphColumnsMenu } from "./GraphColumnsMenu";
+import { useGraphColumns } from "./useGraphColumns";
 import { GraphVisibilityMenu } from "./GraphVisibilityMenu";
 
 const CommitMenu = lazy(() =>
@@ -35,11 +34,7 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
   const identityId = useRepositoryStore((state) => state.identityId);
   const vigilantMode = usePreferencesStore((state) => state.values.vigilantMode.value);
 
-  const savedColumns = useSessionStore((state) =>
-    repositoryId ? state.snapshot?.session.views[repositoryId]?.graphColumns : undefined,
-  );
-
-  const columns = savedColumns ?? defaultGraphColumns();
+  const { columns, startResize, saveWidth, resizing } = useGraphColumns(repositoryId, pending);
   const shaColumnShown = columns.some((column) => column.id === "sha" && column.visible);
   const shaHeader = useRef<HTMLSpanElement>(null);
   const [shaColumnVisible, setShaColumnVisible] = useState(false);
@@ -59,7 +54,6 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
     return () => observer.disconnect();
   }, [vigilantMode, shaColumnShown]);
 
-  const [columnsOpen, setColumnsOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
 
   const dagBoundary = useRepositoryStore((state) => state.dagBoundary);
@@ -136,6 +130,12 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
             oid: rows[selectedIndex]!.commit.oid,
             x: bounds.left + 40,
             y: bounds.top + 60,
+          });
+        }
+      }}
+    >
+      <PanelHeader
+        title={t("commitGraph.history")}
         leading={
           <>
             <IconButton
@@ -157,12 +157,6 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
             />
           </>
         }
-          });
-        }
-      }}
-    >
-      <PanelHeader
-        title={t("commitGraph.history")}
         controls={{
           name: t("commitGraph.historyLabel"),
           state: panel.state,
@@ -202,9 +196,13 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
           {pending || nextOffset === null ? "" : "+"}
         </span>
 
-        <TextButton disabled={pending} onClick={() => setColumnsOpen(true)}>
-          {t("commitGraph.columns")}
-        </TextButton>
+        {repositoryId && (
+          <GraphColumnsMenu
+            repositoryId={repositoryId}
+            columns={columns}
+            disabled={pending || resizing}
+          />
+        )}
       </PanelHeader>
 
       <div
@@ -223,9 +221,36 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
                 key={column.id}
                 ref={column.id === "sha" ? shaHeader : undefined}
                 style={{ width: column.width }}
-                className="hidden shrink-0 truncate @xl:block"
+                className="relative hidden shrink-0 @xl:block"
               >
-                {column.id}
+                <span className="block truncate">{column.id}</span>
+
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={t("graphColumns.columnWidth", { id: column.id })}
+                  aria-valuemin={48}
+                  aria-valuemax={320}
+                  aria-valuenow={column.width}
+                  aria-valuetext={t("graphColumns.px", { width: column.width })}
+                  aria-disabled={pending || !repositoryId}
+                  tabIndex={pending || !repositoryId ? -1 : 0}
+                  className="absolute -left-2 top-0 h-full w-2 touch-none cursor-col-resize rounded-sm border-l border-border-default hover:border-accent focus-visible:outline-2 focus-visible:outline-accent"
+                  onPointerDown={(event) => startResize(column, event)}
+                  onKeyDown={(event) => {
+                    let width: number;
+
+                    if (event.key === "ArrowLeft") width = column.width + 8;
+                    else if (event.key === "ArrowRight") width = column.width - 8;
+                    else if (event.key === "Home") width = 48;
+                    else if (event.key === "End") width = 320;
+                    else return;
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    saveWidth(column.id, width);
+                  }}
+                />
               </span>
             ))}
         </div>
@@ -319,14 +344,6 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
             <Suspense fallback={null}>
               <GraphFilterDialog repositoryId={repositoryId} onClose={() => setFilterOpen(false)} />
             </Suspense>
-          )}
-
-          {columnsOpen && repositoryId && (
-            <GraphColumnsDialog
-              repositoryId={repositoryId}
-              columns={columns}
-              onClose={() => setColumnsOpen(false)}
-            />
           )}
         </>
       )}

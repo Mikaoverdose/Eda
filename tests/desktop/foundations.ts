@@ -170,13 +170,36 @@ try {
 
   await columns.getByRole("checkbox", { name: "author", exact: true }).uncheck();
   await columns.getByRole("button", { name: "Move sha column left" }).click();
-  await columns.getByRole("slider", { name: "sha column width" }).focus();
-  await page.keyboard.press("ArrowRight");
-  await columns.getByRole("button", { name: "Done", exact: true }).click();
+  await page.keyboard.press("Escape");
+
+  const shaDivider = page.getByRole("separator", { name: "sha column width", exact: true });
+  const dividerBounds = await shaDivider.boundingBox();
+
+  assert.ok(dividerBounds);
+  await page.mouse.move(
+    dividerBounds.x + dividerBounds.width / 2,
+    dividerBounds.y + dividerBounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    dividerBounds.x + dividerBounds.width / 2 - 40,
+    dividerBounds.y + dividerBounds.height / 2,
+  );
+  await expect(shaDivider).toHaveAttribute("aria-valuenow", "112");
+  await page.mouse.up();
+  await shaDivider.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(shaDivider).toHaveAttribute("aria-valuenow", "120");
+  await expect(shaDivider.locator("..")).toHaveCSS("width", "120px");
+  await expect(page.locator(`[data-tour="history-commit"] span[title="${head}"]`)).toHaveCSS(
+    "width",
+    "120px",
+  );
   await expect(columns).toHaveCount(0);
 
   const saved = await savedSession(
-    (session) => session.views[session.selectedRepositoryId ?? ""]?.graphColumns?.[1]?.id === "sha",
+    (session) =>
+      session.views[session.selectedRepositoryId ?? ""]?.graphColumns?.[1]?.width === 120,
   );
   const repositoryId = saved.selectedRepositoryId;
   const mergeToolScript = join(root, "merge-tool.cjs");
@@ -208,6 +231,10 @@ try {
   assert.ok(savedColumns?.[0] && savedColumns[1]);
   assert.equal(savedColumns[0].visible, false);
   assert.equal(savedColumns[1].id, "sha");
+  assert.equal(savedColumns[1].width, 120);
+  await expect(
+    page.getByRole("separator", { name: "sha column width", exact: true }),
+  ).toHaveAttribute("aria-valuenow", "120");
 
   const command = async (name: string) => {
     await page.keyboard.press(`${modifier}+Shift+p`);
