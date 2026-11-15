@@ -136,6 +136,27 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
             oid: rows[selectedIndex]!.commit.oid,
             x: bounds.left + 40,
             y: bounds.top + 60,
+        leading={
+          <>
+            <IconButton
+              size="xs"
+              aria-label={t("commitGraph.backInSelectionHistory")}
+              title={t("common.back")}
+              disabled={pending || navigationIndex <= 0}
+              onClick={() => void navigate(-1)}
+              icon={<ArrowLeft size={14} aria-hidden="true" />}
+            />
+
+            <IconButton
+              size="xs"
+              aria-label={t("commitGraph.forwardInSelectionHistory")}
+              title={t("commitGraph.forward")}
+              disabled={pending || navigationIndex + 1 >= navigationLength}
+              onClick={() => void navigate(1)}
+              icon={<ArrowRight size={14} aria-hidden="true" />}
+            />
+          </>
+        }
           });
         }
       }}
@@ -150,24 +171,6 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
           collapseDirection: "up",
         }}
       >
-        <IconButton
-          size="xs"
-          aria-label={t("commitGraph.backInSelectionHistory")}
-          title={t("common.back")}
-          disabled={pending || navigationIndex <= 0}
-          onClick={() => void navigate(-1)}
-          icon={<ArrowLeft size={14} aria-hidden="true" />}
-        />
-
-        <IconButton
-          size="xs"
-          aria-label={t("commitGraph.forwardInSelectionHistory")}
-          title={t("commitGraph.forward")}
-          disabled={pending || navigationIndex + 1 >= navigationLength}
-          onClick={() => void navigate(1)}
-          icon={<ArrowRight size={14} aria-hidden="true" />}
-        />
-
         <TextButton
           aria-label={t("commitGraph.jumpToHead")}
           disabled={pending || !status?.branch.oid}
