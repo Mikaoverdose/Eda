@@ -289,7 +289,7 @@ try {
   ).toHaveAttribute("aria-valuenow", "120");
 
   const command = async (name: string) => {
-    await page.keyboard.press(`${modifier}+Shift+p`);
+    await page.getByRole("button", { name: "Command palette", exact: true }).click();
     await page.getByRole("combobox", { name: "Search commands" }).fill(name);
     await page
       .getByRole("option")
