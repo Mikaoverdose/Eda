@@ -652,7 +652,6 @@
   "graphColumns.reorderColumn": "Reorder {id} column",
   "graphColumns.reorderHint": "Drag to reorder. Use Alt+Shift+Left or Right to move this column with the keyboard.",
   "graphColumns.visibleColumns": "Visible columns",
-  "graphColumns.visibilityDescription": "Drag column headers to reorder and dividers to resize. Commit messages and reference labels stay visible.",
   "graphFilterDialog.applyGraphView": "Apply graph view",
   "graphFilterDialog.checkOutABranchBeforeFocusingTheCurrentBranch": "Check out a branch before focusing the current branch.",
   "graphFilterDialog.filterReferences": "Filter references...",

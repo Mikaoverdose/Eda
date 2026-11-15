@@ -1,6 +1,6 @@
 import { t } from "@shared/i18n";
 import { GRAPH_COLUMN_IDS } from "@shared/preferences/graph-view";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { Checkbox, Select } from "../../../components/ui/index";
 import { usePreferencesStore } from "../../../stores/preferences-store";
 import { useScopedSetting } from "../hooks/useScopedSetting";
@@ -11,7 +11,6 @@ export function HistoryColumnsSettings({
   owner?: "application" | "profile";
 }) {
   const columns = useScopedSetting("historyVisibleColumns", owner);
-  const columnsDescription = useId();
   const saving = usePreferencesStore((state) => state.saving);
   const [visibleColumns, setVisibleColumns] = useState(columns.resolved.value);
 
@@ -48,11 +47,7 @@ export function HistoryColumnsSettings({
         )}
       </div>
 
-      <fieldset
-        className="space-y-2"
-        disabled={columns.unavailable || saving || columns.following}
-        aria-describedby={columnsDescription}
-      >
+      <fieldset className="space-y-2" disabled={columns.unavailable || saving || columns.following}>
         <legend className="mb-2 text-sm font-medium">{t("graphColumns.visibleColumns")}</legend>
         <div className="flex flex-wrap gap-4">
           {GRAPH_COLUMN_IDS.map((id) => (
@@ -75,9 +70,6 @@ export function HistoryColumnsSettings({
             </Checkbox>
           ))}
         </div>
-        <p id={columnsDescription} className="text-xs text-text-secondary">
-          {t("graphColumns.visibilityDescription")}
-        </p>
       </fieldset>
     </section>
   );
