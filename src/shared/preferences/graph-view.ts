@@ -1,7 +1,8 @@
 import { isFullObjectId } from "../repository/object-id";
 import { isOneOf, isRecord } from "../validation";
 
-export type GraphColumnId = "author" | "date" | "sha";
+export const GRAPH_COLUMN_IDS = ["author", "date", "sha"] as const;
+export type GraphColumnId = (typeof GRAPH_COLUMN_IDS)[number];
 
 export interface GraphFilter {
   refs: string[];
@@ -66,7 +67,7 @@ export function isGraphColumns(value: unknown): value is GraphColumn[] {
     value.every(
       (item: unknown) =>
         isRecord(item) &&
-        isOneOf(item["id"], ["author", "date", "sha"]) &&
+        isOneOf(item["id"], GRAPH_COLUMN_IDS) &&
         typeof item["visible"] === "boolean" &&
         typeof item["width"] === "number" &&
         Number.isInteger(item["width"]) &&

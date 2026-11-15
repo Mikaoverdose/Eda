@@ -22,6 +22,7 @@ const PREFERENCE_KEYS = [
   "conventionalCommitsEnabled",
   "vigilantMode",
   "showInternalRefs",
+  "historyVisibleColumns",
   "commitPrefixes",
   "accentHue",
   "editorExecutable",

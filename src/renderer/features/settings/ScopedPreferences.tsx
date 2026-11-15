@@ -19,6 +19,7 @@ const APPEARANCE_SETTINGS = [
   "reducedMotion",
   "background",
   "windowTransparency",
+  "historyVisibleColumns",
 ] as const;
 
 interface ScopedPreferencesProps {

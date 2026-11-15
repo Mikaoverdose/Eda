@@ -152,6 +152,51 @@ try {
   await internalRefsSetting.uncheck();
   await expect(internalRefsSetting).not.toBeChecked();
   await expect(internalRefsSetting).toBeEnabled();
+  await expect(page.getByRole("group", { name: "Visible columns", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Global settings: Appearance", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Commit history", exact: true })).toBeVisible();
+  const visibleColumns = page.getByRole("group", { name: "Visible columns", exact: true });
+  await visibleColumns.getByRole("checkbox", { name: "Author", exact: true }).uncheck();
+  await expect(
+    visibleColumns.getByRole("checkbox", { name: "Author", exact: true }),
+  ).not.toBeChecked();
+  await expect(visibleColumns.getByRole("checkbox", { name: "Author", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Profile: Appearance", exact: true }).click();
+  const columnSource = page.getByRole("combobox", {
+    name: "Column visibility source",
+    exact: true,
+  });
+  await expect(columnSource).toHaveText("Follow global");
+  await expect(
+    visibleColumns.getByRole("checkbox", { name: "Author", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    visibleColumns.getByRole("checkbox", { name: "Author", exact: true }),
+  ).not.toBeChecked();
+  await chooseSelect(columnSource, "custom");
+  await visibleColumns.getByRole("checkbox", { name: "Author", exact: true }).check();
+  await visibleColumns.getByRole("checkbox", { name: "Date", exact: true }).uncheck();
+  await expect(visibleColumns.getByRole("checkbox", { name: "Date", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Reorder author column", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reorder date column", exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Profile: Appearance", exact: true }).click();
+  await expect(columnSource).toHaveText("Customize");
+  await expect(visibleColumns.getByRole("checkbox", { name: "Author", exact: true })).toBeChecked();
+  await expect(
+    visibleColumns.getByRole("checkbox", { name: "Date", exact: true }),
+  ).not.toBeChecked();
+  await chooseSelect(columnSource, "global");
+  await expect(columnSource).toHaveText("Follow global");
+  await expect(
+    visibleColumns.getByRole("checkbox", { name: "Author", exact: true }),
+  ).not.toBeChecked();
+  await expect(visibleColumns.getByRole("checkbox", { name: "Date", exact: true })).toBeChecked();
   await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
   await expect(checkpointRow).toHaveCount(0);
   assert.equal(git("rev-parse", "refs/t3/checkpoints/desktop").trim(), checkpoint);
@@ -164,13 +209,17 @@ try {
     .getByText("Release annotation", { exact: true })
     .waitFor();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Columns...", exact: true }).click();
-
-  const columns = page.getByRole("dialog", { name: "History columns" });
-
-  await columns.getByRole("checkbox", { name: "author", exact: true }).uncheck();
-  await columns.getByRole("button", { name: "Move sha column left" }).click();
-  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Columns...", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Reorder author column", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Reorder sha column", exact: true })
+    .dragTo(page.getByRole("button", { name: "Reorder date column", exact: true }));
+  await expect(page.getByTestId("commit-graph").locator('[draggable="true"]')).toHaveText([
+    "SHA",
+    "Date",
+  ]);
 
   const shaDivider = page.getByRole("separator", { name: "sha column width", exact: true });
   const dividerBounds = await shaDivider.boundingBox();
@@ -195,7 +244,6 @@ try {
     "width",
     "120px",
   );
-  await expect(columns).toHaveCount(0);
 
   const saved = await savedSession(
     (session) =>
@@ -229,7 +277,11 @@ try {
   const savedColumns = saved.views[repositoryId]?.graphColumns;
 
   assert.ok(savedColumns?.[0] && savedColumns[1]);
-  assert.equal(savedColumns[0].visible, false);
+  const columnSetting = await page.evaluate(() =>
+    window.eda.settings.resolve("historyVisibleColumns", {}),
+  );
+  assert.equal(columnSetting.ok, true);
+  if (columnSetting.ok) assert.deepEqual(columnSetting.value.value, ["date", "sha"]);
   assert.equal(savedColumns[1].id, "sha");
   assert.equal(savedColumns[1].width, 120);
   await expect(

@@ -11,6 +11,7 @@ import { ProfilesSettings } from "../profiles/ProfilesSettings";
 import { ScopedPreferences } from "./ScopedPreferences";
 import { AccentSettings } from "./appearance/AccentSettings";
 import { AppearanceControls } from "./appearance/AppearanceControls";
+import { HistoryColumnsSettings } from "./appearance/HistoryColumnsSettings";
 import { AboutSettings } from "./application/AboutSettings";
 import { ApplicationPreferences } from "./application/ApplicationPreferences";
 import { FailureSimulations } from "./debug/FailureSimulations";
@@ -59,6 +60,7 @@ export function SettingsContent({
           <ScopedPreferences owner={owner} section="appearance" preview={preview} />
           <AccentSettings owner={owner} preview={preview} />
           <AppearanceControls owner={owner} preview={preview} active />
+          <HistoryColumnsSettings key={`${owner}:${profile?.id}`} owner={owner} />
         </div>
       );
     }

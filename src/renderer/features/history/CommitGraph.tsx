@@ -10,14 +10,13 @@ import { PanelHeader } from "../../components/layout/PanelHeader";
 import { usePanel } from "../../components/layout/hooks/usePanel";
 import { VirtualRows } from "../../components/ui/display/VirtualRows";
 import { LoadingContent, Skeleton } from "../../components/ui/feedback/Skeleton";
-import { ErrorDialog, IconButton, TextButton } from "../../components/ui/index";
+import { ButtonBase, ErrorDialog, IconButton, TextButton } from "../../components/ui/index";
 import { layoutCommitPages } from "../../repository/dag-layout";
 import { ROW_HEIGHT, graphColumnWidth } from "../../repository/graph-geometry";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { usePreferencesStore } from "../../stores/preferences-store";
 import type { CommitMenuTarget } from "./CommitMenu";
 import { CommitRow } from "./CommitRow";
-import { GraphColumnsMenu } from "./GraphColumnsMenu";
 import { useGraphColumns } from "./useGraphColumns";
 import { GraphVisibilityMenu } from "./GraphVisibilityMenu";
 
@@ -34,7 +33,17 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
   const identityId = useRepositoryStore((state) => state.identityId);
   const vigilantMode = usePreferencesStore((state) => state.values.vigilantMode.value);
 
-  const { columns, startResize, saveWidth, resizing } = useGraphColumns(repositoryId, pending);
+  const {
+    columns,
+    startResize,
+    saveWidth,
+    moveColumn,
+    startReorder,
+    previewReorder,
+    finishReorder,
+    cancelReorder,
+    dropTarget,
+  } = useGraphColumns(repositoryId, pending);
   const shaColumnShown = columns.some((column) => column.id === "sha" && column.visible);
   const shaHeader = useRef<HTMLSpanElement>(null);
   const [shaColumnVisible, setShaColumnVisible] = useState(false);
@@ -195,14 +204,6 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
 
           {pending || nextOffset === null ? "" : "+"}
         </span>
-
-        {repositoryId && (
-          <GraphColumnsMenu
-            repositoryId={repositoryId}
-            columns={columns}
-            disabled={pending || resizing}
-          />
-        )}
       </PanelHeader>
 
       <div
@@ -222,8 +223,37 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
                 ref={column.id === "sha" ? shaHeader : undefined}
                 style={{ width: column.width }}
                 className="relative hidden shrink-0 @xl:block"
+                onDragOver={(event) => previewReorder(column.id, event)}
+                onDrop={(event) => finishReorder(column.id, event)}
               >
-                <span className="block truncate">{column.id}</span>
+                <ButtonBase
+                  draggable={!pending && !!repositoryId}
+                  disabled={pending || !repositoryId}
+                  aria-label={t("graphColumns.reorderColumn", { id: column.id })}
+                  aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
+                  title={t("graphColumns.reorderHint")}
+                  className={`block w-full cursor-grab truncate rounded-sm text-left uppercase active:cursor-grabbing ${dropTarget === column.id ? "bg-accent-muted text-accent-text" : ""}`}
+                  onDragStart={(event) => startReorder(column.id, event)}
+                  onDragEnd={cancelReorder}
+                  onKeyDown={(event) => {
+                    if (
+                      !event.altKey ||
+                      !event.shiftKey ||
+                      !["ArrowLeft", "ArrowRight"].includes(event.key)
+                    )
+                      return;
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const visible = columns.filter((item) => item.visible);
+                    const index = visible.findIndex((item) => item.id === column.id);
+                    const target = visible[index + (event.key === "ArrowLeft" ? -1 : 1)];
+
+                    if (target) moveColumn(column.id, target.id);
+                  }}
+                >
+                  {t(`graphColumns.${column.id}`)}
+                </ButtonBase>
 
                 <span
                   role="separator"

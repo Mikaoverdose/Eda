@@ -45,3 +45,14 @@ it("returns independent preference defaults for each caller", () => {
   prefixes.push("custom");
   expect(builtInSetting("commitPrefixes").value).toEqual(expected);
 });
+
+it("accepts only unique known history column IDs in the global visibility setting", () => {
+  for (const columns of [[], ["sha"], ["author", "date", "sha"]])
+    expect(() =>
+      validateSetting("historyVisibleColumns", { kind: "application" }, columns),
+    ).not.toThrow();
+  for (const columns of [null, true, "sha", ["unknown"], ["sha", "sha"], [1], [["author"]]])
+    expect(() =>
+      validateSetting("historyVisibleColumns", { kind: "application" }, columns),
+    ).toThrow();
+});

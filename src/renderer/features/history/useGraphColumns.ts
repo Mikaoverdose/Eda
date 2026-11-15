@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type DragEvent,
 } from "react";
 import {
   defaultGraphColumns,
@@ -11,6 +12,7 @@ import {
   type GraphColumnId,
 } from "@shared/preferences/graph-view";
 import type { SessionContext } from "@shared/identity/profile-session";
+import { usePreferencesStore } from "../../stores/preferences-store";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { useSessionStore } from "../../stores/session-store";
 
@@ -24,6 +26,22 @@ interface ColumnDrag {
   context: SessionContext;
 }
 
+type ColumnReorder = Pick<ColumnDrag, "id" | "repositoryId" | "context">;
+
+function isCurrentView(repositoryId: string, context: SessionContext) {
+  const store = useSessionStore.getState();
+  const latest = store.snapshot?.context;
+
+  return (
+    !store.transitioning &&
+    !store.snapshot?.recovery &&
+    latest?.profileId === context.profileId &&
+    latest.windowId === context.windowId &&
+    latest.generation === context.generation &&
+    useRepositoryStore.getState().repositoryId === repositoryId
+  );
+}
+
 const clampWidth = (width: number) => Math.max(48, Math.min(320, Math.round(width)));
 
 export function useGraphColumns(repositoryId: string | null, disabled: boolean) {
@@ -31,10 +49,33 @@ export function useGraphColumns(repositoryId: string | null, disabled: boolean) 
     repositoryId ? state.snapshot?.session.views[repositoryId]?.graphColumns : undefined,
   );
   const context = useSessionStore((state) => state.snapshot?.context);
-  const columns = savedColumns ?? defaultGraphColumns();
+  const visibleColumns = usePreferencesStore((state) => state.values.historyVisibleColumns.value);
+  const columns = (savedColumns ?? defaultGraphColumns()).map((column) => ({
+    ...column,
+    visible: visibleColumns.includes(column.id),
+  }));
   const [drag, setDrag] = useState<ColumnDrag | null>(null);
   const [draftWidth, setDraftWidth] = useState(0);
   const width = useRef(0);
+  const reordered = useRef<ColumnReorder | null>(null);
+  const [dropTarget, setDropTarget] = useState<GraphColumnId | null>(null);
+
+  const cancelReorder = useCallback(() => {
+    reordered.current = null;
+    setDropTarget(null);
+  }, []);
+
+  useEffect(
+    () => cancelReorder(),
+    [
+      cancelReorder,
+      repositoryId,
+      disabled,
+      context?.profileId,
+      context?.windowId,
+      context?.generation,
+    ],
+  );
 
   const saveWidth = useCallback(
     (id: GraphColumnId, nextWidth: number) => {
@@ -59,20 +100,8 @@ export function useGraphColumns(repositoryId: string | null, disabled: boolean) 
   useEffect(() => {
     if (!drag || !repositoryId) return;
 
-    const current = () => {
-      const store = useSessionStore.getState();
-      const latest = store.snapshot?.context;
-
-      return (
-        repositoryId === drag.repositoryId &&
-        !store.transitioning &&
-        !store.snapshot?.recovery &&
-        latest?.profileId === drag.context.profileId &&
-        latest.windowId === drag.context.windowId &&
-        latest.generation === drag.context.generation &&
-        useRepositoryStore.getState().repositoryId === repositoryId
-      );
-    };
+    const current = () =>
+      repositoryId === drag.repositoryId && isCurrentView(repositoryId, drag.context);
 
     if (disabled || !current()) {
       setDrag(null);
@@ -164,12 +193,88 @@ export function useGraphColumns(repositoryId: string | null, disabled: boolean) 
     });
   };
 
+  const moveColumn = (id: GraphColumnId, targetId: GraphColumnId) => {
+    const store = useSessionStore.getState();
+    const snapshot = store.snapshot;
+
+    if (
+      disabled ||
+      drag ||
+      !repositoryId ||
+      !snapshot ||
+      !isCurrentView(repositoryId, snapshot.context)
+    )
+      return;
+
+    const latest = snapshot.session.views[repositoryId]?.graphColumns ?? defaultGraphColumns();
+    const from = latest.findIndex((column) => column.id === id);
+    const to = latest.findIndex((column) => column.id === targetId);
+
+    if (from < 0 || to < 0 || from === to) return;
+
+    const next = [...latest];
+    const [column] = next.splice(from, 1);
+
+    if (!column) return;
+
+    next.splice(to, 0, column);
+    store.setView(repositoryId, { graphColumns: next });
+  };
+
+  const canReorder = () => {
+    const source = reordered.current;
+
+    return (
+      source &&
+      !disabled &&
+      !drag &&
+      repositoryId === source.repositoryId &&
+      isCurrentView(source.repositoryId, source.context)
+    );
+  };
+
   return {
     columns: columns.map((column) =>
       drag?.id === column.id ? { ...column, width: draftWidth } : column,
     ),
     startResize,
     saveWidth,
-    resizing: drag !== null,
+    moveColumn,
+    dropTarget,
+    startReorder: (id: GraphColumnId, event: DragEvent<HTMLElement>) => {
+      const snapshot = useSessionStore.getState().snapshot;
+
+      if (
+        disabled ||
+        drag ||
+        !repositoryId ||
+        !snapshot ||
+        !isCurrentView(repositoryId, snapshot.context)
+      ) {
+        event.preventDefault();
+        return;
+      }
+
+      reordered.current = { id, repositoryId, context: snapshot.context };
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", id);
+    },
+    previewReorder: (id: GraphColumnId, event: DragEvent<HTMLElement>) => {
+      if (!canReorder()) return;
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      setDropTarget(id);
+    },
+    finishReorder: (id: GraphColumnId, event: DragEvent<HTMLElement>) => {
+      if (canReorder() && reordered.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        moveColumn(reordered.current.id, id);
+      }
+
+      cancelReorder();
+    },
+    cancelReorder,
   };
 }

@@ -11,6 +11,7 @@ import type { DiffMode } from "../repository/repository-read";
 import { isPullStrategy, type PullStrategy } from "../workflows/pull";
 import { isHexColor, type AccentColor } from "./accent";
 import { DEFAULT_COMMIT_PREFIXES, isCommitPrefix } from "./commit-prefix";
+import { GRAPH_COLUMN_IDS, type GraphColumnId } from "./graph-view";
 
 export type SettingScope =
   | { kind: "application" }
@@ -87,6 +88,15 @@ const percentage = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 100;
 
 export const SETTING_DEFINITIONS = {
+  historyVisibleColumns: define<GraphColumnId[]>({
+    defaultValue: [...GRAPH_COLUMN_IDS],
+    scopes: profile,
+    validate: (value): value is GraphColumnId[] =>
+      Array.isArray(value) &&
+      value.length <= GRAPH_COLUMN_IDS.length &&
+      value.every((id: unknown) => isOneOf(id, GRAPH_COLUMN_IDS)) &&
+      new Set(value).size === value.length,
+  }),
   showInternalRefs: define<boolean>({
     defaultValue: false,
     scopes: application,

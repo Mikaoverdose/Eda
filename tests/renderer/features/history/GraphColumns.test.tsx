@@ -5,16 +5,19 @@ import { defaultGraphColumns } from "@shared/preferences/graph-view";
 import { CommitGraph } from "@renderer/features/history/CommitGraph";
 import { useRepositoryStore } from "@renderer/stores/repository-store";
 import { useSessionStore } from "@renderer/stores/session-store";
+import { usePreferencesStore } from "@renderer/stores/preferences-store";
 
 let root: Root;
 let container: HTMLDivElement;
 let previousSession: ReturnType<typeof useSessionStore.getState>;
+let previousPreferences: ReturnType<typeof usePreferencesStore.getState>;
 let previousRepository: ReturnType<typeof useRepositoryStore.getState>;
 const setView = vi.fn();
 
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   previousSession = useSessionStore.getState();
+  previousPreferences = usePreferencesStore.getState();
   previousRepository = useRepositoryStore.getState();
   setView.mockReset().mockImplementation((id, patch) => {
     const snapshot = useSessionStore.getState().snapshot!;
@@ -80,6 +83,7 @@ afterEach(async () => {
   container.remove();
   useSessionStore.setState(previousSession);
   useRepositoryStore.setState(previousRepository);
+  usePreferencesStore.setState(previousPreferences);
   vi.unstubAllGlobals();
 });
 
@@ -102,12 +106,18 @@ async function key(key: string, target = divider()) {
   await act(async () => target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
 }
 
-async function click(label: string) {
-  const button = [...document.querySelectorAll("button")].find(
-    (item) => item.textContent === label,
-  )!;
-  expect(button).toBeDefined();
-  await act(async () => button.click());
+const header = (id: string) =>
+  container.querySelector<HTMLButtonElement>(`[aria-label="Reorder ${id} column"]`)!;
+const headerOrder = () =>
+  [...container.querySelectorAll<HTMLButtonElement>('[draggable="true"]')].map(
+    (element) => element.textContent,
+  );
+
+async function drag(target: HTMLElement, type: string, dataTransfer = new DataTransfer()) {
+  await act(async () =>
+    target.dispatchEvent(new DragEvent(type, { dataTransfer, bubbles: true, cancelable: true })),
+  );
+  return dataTransfer;
 }
 
 it("previews a dragged boundary in the header and rows, then saves once on release", async () => {
@@ -192,20 +202,114 @@ it.each(["profile", "repository", "pending"])(
   },
 );
 
-it("keeps column visibility, order, and reset available without a modal or width sliders", async () => {
-  await click("Columns...");
-  const menu = document.querySelector('[role="dialog"][aria-label="History columns"]')!;
-  expect(menu.getAttribute("aria-modal")).not.toBe("true");
-  expect(menu.querySelector('input[type="range"]')).toBeNull();
+it("reorders headers and row cells on drop while preserving widths", async () => {
+  await key("ArrowLeft", divider("sha"));
+  setView.mockClear();
+  const data = await drag(header("sha"), "dragstart");
+  await drag(header("date"), "dragover", data);
+  expect(setView).not.toHaveBeenCalled();
+  await drag(header("date"), "drop", data);
 
-  await act(async () => menu.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
-  expect(savedColumns()[0]!.visible).toBe(false);
-  expect(divider()).toBeNull();
+  expect(setView).toHaveBeenCalledOnce();
+  expect(savedColumns().map((column) => column.id)).toEqual(["author", "sha", "date"]);
+  expect(savedColumns()[1]!.width).toBe(80);
+  expect(headerOrder()).toEqual(["Author", "SHA", "Date"]);
+  const cells = [
+    ...container.querySelectorAll<HTMLElement>('[data-tour="history-commit"] span[title]'),
+  ];
+  expect(cells.map((cell) => cell.title)).toEqual([
+    "sample@example.test",
+    "a".repeat(40),
+    "2026-11-06",
+  ]);
+  expect(cells[1]!.style.width).toBe("80px");
 
+  await act(async () => root.render(<CommitGraph key="reopened" />));
+  expect(headerOrder()).toEqual(["Author", "SHA", "Date"]);
+});
+
+it("supports keyboard reordering without moving the commit selection", async () => {
+  const selectCommit = vi.spyOn(useRepositoryStore.getState(), "selectCommit").mockResolvedValue();
   await act(async () =>
-    menu.querySelector<HTMLButtonElement>('[aria-label="Move sha column left"]')!.click(),
+    header("sha").dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+      }),
+    ),
   );
-  expect(savedColumns()[1]!.id).toBe("sha");
-  await click("Reset columns");
-  expect(savedColumns()).toEqual(defaultGraphColumns());
+  expect(savedColumns().map((column) => column.id)).toEqual(["author", "sha", "date"]);
+  expect(selectCommit).not.toHaveBeenCalled();
+  selectCommit.mockRestore();
+});
+
+it.each(["profile", "repository", "pending", "cancel"])(
+  "does not save a reorder after %s changes",
+  async (change) => {
+    const data = await drag(header("sha"), "dragstart");
+    await drag(header("date"), "dragover", data);
+    await act(async () => {
+      if (change === "profile") {
+        const snapshot = useSessionStore.getState().snapshot!;
+        useSessionStore.setState({
+          snapshot: { ...snapshot, context: { ...snapshot.context, generation: 2 } },
+        });
+      } else if (change === "repository") useRepositoryStore.setState({ repositoryId: "other" });
+      else if (change === "pending") root.render(<CommitGraph pending />);
+    });
+    if (change === "cancel") await drag(header("sha"), "dragend", data);
+    await drag(header("date"), "drop", data);
+    expect(setView).not.toHaveBeenCalled();
+  },
+);
+
+it("ignores external drops and drops on the same column", async () => {
+  await drag(header("date"), "drop");
+  const data = await drag(header("date"), "dragstart");
+  await drag(header("date"), "drop", data);
+  expect(setView).not.toHaveBeenCalled();
+});
+
+it("follows global column visibility across repositories and ignores legacy visibility flags", async () => {
+  const snapshot = useSessionStore.getState().snapshot!;
+  const oldColumns = defaultGraphColumns().map((column) => ({ ...column, visible: false }));
+  await act(async () => {
+    useSessionStore.setState({
+      snapshot: {
+        ...snapshot,
+        session: {
+          ...snapshot.session,
+          views: { repo: { ...emptyView(), graphColumns: oldColumns }, other: emptyView() },
+        },
+      },
+    });
+    usePreferencesStore.setState({
+      values: {
+        ...previousPreferences.values,
+        historyVisibleColumns: {
+          ...previousPreferences.values.historyVisibleColumns,
+          value: ["sha"],
+        },
+      },
+    });
+  });
+  expect(headerOrder()).toEqual(["SHA"]);
+  expect(authorCell()).toBeNull();
+  expect(container.querySelector('button[aria-haspopup="dialog"]')).toBeNull();
+
+  await act(async () => useRepositoryStore.setState({ repositoryId: "other" }));
+  expect(headerOrder()).toEqual(["SHA"]);
+  await act(async () =>
+    usePreferencesStore.setState({
+      values: {
+        ...previousPreferences.values,
+        historyVisibleColumns: { ...previousPreferences.values.historyVisibleColumns, value: [] },
+      },
+    }),
+  );
+  expect(headerOrder()).toEqual([]);
+  expect(container.textContent).toContain("Sample commit");
+  expect(setView).not.toHaveBeenCalled();
 });

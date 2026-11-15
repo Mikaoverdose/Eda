@@ -51,6 +51,62 @@ function setup() {
 }
 
 describe("preference scopes", () => {
+  it("persists visible history columns globally across profiles and repositories", () => {
+    const { db, store, work, home } = setup();
+    const scope = { kind: "application" } as const;
+    expect(store.resolve("historyVisibleColumns").value).toEqual(["author", "date", "sha"]);
+    store.set("historyVisibleColumns", scope, ["date", "sha"]);
+    const reloaded = new SettingsRepository(db);
+    for (const profile of [work, home])
+      expect(reloaded.resolve("historyVisibleColumns", { profileId: profile.id }).value).toEqual([
+        "date",
+        "sha",
+      ]);
+    expect(
+      reloaded.resolve("historyVisibleColumns", { profileId: work.id, repositoryId: "repo" }).value,
+    ).toEqual(["date", "sha"]);
+    expect(() =>
+      store.set(
+        "historyVisibleColumns",
+        { kind: "repository", profileId: work.id, repositoryId: "repo" },
+        ["sha"],
+      ),
+    ).toThrow();
+    store.set("historyVisibleColumns", scope, []);
+    expect(new SettingsRepository(db).resolve("historyVisibleColumns").value).toEqual([]);
+    store.reset("historyVisibleColumns", scope);
+    expect(store.resolve("historyVisibleColumns").value).toEqual(["author", "date", "sha"]);
+  });
+
+  it("isolates profile column overrides and returns to the latest global visibility on reset", () => {
+    const { db, store, work, home } = setup();
+    const global = { kind: "application" } as const;
+    const profile = { kind: "profile", profileId: work.id } as const;
+    const context = { profileId: work.id, repositoryId: "repo" };
+    store.set("historyVisibleColumns", global, ["date", "sha"]);
+    store.set("historyVisibleColumns", profile, ["author"]);
+
+    const reloaded = new SettingsRepository(db);
+    expect(reloaded.resolve("historyVisibleColumns", context)).toMatchObject({
+      value: ["author"],
+      source: profile,
+    });
+    expect(reloaded.resolve("historyVisibleColumns", { profileId: home.id }).value).toEqual([
+      "date",
+      "sha",
+    ]);
+    store.set("historyVisibleColumns", global, ["sha"]);
+    expect(reloaded.resolve("historyVisibleColumns", context).value).toEqual(["author"]);
+    store.set("historyVisibleColumns", profile, []);
+    expect(reloaded.resolve("historyVisibleColumns", context).value).toEqual([]);
+    store.reset("historyVisibleColumns", profile);
+    expect(reloaded.resolve("historyVisibleColumns", context)).toMatchObject({
+      value: ["sha"],
+      source: global,
+    });
+    expect(reloaded.resolve("historyVisibleColumns").value).toEqual(["sha"]);
+  });
+
   it("hides internal history refs by default and persists the opt-in globally", () => {
     const { db, store, work, home } = setup();
     const scope = { kind: "application" } as const;
