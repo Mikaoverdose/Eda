@@ -19,6 +19,7 @@ import { StateSimulations } from "./debug/StateSimulations";
 import { FetchSettings } from "./git/FetchSettings";
 import { GitEngineSettings } from "./git/GitEngineSettings";
 import { SshAgentSettings } from "./git/SshAgentSettings";
+import { HistorySettings } from "./git/HistorySettings";
 import { IntegrationsSettings } from "./integrations/IntegrationsSettings";
 
 const ComponentGallery = lazy(() =>
@@ -68,6 +69,7 @@ export function SettingsContent({
           <GitEngineSettings />
           <SshAgentSettings />
           <FetchSettings />
+          <HistorySettings />
         </div>
       );
     case "application":

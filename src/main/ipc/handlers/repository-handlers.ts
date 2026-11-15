@@ -392,9 +392,14 @@ export function registerRepositoryHandlers(services: Services): void {
     if (input["showStashes"] !== undefined && typeof input["showStashes"] !== "boolean")
       throw invalidRequest(errorText("main.repositoryHandlers.chooseWhetherToShowStashes"));
 
+    if (input["showInternalRefs"] !== undefined && typeof input["showInternalRefs"] !== "boolean")
+      throw invalidRequest(errorText("main.repositoryHandlers.chooseWhetherToShowInternalRefs"));
+
     return ok(
       await git.history(repository.path, {
         showStashes: input["showStashes"] === true,
+        showInternalRefs:
+          input["showInternalRefs"] ?? services.preferences.resolve("showInternalRefs").value,
         ...(offset !== undefined && { offset }),
         ...(limit !== undefined && { limit }),
         ...(input["refs"] !== undefined && {

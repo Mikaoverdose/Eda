@@ -78,6 +78,7 @@ export interface HistoryPage {
 
 export interface HistoryPageRequest {
   showStashes?: boolean;
+  showInternalRefs?: boolean;
   repositoryId: string;
   offset?: number;
   limit?: number;

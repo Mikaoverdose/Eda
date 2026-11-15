@@ -197,6 +197,8 @@ function setup() {
   registerApplicationContents(event.sender);
 
   const mocks = {
+    git: { history: vi.fn(async () => ({ commits: [], nextOffset: null })) },
+    repositories: { resolveActiveRepository: vi.fn(() => ({ path: "/repo" })) },
     installation: { method: "development" },
     updates: {
       blocksQuit: false,
@@ -287,7 +289,11 @@ function setup() {
     credentials: { unlockActiveKey: vi.fn() },
     repositoryTrust: { current: vi.fn(() => null), respond: vi.fn(() => true) },
     sshHostTrust: { current: vi.fn(() => null), respond: vi.fn(() => true) },
-    preferences: { set: vi.fn(), reset: vi.fn(), resolve: vi.fn(() => ({ value: 125 })) },
+    preferences: {
+      set: vi.fn(),
+      reset: vi.fn(),
+      resolve: vi.fn((key: string) => ({ value: key === "showInternalRefs" ? false : 125 })),
+    },
   };
 
   registerIpcHandlers(mocks as unknown as Services);
@@ -300,6 +306,29 @@ function invoke(channel: IpcChannel, ...args: unknown[]) {
   if (!handler) throw new Error(`Missing handler: ${channel}`);
   return handler(event, ...args);
 }
+
+it("uses the global history visibility unless a view explicitly overrides it", async () => {
+  const mocks = setup();
+  mocks.preferences.resolve.mockReturnValue({ value: true });
+  expect(await invoke(IPC_CHANNELS.repositoryHistory, { repositoryId })).toMatchObject({
+    ok: true,
+  });
+  expect(mocks.git.history).toHaveBeenLastCalledWith(
+    "/repo",
+    expect.objectContaining({ showInternalRefs: true }),
+  );
+  expect(
+    await invoke(IPC_CHANNELS.repositoryHistory, { repositoryId, showInternalRefs: false }),
+  ).toMatchObject({ ok: true });
+  expect(mocks.git.history).toHaveBeenLastCalledWith(
+    "/repo",
+    expect.objectContaining({ showInternalRefs: false }),
+  );
+  expect(
+    await invoke(IPC_CHANNELS.repositoryHistory, { repositoryId, showInternalRefs: "true" }),
+  ).toMatchObject({ ok: false, error: { kind: "invalid-input" } });
+  expect(mocks.git.history).toHaveBeenCalledTimes(2);
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

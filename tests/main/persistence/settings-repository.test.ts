@@ -51,6 +51,22 @@ function setup() {
 }
 
 describe("preference scopes", () => {
+  it("hides internal history refs by default and persists the opt-in globally", () => {
+    const { db, store, work, home } = setup();
+    const scope = { kind: "application" } as const;
+    expect(store.resolve("showInternalRefs").value).toBe(false);
+    store.set("showInternalRefs", scope, true);
+    const reloaded = new SettingsRepository(db);
+    for (const profile of [work, home])
+      expect(reloaded.resolve("showInternalRefs", { profileId: profile.id }).value).toBe(true);
+    expect(() =>
+      store.set("showInternalRefs", { kind: "profile", profileId: work.id }, false),
+    ).toThrow();
+    expect(() => store.set("showInternalRefs", scope, "true")).toThrow();
+    store.reset("showInternalRefs", scope);
+    expect(store.resolve("showInternalRefs").value).toBe(false);
+  });
+
   it("keeps vigilant mode off by default and persists it only for its profile", () => {
     const { db, store, work, home } = setup();
     const scope = { kind: "profile", profileId: work.id } as const;

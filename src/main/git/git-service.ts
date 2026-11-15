@@ -460,6 +460,7 @@ export class GitService {
       refs?: string[];
       hiddenRefs?: string[];
       showStashes?: boolean;
+      showInternalRefs?: boolean;
     } = {},
   ): Promise<HistoryPage> {
     const offset = page.offset ?? 0;
@@ -487,14 +488,18 @@ export class GitService {
     for (const ref of [...(page.refs ?? []), ...(page.hiddenRefs ?? [])])
       assertValidRefName(ref, t("operations.filterHistory"));
 
-    const revisions = page.refs?.length
-      ? page.refs
-      : [
-          ...(page.hiddenRefs ?? []).map((ref) => `--exclude=${ref}`),
-          "--exclude=refs/stash",
-          "--exclude=refs/eda/*",
-          "--all",
-        ];
+    const publicRefs = ["refs/heads/*", "refs/remotes/*", "refs/tags/*"];
+    const excludedRefs = (page.hiddenRefs ?? []).map((ref) => `--exclude=${ref}`);
+    let revisions: string[];
+    if (page.refs?.length) revisions = page.refs;
+    else if (page.showInternalRefs) revisions = [...excludedRefs, "--exclude=refs/stash", "--all"];
+    else
+      revisions = [
+        ...publicRefs.flatMap((pattern) => [...excludedRefs, `--glob=${pattern}`]),
+        // --all also includes HEAD, without failing when an unborn HEAD has no commit.
+        "--exclude=refs/*",
+        "--all",
+      ];
 
     const stashes = page.showStashes ? await readStashHistory(this, path) : null;
 
@@ -506,7 +511,10 @@ export class GitService {
         "--topo-order",
         "--date=unix",
         "--decorate=full",
-        "--decorate-refs-exclude=refs/eda/*",
+        ...["HEAD", ...(page.showInternalRefs ? ["refs/*"] : publicRefs)].map(
+          (pattern) => `--decorate-refs=${pattern}`,
+        ),
+        "--decorate-refs-exclude=refs/stash",
         `--max-count=${limit + 1}`,
         `--skip=${offset}`,
         ...LOG_ARGUMENTS,

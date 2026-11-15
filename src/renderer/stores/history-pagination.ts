@@ -33,6 +33,7 @@ export function createHistoryPagination(
     return {
       ...(filter && { refs: filter.refs, hiddenRefs: filter.hiddenRefs }),
       showStashes: filter?.showStashes ?? true,
+      ...(filter?.showInternalRefs !== undefined && { showInternalRefs: filter.showInternalRefs }),
     };
   }
 

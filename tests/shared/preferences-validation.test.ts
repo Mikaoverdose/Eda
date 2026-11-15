@@ -2,6 +2,16 @@ import { expect, it } from "vitest";
 import { emptyView, isView } from "@shared/identity/profile-session";
 import { defaultFileView, isFileView } from "@shared/preferences/file-view";
 import { builtInSetting, validateSetting } from "@shared/preferences/settings";
+import { defaultGraphFilter, isGraphFilter } from "@shared/preferences/graph-view";
+
+it("keeps existing graph views valid and accepts only explicit boolean overrides for internal refs", () => {
+  const legacy = defaultGraphFilter();
+  expect(isGraphFilter(legacy)).toBe(true);
+  for (const showInternalRefs of [undefined, false, true])
+    expect(isView({ ...emptyView(), graphFilter: { ...legacy, showInternalRefs } })).toBe(true);
+  for (const showInternalRefs of [null, "true", 1, [true]])
+    expect(isGraphFilter({ ...legacy, showInternalRefs })).toBe(false);
+});
 
 it("rejects saved selection areas that only coerce to valid strings", () => {
   for (const area of [["staged"], { toString: () => "staged" }]) {

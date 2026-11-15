@@ -642,6 +642,7 @@
   "main.repositoryHandlers.chooseSupportedInitialFiles": "Choose supported initial files.",
   "main.repositoryHandlers.chooseWhetherToKeepTheSourceMembership": "Choose whether to keep the source membership.",
   "main.repositoryHandlers.chooseWhetherToShowStashes": "Choose whether to show stashes.",
+  "main.repositoryHandlers.chooseWhetherToShowInternalRefs": "Choose whether to show internal references.",
   "main.repositoryHandlers.commitDiffRequest": "commit diff request",
   "main.repositoryHandlers.commitRequest": "commit request",
   "main.repositoryHandlers.historyRequest": "history request",

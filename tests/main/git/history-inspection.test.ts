@@ -5,6 +5,96 @@ import { SshService } from "@main/ssh/ssh-service";
 import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 
 describe("history visibility and inspection", () => {
+  it("hides internal history and badges by default, and includes them when all refs are requested", async () => {
+    const repo = await createTempRepo();
+
+    try {
+      await repo.writeFile("file.txt", "base\n");
+      await repo.commit("Base");
+      const base = (await repo.run(["rev-parse", "HEAD"])).trim();
+      const tree = (await repo.run(["rev-parse", "HEAD^{tree}"])).trim();
+      const namespaces = [
+        "t3/checkpoints",
+        "eda/recovery",
+        "notes",
+        "original/refs/heads",
+        "replace",
+        "bisect",
+        "rewritten",
+        "worktree",
+        "keep-around",
+        "pipelines",
+        "pull/1",
+        "merge-requests/1",
+        "changes/01/1",
+        "gitbutler",
+        "custom-tool",
+      ];
+      const internal: string[] = [];
+      for (const namespace of namespaces) {
+        const oid = (await repo.run(["commit-tree", tree, "-p", base, "-m", namespace])).trim();
+        await repo.run(["update-ref", `refs/${namespace}/snapshot`, oid]);
+        internal.push(oid);
+      }
+      await repo.run(["update-ref", "refs/t3/shared", base]);
+      await repo.run(["config", "log.initialDecorationSet", "all"]);
+      const before = await repo.run(["show-ref"]);
+      const normal = await repo.git.history(repo.path);
+
+      expect(normal.commits.map((commit) => commit.oid)).toEqual([base]);
+      expect(normal.commits[0]!.decorations).toEqual([
+        { type: "head", name: "main", target: "refs/heads/main" },
+      ]);
+
+      const all = await repo.git.history(repo.path, { showInternalRefs: true });
+      expect(all.commits.map((commit) => commit.oid).sort()).toEqual([base, ...internal].sort());
+      expect(all.commits.find((commit) => commit.oid === base)!.decorations).toContainEqual({
+        type: "ref",
+        name: "refs/t3/shared",
+      });
+
+      const paged: string[] = [];
+      let offset: number | null = 0;
+      while (offset !== null) {
+        const page = await repo.git.history(repo.path, {
+          showInternalRefs: true,
+          offset,
+          limit: 2,
+        });
+        paged.push(...page.commits.map((commit) => commit.oid));
+        offset = page.nextOffset;
+      }
+      expect(paged).toEqual(all.commits.map((commit) => commit.oid));
+
+      await repo.run(["branch", "shared", internal[0]!]);
+      await repo.run(["update-ref", "refs/remotes/origin/shared", internal[1]!]);
+      await repo.run(["tag", "shared", internal[2]!]);
+      expect(
+        (await repo.git.history(repo.path)).commits.map((commit) => commit.oid).sort(),
+      ).toEqual([base, ...internal.slice(0, 3)].sort());
+      await repo.run(["branch", "-D", "shared"]);
+      await repo.run(["update-ref", "-d", "refs/remotes/origin/shared"]);
+      await repo.run(["tag", "-d", "shared"]);
+      expect(await repo.run(["show-ref"])).toBe(before);
+      expect(await repo.run(["status", "--porcelain"])).toBe("");
+    } finally {
+      await repo.cleanup();
+    }
+  });
+
+  it("returns empty history for an unborn repository in either reference view", async () => {
+    const repo = await createTempRepo();
+    try {
+      for (const showInternalRefs of [false, true])
+        expect(await repo.git.history(repo.path, { showInternalRefs })).toEqual({
+          commits: [],
+          nextOffset: null,
+        });
+    } finally {
+      await repo.cleanup();
+    }
+  });
+
   it("detects signature headers and preserves commit details when the verifier is unavailable", async () => {
     const repo = await createTempRepo();
 

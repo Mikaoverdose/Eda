@@ -20,6 +20,7 @@ import { useSessionStore } from "../../stores/session-store";
 import type { CommitMenuTarget } from "./CommitMenu";
 import { CommitRow } from "./CommitRow";
 import { GraphColumnsDialog } from "./GraphColumnsDialog";
+import { GraphVisibilityMenu } from "./GraphVisibilityMenu";
 
 const CommitMenu = lazy(() =>
   import("../repository-dialogs").then((module) => ({ default: module.CommitMenu })),
@@ -60,10 +61,6 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
 
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-
-  const graphFilter = useSessionStore((state) =>
-    repositoryId ? state.snapshot?.session.views[repositoryId]?.graphFilter : undefined,
-  );
 
   const dagBoundary = useRepositoryStore((state) => state.dagBoundary);
   const hoveredRefOid = useRepositoryStore((state) => state.hoveredRefOid);
@@ -182,11 +179,13 @@ export function CommitGraph({ pending = false }: { pending?: boolean }) {
           {t("commitGraph.head")}
         </TextButton>
 
-        <TextButton disabled={pending} onClick={() => setFilterOpen(true)}>
-          {graphFilter?.refs.length || graphFilter?.hiddenRefs.length
-            ? t("commitGraph.filteredGraph")
-            : t("commitGraph.allBranches")}
-        </TextButton>
+        {repositoryId && (
+          <GraphVisibilityMenu
+            repositoryId={repositoryId}
+            disabled={pending}
+            onFilter={() => setFilterOpen(true)}
+          />
+        )}
 
         <span className="mono ml-auto text-xs text-text-tertiary">
           {pending ? (

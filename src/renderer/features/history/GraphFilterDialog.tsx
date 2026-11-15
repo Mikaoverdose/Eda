@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { defaultGraphFilter, type GraphFilter } from "@shared/preferences/graph-view";
 import { useSessionStore } from "../../stores/session-store";
 import { useRepositoryStore } from "../../stores/repository-store";
+import { usePreferencesStore } from "../../stores/preferences-store";
 import {
   Button,
   Dialog,
@@ -11,6 +12,7 @@ import {
   Checkbox,
   ErrorDialog,
   TextButton,
+  Select,
 } from "../../components/ui/index";
 
 export function GraphFilterDialog({
@@ -30,6 +32,7 @@ export function GraphFilterDialog({
   >([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const globalDefault = usePreferencesStore((state) => state.values.showInternalRefs.value);
 
   useEffect(() => {
     let alive = true;
@@ -88,7 +91,10 @@ export function GraphFilterDialog({
       onClose={onClose}
       footer={
         <>
-          <Button variant="quiet" onClick={() => setFilter(defaultGraphFilter())}>
+          <Button
+            variant="quiet"
+            onClick={() => setFilter({ ...defaultGraphFilter(), showInternalRefs: true })}
+          >
             {t("graphFilterDialog.showAll")}
           </Button>
           <Button onClick={apply}>{t("graphFilterDialog.applyGraphView")}</Button>
@@ -96,6 +102,32 @@ export function GraphFilterDialog({
       }
     >
       <div className="space-y-3 text-sm">
+        <label className="block space-y-2">
+          <span>{t("historyRefs.historyReferences")}</span>
+          <Select
+            aria-label={t("historyRefs.historyReferences")}
+            value={
+              filter.showInternalRefs === undefined ? "default" : String(filter.showInternalRefs)
+            }
+            onValueChange={(value) =>
+              setFilter({
+                ...filter,
+                showInternalRefs: value === "default" ? undefined : value === "true",
+              })
+            }
+          >
+            <option value="default">
+              {t("historyRefs.useGlobalDefault", {
+                value: globalDefault
+                  ? t("historyRefs.allReferences")
+                  : t("historyRefs.branchesAndTags"),
+              })}
+            </option>
+            <option value="false">{t("historyRefs.branchesAndTags")}</option>
+            <option value="true">{t("historyRefs.allReferences")}</option>
+          </Select>
+        </label>
+        <p className="text-xs text-text-tertiary">{t("historyRefs.allReferencesDescription")}</p>
         <Checkbox
           checked={filter.showStashes ?? true}
           onChange={(event) => setFilter({ ...filter, showStashes: event.target.checked })}

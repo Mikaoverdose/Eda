@@ -98,6 +98,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             return;
           }
 
+          if (change.key === "showInternalRefs") void useRepositoryStore.getState().syncFromDisk();
+
           void usePreferencesStore.getState().load({
             ...(activeIdentity ? { profileId: activeIdentity.id } : {}),
             ...(selectedRepositoryId ? { repositoryId: selectedRepositoryId } : {}),

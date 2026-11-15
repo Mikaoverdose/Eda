@@ -49,6 +49,15 @@ const head = git("rev-parse", "HEAD").trim();
 
 git("tag", "-a", "v1", "-m", "Release annotation");
 git("branch", "feature/work");
+const checkpoint = git(
+  "commit-tree",
+  git("rev-parse", "HEAD^{tree}").trim(),
+  "-p",
+  head,
+  "-m",
+  "Internal checkpoint",
+).trim();
+git("update-ref", "refs/t3/checkpoints/desktop", checkpoint);
 
 let app: ElectronApplication | undefined;
 const errors: string[] = [];
@@ -107,6 +116,45 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await finishOnboarding(page);
   await page.getByRole("button", { name: "Inspect branch feature/work", exact: true }).waitFor();
+  const checkpointRow = page
+    .getByTestId("commit-graph")
+    .getByText("Internal checkpoint", { exact: true });
+  await expect(checkpointRow).toHaveCount(0);
+  await page.getByRole("button", { name: "All branches...", exact: true }).click();
+  await page.getByRole("menuitem", { name: "All references", exact: true }).click();
+  await expect(checkpointRow).toBeVisible();
+  await savedSession(
+    (session) =>
+      session.views[session.selectedRepositoryId ?? ""]?.graphFilter?.showInternalRefs === true,
+  );
+  await page.getByRole("button", { name: "All references...", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Use global default (Branches and tags)", exact: true })
+    .click();
+  await expect(checkpointRow).toHaveCount(0);
+
+  await page.getByRole("button", { name: "All branches...", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Global history settings...", exact: true }).click();
+  const internalRefsSetting = page.getByRole("checkbox", {
+    name: "Show internal references by default",
+    exact: true,
+  });
+  await internalRefsSetting.check();
+  await expect(internalRefsSetting).toBeChecked();
+  await expect(internalRefsSetting).toBeEnabled();
+  await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  await expect(checkpointRow).toBeVisible();
+  await page.getByRole("button", { name: "All references...", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Branches and tags", exact: true }).click();
+  await expect(checkpointRow).toHaveCount(0);
+  await page.getByRole("button", { name: "All branches...", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Global history settings...", exact: true }).click();
+  await internalRefsSetting.uncheck();
+  await expect(internalRefsSetting).not.toBeChecked();
+  await expect(internalRefsSetting).toBeEnabled();
+  await page.getByRole("button", { name: "Back to workspace", exact: true }).click();
+  await expect(checkpointRow).toHaveCount(0);
+  assert.equal(git("rev-parse", "refs/t3/checkpoints/desktop").trim(), checkpoint);
   await page
     .getByRole("button", { name: "Inspect tag v1", exact: true })
     .click({ button: "right" });

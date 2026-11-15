@@ -9,6 +9,7 @@ export interface GraphFilter {
   pinnedRef: string | null;
   pinnedOid?: string | undefined;
   showStashes?: boolean;
+  showInternalRefs?: boolean | undefined;
 }
 
 export const defaultGraphFilter = (): GraphFilter => ({
@@ -31,9 +32,12 @@ export function isGraphFilter(value: unknown): value is GraphFilter {
 
   return (
     Object.keys(item).every((key) =>
-      ["refs", "hiddenRefs", "pinnedRef", "pinnedOid", "showStashes"].includes(key),
+      ["refs", "hiddenRefs", "pinnedRef", "pinnedOid", "showStashes", "showInternalRefs"].includes(
+        key,
+      ),
     ) &&
     (item["showStashes"] === undefined || typeof item["showStashes"] === "boolean") &&
+    (item["showInternalRefs"] === undefined || typeof item["showInternalRefs"] === "boolean") &&
     [item["refs"], item["hiddenRefs"]].every(
       (list) => Array.isArray(list) && list.length <= 256 && list.every(ref),
     ) &&

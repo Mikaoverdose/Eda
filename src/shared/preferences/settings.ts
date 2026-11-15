@@ -87,6 +87,11 @@ const percentage = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 100;
 
 export const SETTING_DEFINITIONS = {
+  showInternalRefs: define<boolean>({
+    defaultValue: false,
+    scopes: application,
+    validate: boolean,
+  }),
   developerSettingsEnabled: define<boolean>({
     defaultValue: false,
     scopes: application,
