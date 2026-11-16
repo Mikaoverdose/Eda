@@ -1,88 +1,44 @@
 import { errorMessage } from "@shared/errors";
 import { t } from "@shared/i18n";
 import type { GitLabSignIn, GitLabStatus, GitLabAccountProfile } from "@shared/integrations/gitlab";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLinkIcon as ExternalLink, UnplugIcon as Unplug } from "../../components/ui/icons";
 import { Button, ActionsMenu } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
 import { ConnectionProfile } from "./ConnectionProfile";
 import { ConnectionActionSkeleton } from "./ConnectionSkeleton";
+import { useConnectionStatus } from "./useConnectionStatus";
 
-export function GitLabConnection({
-  profileId,
-  compact = false,
-}: {
-  profileId: string;
-  compact?: boolean;
-}) {
-  const [statusRevision, setStatusRevision] = useState(0);
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [status, setStatus] = useState<GitLabStatus | null>(null);
-  const [profileReadyFor, setProfileReadyFor] = useState<string | null>(null);
-  const [profile, setProfile] = useState<GitLabAccountProfile | null>(null);
+type ConnectionProps = { profileId: string; compact?: boolean };
+
+export function GitLabConnection(props: ConnectionProps) {
+  return <GitLabConnectionSession key={props.profileId} {...props} />;
+}
+
+function GitLabConnectionSession({ profileId, compact = false }: ConnectionProps) {
+  const {
+    status,
+    setStatus,
+    statusLoading,
+    loading,
+    profile,
+    error,
+    setError,
+    alive,
+    current,
+    retryStatus,
+  } = useConnectionStatus<GitLabStatus, GitLabAccountProfile, GitLabSignIn>(
+    profileId,
+    window.eda.gitlab,
+    t("settings.gitLabConnection.loadFailed"),
+  );
   const [pending, setPending] = useState<GitLabSignIn | null>(null);
+  const hue = useAppStore((state) => state.activeIdentity?.hue ?? 210);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [connectRequested, setConnectRequested] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const alive = useRef(true);
-  const current = useRef<GitLabSignIn | null>(null);
-  const hue = useAppStore((state) => state.activeIdentity?.hue ?? 210);
-  const loading = statusLoading || !!(status?.account && profileReadyFor !== status.account.id);
   const connected = status?.account?.state === "connected";
-
-  useEffect(() => {
-    alive.current = true;
-    setStatusLoading(true);
-    setError(null);
-
-    let active = true;
-
-    void window.eda.gitlab
-      .status(profileId)
-      .then((result) => {
-        if (!active) return;
-        if (result.ok) setStatus(result.value);
-        else setError(errorMessage(result.error));
-      })
-      .catch(() => {
-        if (active) setError(t("settings.gitLabConnection.loadFailed"));
-      })
-      .finally(() => {
-        if (active) setStatusLoading(false);
-      });
-
-    return () => {
-      active = false;
-      alive.current = false;
-      if (current.current) void window.eda.gitlab.cancel(profileId, current.current.id);
-      current.current = null;
-    };
-  }, [profileId, statusRevision]);
-
-  useEffect(() => {
-    let active = true;
-    setProfile(null);
-    const accountId = status?.account?.id;
-
-    if (accountId)
-      void window.eda.gitlab
-        .profile(profileId)
-        .then((result) => {
-          if (active && result.ok && result.value?.id === accountId) setProfile(result.value);
-        })
-        .catch(() => {
-          if (active) setProfile(null);
-        })
-        .finally(() => {
-          if (active) setProfileReadyFor(accountId);
-        });
-
-    return () => {
-      active = false;
-    };
-  }, [profileId, status?.account?.id]);
 
   useEffect(() => {
     if (!pending) return;
@@ -130,7 +86,8 @@ export function GitLabConnection({
       if (alive.current && current.current?.id === signIn.id && !result.ok)
         setError(errorMessage(result.error));
     } catch {
-      if (alive.current) setError(t("settings.gitLabConnection.openFailed"));
+      if (alive.current && current.current?.id === signIn.id)
+        setError(t("settings.gitLabConnection.openFailed"));
     }
   };
 
@@ -297,7 +254,7 @@ export function GitLabConnection({
       }
     >
       {!status && !statusLoading && (
-        <Button size="sm" onClick={() => setStatusRevision((value) => value + 1)}>
+        <Button size="sm" onClick={retryStatus}>
           {t("common.retry")}
         </Button>
       )}

@@ -6,89 +6,44 @@ import {
   ExternalLinkIcon as ExternalLink,
   UnplugIcon as Unplug,
 } from "../../components/ui/icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ConnectionProfile } from "./ConnectionProfile";
 import { Button, CodeBlock, CopyButton, ActionsMenu } from "../../components/ui/index";
 import { useAppStore } from "../../stores/app-store";
 import { ServiceAccountCard } from "./ServiceAccountCard";
 import { ConnectionActionSkeleton } from "./ConnectionSkeleton";
+import { useConnectionStatus } from "./useConnectionStatus";
 
-export function GitHubConnection({
-  profileId,
-  compact = false,
-}: {
-  profileId: string;
-  compact?: boolean;
-}) {
-  const [statusRevision, setStatusRevision] = useState(0);
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [status, setStatus] = useState<GitHubStatus | null>(null);
+type ConnectionProps = { profileId: string; compact?: boolean };
+
+export function GitHubConnection(props: ConnectionProps) {
+  return <GitHubConnectionSession key={props.profileId} {...props} />;
+}
+
+function GitHubConnectionSession({ profileId, compact = false }: ConnectionProps) {
+  const {
+    status,
+    setStatus,
+    statusLoading,
+    loading,
+    profile,
+    error,
+    setError,
+    alive,
+    current,
+    retryStatus,
+  } = useConnectionStatus<GitHubStatus, GitHubAccountProfile, GitHubSignIn>(
+    profileId,
+    window.eda.github,
+    t("settings.gitHubConnection.couldNotLoadTheGitHubConnectionReopenSettingsAndTryAgain"),
+  );
   const [pending, setPending] = useState<GitHubSignIn | null>(null);
-  const [profileReadyFor, setProfileReadyFor] = useState<string | null>(null);
-  const [profile, setProfile] = useState<GitHubAccountProfile | null>(null);
   const hue = useAppStore((state) => state.activeIdentity?.hue ?? 210);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [connectRequested, setConnectRequested] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [copiedSignIn, setCopiedSignIn] = useState<string | null>(null);
-  const alive = useRef(true);
-  const current = useRef<GitHubSignIn | null>(null);
   const signedIn = status?.account?.state === "connected";
-
-  useEffect(() => {
-    alive.current = true;
-    setStatusLoading(true);
-    setError(null);
-    let active = true;
-
-    void window.eda.github
-      .status(profileId)
-      .then((result) => {
-        if (!active) return;
-        if (result.ok) setStatus(result.value);
-        else setError(errorMessage(result.error));
-      })
-      .catch(() => {
-        if (active)
-          setError(
-            t("settings.gitHubConnection.couldNotLoadTheGitHubConnectionReopenSettingsAndTryAgain"),
-          );
-      })
-      .finally(() => {
-        if (active) setStatusLoading(false);
-      });
-
-    return () => {
-      active = false;
-      alive.current = false;
-      if (current.current) void window.eda.github.cancel(profileId, current.current.id);
-      current.current = null;
-    };
-  }, [profileId, statusRevision]);
-
-  useEffect(() => {
-    let active = true;
-    setProfile(null);
-    const accountId = status?.account?.id;
-
-    if (accountId)
-      void window.eda.github
-        .profile(profileId)
-        .then((result) => {
-          if (active && result.ok && result.value?.id === accountId) setProfile(result.value);
-        })
-        .catch(() => {
-          if (active) setProfile(null);
-        })
-        .finally(() => {
-          if (active) setProfileReadyFor(accountId);
-        });
-
-    return () => {
-      active = false;
-    };
-  }, [profileId, status?.account?.id]);
 
   useEffect(() => {
     if (!pending) return;
@@ -151,7 +106,7 @@ export function GitHubConnection({
       if (result.ok) setCopiedSignIn(signIn.id);
       else setError(errorMessage(result.error));
     } catch {
-      if (alive.current)
+      if (alive.current && current.current?.id === signIn.id)
         setError(t("settings.gitHubConnection.couldNotCopyTheCodeAndOpenGitHubTryAgain"));
     }
   };
@@ -207,10 +162,9 @@ export function GitHubConnection({
       if (!alive.current) return;
 
       if (result.ok) {
+        setStatus((value) => value && { ...value, account: null });
         setExpanded(false);
         setConnectRequested(false);
-        const refreshed = await window.eda.github.status(profileId);
-        if (alive.current && refreshed.ok) setStatus(refreshed.value);
       } else setError(errorMessage(result.error));
     } catch {
       if (alive.current) setError(t("settings.gitHubConnection.couldNotDisconnectGitHubTryAgain"));
@@ -235,8 +189,6 @@ export function GitHubConnection({
   useEffect(() => {
     if (isConnected) setExpanded(false);
   }, [compact, isConnected]);
-
-  const loading = statusLoading || !!(account && profileReadyFor !== account.id);
 
   const starting = busy && !pending && !signedIn;
   const details = profile?.id === account?.id ? profile : null;
@@ -350,7 +302,7 @@ export function GitHubConnection({
       }
     >
       {!status && !statusLoading && (
-        <Button size="sm" onClick={() => setStatusRevision((value) => value + 1)}>
+        <Button size="sm" onClick={retryStatus}>
           {t("common.retry")}
         </Button>
       )}
