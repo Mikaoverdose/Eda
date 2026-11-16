@@ -89,9 +89,7 @@ function algorithmToType(algorithm: string): SshKeyType {
 
 export function isEncryptedFromProbe(stdout: string, stderr: string): boolean {
   const combined = `${stdout}\n${stderr}`;
-  return /incorrect passphrase|passphrase is required|load key .* bad (passphrase|permissions)/i.test(
-    combined,
-  );
+  return /incorrect passphrase|passphrase is required|load key .* bad passphrase/i.test(combined);
 }
 
 export function parseAuthenticatedUser(output: string): string | undefined {

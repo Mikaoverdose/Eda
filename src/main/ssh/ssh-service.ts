@@ -403,6 +403,9 @@ export class SshService {
       ["-y", "-f", privateKeyPath, "-P", ""],
       t("operations.checkSshKey"),
     );
+    const encrypted = isEncryptedFromProbe(probe.stdout, probe.stderr);
+
+    if (probe.exitCode !== 0 && !encrypted) return undefined;
 
     return {
       path: privateKeyPath,
@@ -412,7 +415,7 @@ export class SshService {
       fingerprint: parsedFingerprint.fingerprint,
       comment: parsedFingerprint.comment || parsedPublicKey.comment,
       publicKey: parsedPublicKey.publicKey,
-      encrypted: isEncryptedFromProbe(probe.stdout, probe.stderr),
+      encrypted,
       loadedInAgent: loadedFingerprints.has(parsedFingerprint.fingerprint),
     };
   }

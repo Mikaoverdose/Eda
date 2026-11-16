@@ -468,6 +468,30 @@ describe("SshService discovery", () => {
     expect(JSON.stringify(keys[0])).not.toContain("BEGIN OPENSSH PRIVATE KEY");
   });
 
+  it.each([
+    fx.probeUnreadable,
+    'Load key "key": error in libcrypto\n',
+    'Load key "key": bad permissions\n',
+  ])("rejects unusable private keys despite a valid public sidecar: %s", async (stderr) => {
+    const home = await makeHome();
+    const keyPath = join(home, ".ssh", "invalid");
+
+    await writeFile(keyPath, "not a private key", { mode: 0o600 });
+    await writeFile(`${keyPath}.pub`, fx.publicKeyEd25519, "utf8");
+
+    const runner = new FakeProcessRunner()
+      .when((request) => request.executable === "ssh-add", {
+        exitCode: 1,
+        stderr: fx.agentEmpty,
+      })
+      .on(["-l", "-f"], { stdout: fx.fingerprintEd25519 })
+      .on(["-y"], { exitCode: 1, stderr });
+    const service = new SshService(runner, home);
+
+    await expect(service.importKey(keyPath)).rejects.toMatchObject({ kind: "invalid-input" });
+    expect(await service.discoverKeys()).toEqual([]);
+  });
+
   it("marks a passphrase-protected key as encrypted", async () => {
     const home = await makeHome();
     const keyPath = join(home, ".ssh", "locked");
