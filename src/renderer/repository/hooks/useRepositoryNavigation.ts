@@ -64,6 +64,21 @@ export function useRepositoryNavigation(profileId: string | undefined, showWorks
 
             if (!(await showOpenedRepository(opened.value, profileId))) return;
 
+            const generation = useRepositoryStore.getState().generation;
+            const current = () => {
+              const app = useAppStore.getState();
+              const repository = useRepositoryStore.getState();
+
+              return (
+                alive &&
+                app.switchingIdentityId === null &&
+                app.activeIdentity?.id === profileId &&
+                app.selectedRepositoryId === opened.value.id &&
+                repository.repositoryId === opened.value.id &&
+                repository.identityId === profileId &&
+                repository.generation === generation
+              );
+            };
             let oid = target.commit;
 
             if (target.ref) {
@@ -71,6 +86,8 @@ export function useRepositoryNavigation(profileId: string | undefined, showWorks
                 window.eda.repository.listBranches(opened.value.id),
                 window.eda.repository.listTags(opened.value.id),
               ]);
+
+              if (!current()) return;
 
               oid = branches.ok
                 ? branches.value.find(
@@ -97,8 +114,7 @@ export function useRepositoryNavigation(profileId: string | undefined, showWorks
                 });
             }
 
-            if (oid && alive && useAppStore.getState().activeIdentity?.id === profileId)
-              await useRepositoryStore.getState().jumpToCommit(oid);
+            if (oid && current()) await useRepositoryStore.getState().jumpToCommit(oid);
           }
         } while (again && alive);
       } finally {

@@ -20,6 +20,7 @@ export function useTransportOperation(repositoryId: string) {
       const state = useAppStore.getState();
       return (
         mounted.current &&
+        state.switchingIdentityId === null &&
         state.selectedRepositoryId === repositoryId &&
         state.activeIdentity?.id === profileId
       );

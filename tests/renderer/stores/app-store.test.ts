@@ -1,8 +1,10 @@
 import type { EdaApi } from "@shared/ipc";
 import type { Identity } from "@shared/identity/identity";
 import type { RepositorySummary } from "@shared/repository/repository";
-import { ok } from "@shared/errors";
+import { err, ok, type Result } from "@shared/errors";
 import { useAppStore } from "@renderer/stores/app-store";
+import { errorFixture } from "../../helpers/error";
+import { deferred } from "../../helpers/deferred";
 
 const identity = (id: string): Identity => ({
   id,
@@ -223,3 +225,44 @@ it("ignores an older identity refresh after a newer profile response", async () 
     usePreferencesStore.setState(preferences);
   }
 });
+
+it.each(["success", "failure"])(
+  "ignores an older repository refresh %s after a newer list arrives",
+  async (outcome) => {
+    const { useSessionStore } = await import("@renderer/stores/session-store");
+    const app = useAppStore.getState();
+    const session = useSessionStore.getState();
+    const pending = deferred<Result<RepositorySummary[]>>();
+
+    install(identity("work"), [repo("a"), repo("b")]);
+    const list = vi.spyOn(window.eda.repository, "list").mockReturnValueOnce(pending.promise);
+
+    try {
+      reset();
+      useSessionStore.setState({ snapshot: null });
+      useAppStore.setState({ activeIdentity: identity("work"), error: null });
+      const previous = useAppStore.getState().refreshRepositories();
+      await useAppStore.getState().refreshRepositories();
+      useAppStore.getState().selectRepository("b");
+
+      pending.resolve(
+        outcome === "success"
+          ? ok([repo("a")])
+          : err(errorFixture({ message: "Obsolete list failure" })),
+      );
+      await previous;
+
+      expect(useAppStore.getState().repositories.map((repository) => repository.id)).toEqual([
+        "a",
+        "b",
+      ]);
+      expect(useAppStore.getState().selectedRepositoryId).toBe("b");
+      expect(useAppStore.getState().openTabsByIdentity["work"]).toEqual(["a", "b"]);
+      expect(useAppStore.getState().error).toBeNull();
+    } finally {
+      list.mockRestore();
+      useAppStore.setState(app);
+      useSessionStore.setState(session);
+    }
+  },
+);

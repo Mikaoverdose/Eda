@@ -35,6 +35,7 @@ beforeEach(async () => {
   useAppStore.setState({
     selectedRepositoryId: "repo",
     activeIdentity: { id: "profile" } as never,
+    switchingIdentityId: null,
   });
   useRepositoryStore.setState({
     repositoryId: "repo",
@@ -64,6 +65,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   useShellStore.setState({ request: null });
+  useAppStore.setState({ switchingIdentityId: null });
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -128,6 +130,23 @@ it("does not start a transfer after switching repository while resolving default
 it("prevents duplicate transfers", async () => {
   await perform(() => Promise.all([api.fetch(), api.fetch()]));
   expect(fetchRemote).toHaveBeenCalledOnce();
+});
+it("does not start fetching while a profile switch is in progress", async () => {
+  useAppStore.setState({ switchingIdentityId: "other" });
+  await perform(() => api.fetch());
+  expect(inspect).not.toHaveBeenCalled();
+  expect(fetchRemote).not.toHaveBeenCalled();
+  expect(api.busy).toBe(false);
+});
+it("does not transfer when a profile switch starts while resolving defaults", async () => {
+  resolve.mockImplementation(async () => {
+    useAppStore.setState({ switchingIdentityId: "other" });
+    return ok({ value: false });
+  });
+  await perform(() => api.fetch());
+  expect(fetchRemote).not.toHaveBeenCalled();
+  expect(api.message).toBeNull();
+  expect(api.busy).toBe(false);
 });
 it("stops Fetch all on failure without fetching later remotes", async () => {
   fetchRemote.mockResolvedValueOnce(

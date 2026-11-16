@@ -43,6 +43,7 @@ interface AppState {
 let initialization: Promise<void> | null = null;
 let subscriptionsInstalled = false;
 let identityRefreshGeneration = 0;
+let repositoryRefreshGeneration = 0;
 
 export const useAppStore = create<AppState>((set, get) => ({
   identities: [],
@@ -157,10 +158,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async refreshRepositories() {
+    const generation = ++repositoryRefreshGeneration;
     const expectedIdentity = get().activeIdentity?.id;
     const result = await window.eda.repository.list();
 
-    if (get().activeIdentity?.id !== expectedIdentity) return;
+    if (generation !== repositoryRefreshGeneration || get().activeIdentity?.id !== expectedIdentity)
+      return;
 
     if (!result.ok) {
       set({ error: result.error });
