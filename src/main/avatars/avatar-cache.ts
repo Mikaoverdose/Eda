@@ -29,8 +29,8 @@ export class AvatarCache {
   ) {}
 
   async clear(): Promise<void> {
-    await Promise.allSettled(this.slots);
     await this.loaded;
+    await Promise.allSettled(this.slots);
     await this.saved;
     this.entries.clear();
     this.persistedImages.clear();

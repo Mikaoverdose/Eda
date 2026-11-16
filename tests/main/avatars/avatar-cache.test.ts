@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { AvatarCache } from "@main/avatars/avatar-cache";
+import { deferred } from "../../helpers/deferred";
 const githubAvatar = "https://avatars.githubusercontent.com/u/7?v=4";
 
 it("caches GitHub avatars by durable account ID across restarts using the provider’s returned URL", async () => {
@@ -163,6 +164,38 @@ it("clears persisted and in-memory avatars before accepting fresh requests", asy
     await cache.getGitHub("7", githubAvatar);
     expect(fetchImage).toHaveBeenCalledTimes(2);
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it("waits for requests still loading the disk index before clearing the cache", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "eda-avatar-loading-reset-"));
+  const response = deferred<Response>();
+  const fetchImage = vi.fn<typeof fetch>().mockReturnValueOnce(response.promise);
+  const file = join(directory, "avatars");
+  const cache = new AvatarCache(file, fetchImage);
+  const image = cache.getGitHub("7", githubAvatar);
+  let cleared = false;
+  const clearing = cache.clear().then(() => {
+    cleared = true;
+  });
+
+  try {
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledOnce());
+    expect(cleared).toBe(false);
+    response.resolve(
+      new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } }),
+    );
+    await Promise.all([image, clearing]);
+    await expect(readFile(join(file, "index"))).rejects.toMatchObject({ code: "ENOENT" });
+    fetchImage.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    expect((await cache.getGitHub("7", githubAvatar)).dataUrl).toBeNull();
+    expect(fetchImage).toHaveBeenCalledTimes(2);
+  } finally {
+    response.resolve(
+      new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } }),
+    );
+    await Promise.all([image, clearing]);
     await rm(directory, { recursive: true, force: true });
   }
 });

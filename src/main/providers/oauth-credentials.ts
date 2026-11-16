@@ -31,7 +31,7 @@ const messages = {
 export class OAuthCredentials {
   readonly authorized = new Map<string, AuthorizedAccount>();
   private readonly committing = new Map<string, Promise<void>>();
-  private readonly refreshing = new Map<string, Promise<OAuthTokens>>();
+  private readonly reading = new Map<string, Promise<OAuthTokens>>();
 
   constructor(
     private readonly provider: "github" | "gitlab",
@@ -45,7 +45,7 @@ export class OAuthCredentials {
   }
 
   async settle(): Promise<void> {
-    await Promise.allSettled([...this.committing.values(), ...this.refreshing.values()]);
+    await Promise.allSettled([...this.committing.values(), ...this.reading.values()]);
   }
 
   commit(candidate: AuthorizedAccount): Promise<void> {
@@ -64,19 +64,26 @@ export class OAuthCredentials {
 
   async currentTokens(
     account: SavedProviderAccount,
-    tokens: OAuthTokens,
-    refreshTokens: () => Promise<OAuthTokens>,
+    readTokens: () => Promise<OAuthTokens>,
+    refreshTokens: (tokens: OAuthTokens) => Promise<OAuthTokens>,
   ): Promise<OAuthTokens> {
-    if (tokens.expiresAt !== undefined && tokens.expiresAt <= this.now() + 60_000) {
-      let refresh = this.refreshing.get(account.profileId);
+    let work = this.reading.get(account.credentialRef);
 
-      if (!refresh) {
-        refresh = refreshTokens().finally(() => this.refreshing.delete(account.profileId));
-        this.refreshing.set(account.profileId, refresh);
-      }
+    if (!work) {
+      work = readTokens()
+        .then((tokens) => {
+          if (this.accounts.find(account.profileId)?.credentialRef !== account.credentialRef)
+            throw this.failure("changed");
 
-      tokens = await refresh;
+          return tokens.expiresAt !== undefined && tokens.expiresAt <= this.now() + 60_000
+            ? refreshTokens(tokens)
+            : tokens;
+        })
+        .finally(() => this.reading.delete(account.credentialRef));
+      this.reading.set(account.credentialRef, work);
     }
+
+    const tokens = await work;
 
     if (this.accounts.find(account.profileId)?.credentialRef !== account.credentialRef)
       throw this.failure("changed");

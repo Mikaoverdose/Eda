@@ -315,9 +315,10 @@ export class GitLabAuth {
         "auth-failed",
       );
 
-    const saved = await this.readTokens(account);
-    const tokens = await this.credentialsStore.currentTokens(account, saved, () =>
-      this.refresh(account, saved),
+    const tokens = await this.credentialsStore.currentTokens(
+      account,
+      () => this.readTokens(account),
+      (saved) => this.refresh(account, saved),
     );
 
     return { username: "oauth2", password: tokens.accessToken };

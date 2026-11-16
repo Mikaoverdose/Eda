@@ -52,6 +52,7 @@ export class GitHubAuth {
   private readonly clientId = INTEGRATIONS.github.clientId;
   private readonly credentialsStore: OAuthCredentials;
   private readonly pending = new Map<string, Pending>();
+  private readonly beginning = new Map<string, AbortController>();
   private readonly profiles: GitHubProfileCache;
 
   constructor(
@@ -113,15 +114,27 @@ export class GitHubAuth {
     for (const [id, pending] of this.pending)
       if (pending.signIn.expiresAt <= this.now()) this.cancel(pending.profileId, id);
 
-    if (this.pending.size >= 16)
+    if (this.pending.size + this.beginning.size >= 16)
       throw fail(
         errorText("main.providers.githubAuth.tooManyGitHubSignInsArePendingCancelOneAndTryAgain"),
       );
 
-    const response = await this.request(DEVICE_URL, {
-      client_id: this.clientId,
-      scope: "repo offline_access",
-    });
+    const controller = new AbortController();
+    this.beginning.set(profileId, controller);
+    let response: Record<string, unknown>;
+
+    try {
+      response = await this.request(
+        DEVICE_URL,
+        { client_id: this.clientId, scope: "repo offline_access" },
+        controller.signal,
+      );
+    } finally {
+      if (this.beginning.get(profileId) === controller) this.beginning.delete(profileId);
+    }
+
+    if (controller.signal.aborted)
+      throw fail(errorText("main.providers.githubAuth.theGitHubConnectionWasCancelledSignInAgain"));
 
     if (response["error"]) throw this.oauthError(response["error"]);
     const deviceCode = text(response["device_code"]);
@@ -240,12 +253,16 @@ export class GitHubAuth {
   }
 
   cancelProfile(profileId: string): void {
+    this.beginning.get(profileId)?.abort();
+    this.beginning.delete(profileId);
     this.credentialsStore.authorized.delete(profileId);
     for (const [id, pending] of this.pending)
       if (pending.profileId === profileId) this.cancel(profileId, id);
   }
 
   cancelAll(): void {
+    for (const controller of this.beginning.values()) controller.abort();
+    this.beginning.clear();
     this.credentialsStore.authorized.clear();
     for (const [id, pending] of this.pending) this.cancel(pending.profileId, id);
   }
@@ -299,9 +316,10 @@ export class GitHubAuth {
         "github-auth-required",
       );
 
-    const saved = await this.readTokens(account);
-    const tokens = await this.credentialsStore.currentTokens(account, saved, () =>
-      this.refresh(account, saved),
+    const tokens = await this.credentialsStore.currentTokens(
+      account,
+      () => this.readTokens(account),
+      (saved) => this.refresh(account, saved),
     );
 
     return { username: "x-access-token", password: tokens.accessToken };

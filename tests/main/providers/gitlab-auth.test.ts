@@ -7,6 +7,7 @@ import { IdentityRepository } from "@main/persistence/identity-repository";
 import { openDatabase } from "@main/persistence/database";
 import type { Database } from "@main/persistence/types";
 import type { SecretStore } from "@main/secrets/secret-store";
+import { deferred } from "../../helpers/deferred";
 
 const callbacks = vi.hoisted(
   () =>
@@ -206,6 +207,35 @@ it("persists connections across service restarts, refreshes once for concurrent 
   await restarted.disconnect(ctx.profile.id);
   expect(ctx.accounts.find(ctx.profile.id)).toBeUndefined();
   expect(ctx.values.size).toBe(0);
+});
+
+it("does not reuse rotated refresh tokens from a delayed concurrent vault read", async () => {
+  const ctx = setup();
+  await ctx.connect();
+  ctx.advance(7_200_000);
+  const saved = [...ctx.values.values()][0];
+  const delayed = deferred<string | undefined>();
+  vi.mocked(ctx.secrets.get).mockResolvedValueOnce(saved).mockReturnValueOnce(delayed.promise);
+  ctx.fetch.mockClear();
+  ctx.fetch
+    .mockResolvedValueOnce(
+      json({ ...token, access_token: "rotated-access", refresh_token: "rotated-refresh" }),
+    )
+    .mockResolvedValueOnce(json({ id: 7, username: "work.user" }))
+    .mockResolvedValueOnce(json({ error: "invalid_grant" }));
+
+  const first = ctx.service.forFetch(ctx.profile.id, "https://gitlab.com/org/repo");
+  const second = ctx.service.forFetch(ctx.profile.id, "https://gitlab.com/org/repo");
+  const result = expect(second).resolves.toEqual({
+    username: "oauth2",
+    password: "rotated-access",
+  });
+  await first;
+  delayed.resolve(saved);
+
+  await result;
+  expect(ctx.fetch).toHaveBeenCalledTimes(2);
+  expect(ctx.service.status(ctx.profile.id).account?.state).toBe("connected");
 });
 
 it("never supplies tokens to other profiles, hosts, self-hosted GitLab, SSH, or malformed remotes", async () => {

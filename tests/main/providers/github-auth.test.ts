@@ -9,6 +9,7 @@ import { IdentityRepository } from "@main/persistence/identity-repository";
 import { openDatabase } from "@main/persistence/database";
 import type { Database } from "@main/persistence/types";
 import type { SecretStore } from "@main/secrets/secret-store";
+import { deferred } from "../../helpers/deferred";
 
 const databases: Database[] = [];
 const directories: string[] = [];
@@ -108,6 +109,51 @@ function setup(path = ":memory:") {
 }
 
 describe("GitHub device OAuth", () => {
+  it("cancels device authorization requests that have not returned a sign-in ID", async () => {
+    const ctx = setup();
+    const response = deferred<Response>();
+    ctx.fetch.mockReturnValueOnce(response.promise);
+
+    const beginning = ctx.service.begin(ctx.profile.id);
+    const rejected = expect(beginning).rejects.toThrow(/cancelled/i);
+    ctx.service.cancelAll();
+    response.resolve(json(device));
+
+    await rejected;
+    expect(ctx.fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect(ctx.accounts.find(ctx.profile.id)).toBeUndefined();
+    expect(ctx.values.size).toBe(0);
+  });
+
+  it("does not reuse rotated refresh tokens from a delayed concurrent vault read", async () => {
+    const ctx = setup();
+    await ctx.connect();
+    ctx.advance(3_600_000);
+    const saved = [...ctx.values.values()][0];
+    const delayed = deferred<string | undefined>();
+    vi.mocked(ctx.secrets.get).mockResolvedValueOnce(saved).mockReturnValueOnce(delayed.promise);
+    ctx.fetch.mockClear();
+    ctx.fetch
+      .mockResolvedValueOnce(
+        json({ ...token, access_token: "gho_rotated", refresh_token: "ghr_rotated" }),
+      )
+      .mockResolvedValueOnce(json({ id: 7, login: "work-user" }))
+      .mockResolvedValueOnce(json({ error: "bad_refresh_token" }));
+
+    const first = ctx.service.forFetch(ctx.profile.id, "https://github.com/org/repo");
+    const second = ctx.service.forFetch(ctx.profile.id, "https://github.com/org/repo");
+    const result = expect(second).resolves.toEqual({
+      username: "x-access-token",
+      password: "gho_rotated",
+    });
+    await first;
+    delayed.resolve(saved);
+
+    await result;
+    expect(ctx.fetch).toHaveBeenCalledTimes(2);
+    expect(ctx.service.status(ctx.profile.id).account?.state).toBe("connected");
+  });
+
   it("loads basic public details for the durable saved account without reauthentication or leaking credentials", async () => {
     const ctx = setup();
     await ctx.connect();
