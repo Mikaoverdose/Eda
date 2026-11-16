@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { GitError } from "@shared/errors";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createTempRepo, type TempRepo } from "../../helpers/temp-repo";
 
 let repos: TempRepo[] = [];
@@ -21,6 +23,37 @@ const staged = async (repo: TempRepo) =>
     .map((c) => c.path);
 
 describe("staging against real Git", () => {
+  it.each(["selected", "all"])(
+    "unstages %s unborn changes after further edits without changing working files",
+    async (scope) => {
+      const repo = await make();
+      await repo.writeFile("a.txt", "staged\n");
+      await repo.writeFile("b.txt", "other staged\n");
+      await repo.git.stageAll(repo.path);
+      await repo.writeFile("a.txt", "working\n");
+
+      if (scope === "selected") await repo.git.unstage(repo.path, ["a.txt"]);
+      else await repo.git.unstageAll(repo.path);
+
+      expect(await staged(repo)).toEqual(scope === "selected" ? ["b.txt"] : []);
+      expect(await readFile(join(repo.path, "a.txt"), "utf8")).toBe("working\n");
+      expect(await readFile(join(repo.path, "b.txt"), "utf8")).toBe("other staged\n");
+    },
+  );
+
+  it("reports index lock contention instead of silently accepting unborn unstage-all", async () => {
+    const repo = await make();
+    await repo.writeFile("a.txt", "staged\n");
+    await repo.git.stageAll(repo.path);
+    await repo.writeFile(".git/index.lock", "another writer");
+
+    await expect(repo.git.unstageAll(repo.path)).rejects.toMatchObject({
+      kind: "lock-contention",
+    });
+    expect(await repo.run(["show", ":a.txt"])).toBe("staged\n");
+    expect(await readFile(join(repo.path, ".git/index.lock"), "utf8")).toBe("another writer");
+  });
+
   it("stages and unstages a single file", async () => {
     const repo = await make();
 

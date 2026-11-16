@@ -518,6 +518,7 @@ export class GitService {
         `--max-count=${limit + 1}`,
         `--skip=${offset}`,
         ...LOG_ARGUMENTS,
+        "--",
       ],
       {
         cwd: path,
@@ -832,7 +833,7 @@ export class GitService {
       return;
     }
 
-    await this.exec(["rm", "--cached", "-r", "--", ...safe], {
+    await this.exec(["rm", "--cached", "-r", "--force", "--", ...safe], {
       cwd: path,
       operation: t("operations.unstageChanges"),
     });
@@ -848,11 +849,9 @@ export class GitService {
       return;
     }
 
-    await this.exec(["rm", "--cached", "-r", "--", "."], {
+    await this.exec(["rm", "--cached", "-r", "--force", "--ignore-unmatch", "--", "."], {
       cwd: path,
       operation: t("operations.unstageAllChanges"),
-      // git rm exits with 128 if the repository has no commits and the index is empty.
-      allowedExitCodes: [0, 128],
     });
   }
 

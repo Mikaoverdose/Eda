@@ -5,6 +5,25 @@ import { SshService } from "@main/ssh/ssh-service";
 import { NodeProcessRunner } from "@main/git/execution/node-process-runner";
 
 describe("history visibility and inspection", () => {
+  it("filters by a reference even when a working-tree path has the same name", async () => {
+    const repo = await createTempRepo();
+
+    try {
+      await repo.writeFile("file.txt", "base\n");
+      await repo.commit("Base");
+      const head = (await repo.run(["rev-parse", "HEAD"])).trim();
+      await repo.writeFile("refs/heads/main", "not a revision\n");
+
+      expect(
+        (await repo.git.history(repo.path, { refs: ["refs/heads/main"] })).commits.map(
+          (commit) => commit.oid,
+        ),
+      ).toEqual([head]);
+    } finally {
+      await repo.cleanup();
+    }
+  });
+
   it("hides internal history and badges by default, and includes them when all refs are requested", async () => {
     const repo = await createTempRepo();
 

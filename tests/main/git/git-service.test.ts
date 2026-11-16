@@ -217,6 +217,28 @@ describe("GitService against real Git", () => {
     expect(workingDiff.files[0]).toMatchObject({ status: "added", newPath: "untracked.txt" });
   });
 
+  it.runIf(process.platform !== "win32").each(["\t", "\x07", "\x0b", "\x1b"])(
+    "keeps quoted rename paths consistent between status and diffs: %j",
+    async (separator) => {
+      repo = await createTempRepo();
+      const oldPath = `old${separator}name.txt`;
+      const newPath = `new${separator}name.txt`;
+      await repo.writeFile(oldPath, "unchanged content\n");
+      await repo.commit("initial");
+      await repo.run(["mv", "--", oldPath, newPath]);
+
+      expect((await repo.git.status(repo.path)).changes[0]).toMatchObject({
+        path: newPath,
+        originalPath: oldPath,
+      });
+      expect((await repo.git.workingDiff(repo.path, { area: "staged" })).files[0]).toMatchObject({
+        oldPath,
+        newPath,
+        status: "renamed",
+      });
+    },
+  );
+
   it("reports a missing selected commit without claiming the repository is corrupt", async () => {
     repo = await createTempRepo();
     await repo.writeFile("root.txt", "root\n");

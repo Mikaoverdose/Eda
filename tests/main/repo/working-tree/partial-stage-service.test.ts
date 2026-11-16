@@ -9,6 +9,30 @@ afterEach(async () => {
 });
 
 describe("partial index writes", () => {
+  it("stages the displayed selected line after header-like hunk content", async () => {
+    repo = await createTempRepo();
+    await repo.writeFile("file.txt", "-- old heading\nkeep\n");
+    await repo.commit("initial");
+    await repo.writeFile("file.txt", "++ new heading\nkeep\nextra\n");
+
+    const diff = await repo.git.workingDiff(repo.path, { area: "unstaged" });
+    const line = diff.files[0]!.hunks[0]!.lines.findIndex(
+      (entry) => entry.type === "addition" && entry.content === "extra",
+    );
+    expect(line).toBeGreaterThanOrEqual(0);
+
+    const partial = new PartialStageService(repo.git);
+    const preview = await partial.preview(repo.path, "work", {
+      repositoryId: "r",
+      path: "file.txt",
+      area: "unstaged",
+      lines: [{ hunk: 0, line }],
+    });
+    await partial.apply(repo.path, "work", "r", preview.token);
+
+    expect(await repo.run(["show", ":file.txt"])).toBe("-- old heading\nkeep\nextra\n");
+  });
+
   it.each(["one\r\ntwo\r\n", "one\ntwo"])(
     "preserves CRLF and missing final newlines: %j",
     async (original) => {

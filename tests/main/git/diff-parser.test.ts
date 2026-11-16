@@ -31,6 +31,19 @@ describe("parseUnifiedDiff", () => {
     expect(parseUnifiedDiff(Buffer.alloc(0))).toEqual({ files: [] });
   });
 
+  it("keeps header-like content inside hunks without changing paths or line numbers", () => {
+    const output =
+      "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1,2 +1,2 @@\n--- old heading\n+++ new heading\n context\n";
+    const file = parseUnifiedDiff(Buffer.from(output)).files[0];
+
+    expect(file).toMatchObject({ oldPath: "file.txt", newPath: "file.txt" });
+    expect(file?.hunks[0]?.lines).toEqual([
+      { type: "deletion", content: "-- old heading", oldLineNumber: 1 },
+      { type: "addition", content: "++ new heading", newLineNumber: 1 },
+      { type: "context", content: "context", oldLineNumber: 2, newLineNumber: 2 },
+    ]);
+  });
+
   it("retains binary paths with spaces and metadata-only mode changes", () => {
     const diff = parseUnifiedDiff(
       Buffer.from(
@@ -52,6 +65,27 @@ describe("parseUnifiedDiff", () => {
     expect(parseUnifiedDiff(Buffer.from(output)).files[0]).toMatchObject({
       oldPath: "a file.txt",
       newPath: "a file.txt",
+    });
+  });
+
+  it.each(["rename", "copy"])("decodes quoted %s metadata paths", (kind) => {
+    const output = `diff --git "a/old\\tname" "b/new\\tname"\nsimilarity index 100%\n${kind} from "old\\tname"\n${kind} to "new\\tname"\n`;
+
+    expect(parseUnifiedDiff(Buffer.from(output)).files[0]).toMatchObject({
+      oldPath: "old\tname",
+      newPath: "new\tname",
+      status: kind === "rename" ? "renamed" : "copied",
+      hunks: [],
+    });
+  });
+
+  it("decodes octal UTF-8 paths without interpreting escaped backslashes twice", () => {
+    const output =
+      'diff --git "a/caf\\303\\251\\\\a.txt" "b/caf\\303\\251\\\\a.txt"\nold mode 100644\nnew mode 100755\n';
+
+    expect(parseUnifiedDiff(Buffer.from(output)).files[0]).toMatchObject({
+      oldPath: "café\\a.txt",
+      newPath: "café\\a.txt",
     });
   });
 });

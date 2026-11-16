@@ -25,6 +25,15 @@ export function parseUnifiedDiff(output: Buffer): UnifiedDiff {
 
     if (!file) continue;
 
+    if (hunk && !line.startsWith("@@ ")) {
+      const parsed = parseHunkLine(line, oldLine, newLine);
+      if (!parsed) continue;
+      hunk.lines.push(parsed.line);
+      oldLine = parsed.oldLine;
+      newLine = parsed.newLine;
+      continue;
+    }
+
     if (line.startsWith("new file mode ")) {
       file.status = "added";
       delete file.oldPath;
@@ -39,15 +48,15 @@ export function parseUnifiedDiff(output: Buffer): UnifiedDiff {
     } else if (line.startsWith("new mode ")) {
       file.newMode = line.slice(9);
     } else if (line.startsWith("rename from ")) {
-      file.oldPath = line.slice(12);
+      file.oldPath = unquotePath(line.slice(12));
       file.status = "renamed";
     } else if (line.startsWith("rename to ")) {
-      file.newPath = line.slice(10);
+      file.newPath = unquotePath(line.slice(10));
     } else if (line.startsWith("copy from ")) {
-      file.oldPath = line.slice(10);
+      file.oldPath = unquotePath(line.slice(10));
       file.status = "copied";
     } else if (line.startsWith("copy to ")) {
-      file.newPath = line.slice(8);
+      file.newPath = unquotePath(line.slice(8));
     } else if (line.startsWith("--- ")) {
       const path = parseMarkerPath(line.slice(4));
       if (path !== undefined) file.oldPath = path;
@@ -74,12 +83,6 @@ export function parseUnifiedDiff(output: Buffer): UnifiedDiff {
         lines: [],
       };
       file.hunks.push(hunk);
-    } else if (hunk) {
-      const parsed = parseHunkLine(line, oldLine, newLine);
-      if (!parsed) continue;
-      hunk.lines.push(parsed.line);
-      oldLine = parsed.oldLine;
-      newLine = parsed.newLine;
     }
   }
 
@@ -116,7 +119,19 @@ function parseMarkerPath(value: string): string | undefined {
 function unquotePath(value: string): string {
   if (!value.startsWith('"') || !value.endsWith('"')) return value;
   try {
-    return JSON.parse(value) as string;
+    const normalized = value.replace(/(?:\\[0-3][0-7]{2})+|\\./g, (escape) => {
+      if (escape === "\\a") return "\\u0007";
+      if (escape === "\\v") return "\\u000b";
+      if (!/^\\[0-3]/.test(escape)) return escape;
+
+      const bytes = escape
+        .split("\\")
+        .slice(1)
+        .map((octal) => Number.parseInt(octal, 8));
+      return JSON.stringify(Buffer.from(bytes).toString("utf8")).slice(1, -1);
+    });
+
+    return JSON.parse(normalized) as string;
   } catch {
     throw new AppError(ERROR_CODE.INVALID_DIFF_PATH);
   }
