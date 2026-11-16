@@ -1,10 +1,8 @@
-import { readCommitTemplate } from "../../git/commit-template";
 import { errorText } from "@shared/error-codes";
 import { ok } from "@shared/errors";
 import { t } from "@shared/i18n";
 import { IPC_CHANNELS, IPC_EVENTS } from "@shared/ipc";
 import type { PartialStageRequest } from "@shared/repository/partial-stage";
-import { referenceLink } from "@shared/repository/reference-link";
 import type { InitRepositoryOptions } from "@shared/repository/repository";
 import { MAX_HISTORY_PAGE_SIZE } from "@shared/repository/repository-read";
 import { BrowserWindow, dialog, shell } from "electron";
@@ -55,38 +53,14 @@ export function registerRepositoryHandlers(services: Services): void {
   });
 
   handle(IPC_CHANNELS.repositoryReferenceUrl, async (_e, rawId, kind, rawName) => {
-    const repository = repositories.resolveActiveRepository(requireId(rawId));
+    const repositoryId = requireId(rawId);
 
     if (kind !== "commit" && kind !== "branch" && kind !== "remote-branch" && kind !== "tag")
       throw invalidRequest(errorText("main.repositoryHandlers.chooseAReferenceKind"));
 
-    let name = requireString(rawName, t("fields.referenceName"), 255);
+    const name = requireString(rawName, t("fields.referenceName"), 255);
 
-    const result = await git.exec(["remote"], {
-      cwd: repository.path,
-      operation: t("operations.readRemoteNames"),
-      maxStdoutBytes: 64 * 1024,
-    });
-
-    const names = result.stdout.trim().split("\n").filter(Boolean);
-
-    const remote =
-      kind === "remote-branch"
-        ? names.sort((a, b) => b.length - a.length).find((remote) => name.startsWith(`${remote}/`))
-        : names.includes("origin")
-          ? "origin"
-          : names[0];
-
-    if (!remote) return ok(null);
-    if (kind === "remote-branch") name = name.slice(remote.length + 1);
-
-    const url = await git.readConfig(`remote.${remote}.url`, { cwd: repository.path });
-
-    const instances = services.gitlabSelfHosted
-      .status(repository.identityId)
-      .accounts.map((account) => account.baseUrl);
-
-    return ok(url ? referenceLink(url, kind, name, instances) : null);
+    return ok(await services.repositoryReader.referenceUrl(repositoryId, kind, name));
   });
 
   handle(IPC_CHANNELS.repositoryPreviewCommit, async (_e, id) =>
@@ -98,28 +72,13 @@ export function registerRepositoryHandlers(services: Services): void {
     return ok(undefined);
   });
 
-  handle(IPC_CHANNELS.repositoryIgnoredFiles, async (_event, rawId) => {
-    const repository = repositories.resolveActiveRepository(requireId(rawId));
+  handle(IPC_CHANNELS.repositoryIgnoredFiles, async (_event, rawId) =>
+    ok(await services.repositoryReader.ignoredFiles(requireId(rawId))),
+  );
 
-    const result = await git.exec(
-      ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
-      {
-        cwd: repository.path,
-        operation: t("operations.listIgnoredFiles"),
-        maxStdoutBytes: 4 * 1024 * 1024,
-      },
-    );
-
-    const paths = result.stdout.split("\0").filter(Boolean);
-
-    return ok({ paths: paths.slice(0, 5000), truncated: paths.length > 5000 });
-  });
-
-  handle(IPC_CHANNELS.repositoryCommitTemplate, async (_event, rawId) => {
-    const repository = repositories.resolveActiveRepository(requireId(rawId));
-    const configured = await git.readConfig("commit.template", { cwd: repository.path });
-    return ok(await readCommitTemplate(repository.path, configured));
-  });
+  handle(IPC_CHANNELS.repositoryCommitTemplate, async (_event, rawId) =>
+    ok(await services.repositoryReader.commitTemplate(requireId(rawId))),
+  );
 
   handle(
     IPC_CHANNELS.repositoryExportRecoveryFile,

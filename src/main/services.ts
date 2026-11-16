@@ -75,6 +75,7 @@ import { ResetService } from "./repo/workflows/reset-service";
 import { StashService } from "./repo/workflows/stash-service";
 import { WorkflowService } from "./repo/workflows/workflow-service";
 import { RepositoryWriter } from "./repo/working-tree/repository-writer";
+import { RepositoryReader } from "./repo/repository-reader";
 import { KeychainSecretStore, vaultPathFor } from "./secrets/keychain-secret-store";
 import type { SecretStore } from "./secrets/secret-store";
 import { SshService } from "./ssh/ssh-service";
@@ -108,6 +109,7 @@ export interface Services {
   identities: IdentityRepository;
   identity: IdentityManager;
   repositories: RepositoryManager;
+  repositoryReader: RepositoryReader;
   writer: RepositoryWriter;
   secrets: SecretStore;
   ssh: SshService;
@@ -394,6 +396,9 @@ export async function createServices(): Promise<Services> {
         recovery,
       ),
       historyRecovery: new HistoryRecoveryService(git, repositories, writer, journal),
+      repositoryReader: new RepositoryReader(git, repositories, (profileId) =>
+        gitlabSelfHosted.status(profileId).accounts.map((account) => account.baseUrl),
+      ),
       commitSignatures: new CommitSignatureService(
         git,
         repositories,

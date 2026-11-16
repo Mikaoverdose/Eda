@@ -22,6 +22,23 @@ const seeded = async () => {
   return repo;
 };
 
+it("reads remote names, ignored paths and configured commit templates from the worktree", async () => {
+  const repo = await seeded();
+  expect(await repo.git.remoteNames(repo.path)).toEqual([]);
+  expect(await repo.git.commitTemplate(repo.path)).toBeNull();
+
+  await repo.run(["remote", "add", "origin", "https://github.com/owner/repo.git"]);
+  await repo.writeFile(".gitignore", "*.ignored\n");
+  await repo.writeFile("space name.ignored", "ignored");
+  await repo.writeFile("visible.txt", "visible");
+  await repo.writeFile("template", "Subject\n\n# Details\n");
+  await repo.run(["config", "commit.template", "template"]);
+
+  expect(await repo.git.remoteNames(repo.path)).toEqual(["origin"]);
+  expect(await repo.git.ignoredFiles(repo.path)).toEqual(["space name.ignored"]);
+  expect(await repo.git.commitTemplate(repo.path)).toBe("Subject\n\n# Details\n");
+});
+
 describe("branches against real Git", () => {
   it("creates, lists, renames and deletes a branch", async () => {
     const repo = await seeded();

@@ -33,8 +33,10 @@ import { mapGitError } from "./execution/error-mapping";
 import type { GitEngine } from "./execution/git-engine";
 import { ProcessSpawnError, type ProcessRunner } from "./execution/process-runner";
 import { readStashHistory } from "./operations/stash-history";
+import { readCommitTemplate } from "./commit-template";
 import { parseUnifiedDiff } from "./parsers/diff-parser";
 import { LOG_ARGUMENTS, parseLog } from "./parsers/log-parser";
+import { BRANCH_ARGUMENTS, TAG_ARGUMENTS, parseBranches, parseTags } from "./parsers/ref-parser";
 import { commitSignatureFormat, parseCommitVerification } from "./security/commit-signature";
 
 import { parseStatus } from "./parsers/status-parser";
@@ -955,34 +957,13 @@ export class GitService {
   }
 
   async listBranches(path: string): Promise<BranchSummary[]> {
-    const fields = await this.execFields(
-      [
-        "for-each-ref",
-        "--format=%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(refname)%00%(symref)%00%(worktreepath)%00",
-        "refs/heads",
-        "refs/remotes",
-      ],
-      { cwd: path, operation: t("operations.listBranches"), maxStdoutBytes: 4 * 1024 * 1024 },
-    );
+    const fields = await this.execFields(BRANCH_ARGUMENTS, {
+      cwd: path,
+      operation: t("operations.listBranches"),
+      maxStdoutBytes: 4 * 1024 * 1024,
+    });
 
-    const branches: BranchSummary[] = [];
-
-    for (let index = 0; index + 6 < fields.length; index += 7) {
-      if (fields[index + 5]) continue;
-
-      const fullRef = fields[index + 4]!;
-
-      branches.push({
-        name: fullRef.replace(/^refs\/(?:heads|remotes)\//, ""),
-        oid: fields[index + 1]!,
-        isHead: fields[index + 2] === "*",
-        remote: fullRef.startsWith("refs/remotes/"),
-        ...(fields[index + 3] ? { upstream: fields[index + 3]! } : {}),
-        ...(fields[index + 6] ? { worktreePath: fields[index + 6]! } : {}),
-      });
-    }
-
-    return branches;
+    return parseBranches(fields);
   }
 
   async createTag(
@@ -1108,29 +1089,40 @@ export class GitService {
   }
 
   async listTags(path: string): Promise<TagSummary[]> {
-    const fields = await this.execFields(
-      [
-        "for-each-ref",
-        "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(objecttype)%00%(taggername)%00%(contents)%00%(creatordate:iso-strict)%00",
-        "refs/tags",
-      ],
-      { cwd: path, operation: t("operations.listTags"), maxStdoutBytes: 4 * 1024 * 1024 },
+    const fields = await this.execFields(TAG_ARGUMENTS, {
+      cwd: path,
+      operation: t("operations.listTags"),
+      maxStdoutBytes: 4 * 1024 * 1024,
+    });
+
+    return parseTags(fields);
+  }
+
+  async remoteNames(path: string): Promise<string[]> {
+    const { stdout } = await this.exec(["remote"], {
+      cwd: path,
+      operation: t("operations.readRemoteNames"),
+      maxStdoutBytes: 64 * 1024,
+    });
+
+    return stdout.trim().split("\n").filter(Boolean);
+  }
+
+  async ignoredFiles(path: string): Promise<string[]> {
+    const { stdout } = await this.exec(
+      ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+      {
+        cwd: path,
+        operation: t("operations.listIgnoredFiles"),
+        maxStdoutBytes: 4 * 1024 * 1024,
+      },
     );
 
-    const tags: TagSummary[] = [];
+    return stdout.split("\0").filter(Boolean);
+  }
 
-    for (let index = 0; index + 6 < fields.length; index += 7) {
-      tags.push({
-        name: fields[index]!.replace(/^\n/, "").slice("refs/tags/".length),
-        oid: fields[index + 2] || fields[index + 1]!,
-        ...(fields[index + 6] ? { createdAt: fields[index + 6]! } : {}),
-        ...(fields[index + 3] === "tag"
-          ? { annotated: true, tagger: fields[index + 4]!, message: fields[index + 5]! }
-          : {}),
-      });
-    }
-
-    return tags;
+  async commitTemplate(path: string): Promise<string | null> {
+    return readCommitTemplate(path, await this.readConfig("commit.template", { cwd: path }));
   }
 
   async checkoutTag(path: string, name: string): Promise<void> {

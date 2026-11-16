@@ -199,6 +199,11 @@ function setup() {
   const mocks = {
     git: { history: vi.fn(async () => ({ commits: [], nextOffset: null })) },
     repositories: { resolveActiveRepository: vi.fn(() => ({ path: "/repo" })) },
+    repositoryReader: {
+      referenceUrl: vi.fn(async () => null),
+      ignoredFiles: vi.fn(async () => ({ paths: [], truncated: false })),
+      commitTemplate: vi.fn(async () => null),
+    },
     installation: { method: "development" },
     updates: {
       blocksQuit: false,
@@ -306,6 +311,37 @@ function invoke(channel: IpcChannel, ...args: unknown[]) {
   if (!handler) throw new Error(`Missing handler: ${channel}`);
   return handler(event, ...args);
 }
+
+it("validates repository reads before forwarding them to the reader", async () => {
+  const { repositoryReader } = setup();
+
+  expect(
+    await invoke(IPC_CHANNELS.repositoryReferenceUrl, repositoryId, "invalid", "main"),
+  ).toMatchObject({ ok: false });
+  expect(
+    await invoke(IPC_CHANNELS.repositoryReferenceUrl, repositoryId, "branch", ""),
+  ).toMatchObject({ ok: false });
+  expect(await invoke(IPC_CHANNELS.repositoryIgnoredFiles, "invalid")).toMatchObject({ ok: false });
+  expect(await invoke(IPC_CHANNELS.repositoryCommitTemplate, "invalid")).toMatchObject({
+    ok: false,
+  });
+  for (const method of Object.values(repositoryReader)) expect(method).not.toHaveBeenCalled();
+
+  expect(await invoke(IPC_CHANNELS.repositoryReferenceUrl, repositoryId, "branch", "main")).toEqual(
+    { ok: true, value: null },
+  );
+  expect(repositoryReader.referenceUrl).toHaveBeenCalledWith(repositoryId, "branch", "main");
+  expect(await invoke(IPC_CHANNELS.repositoryIgnoredFiles, repositoryId)).toEqual({
+    ok: true,
+    value: { paths: [], truncated: false },
+  });
+  expect(repositoryReader.ignoredFiles).toHaveBeenCalledWith(repositoryId);
+  expect(await invoke(IPC_CHANNELS.repositoryCommitTemplate, repositoryId)).toEqual({
+    ok: true,
+    value: null,
+  });
+  expect(repositoryReader.commitTemplate).toHaveBeenCalledWith(repositoryId);
+});
 
 it("uses the global history visibility unless a view explicitly overrides it", async () => {
   const mocks = setup();
