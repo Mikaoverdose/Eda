@@ -9,6 +9,7 @@ import { layoutCommitPages } from "@renderer/repository/dag-layout";
 import {
   HISTORY_PAGE_SIZE,
   MAX_HISTORY_PAGES,
+  MAX_STATUS_CHANGES,
   categorizeChanges,
   useRepositoryStore,
 } from "@renderer/stores/repository-store";
@@ -91,6 +92,28 @@ describe("repository read store", () => {
     expect(useRepositoryStore.getState().historyError?.message).toBe("Missing object");
   });
 
+  it("reports truncated working changes even when the initial history load fails", async () => {
+    const bridge = api(async () => err(errorFixture({ message: "Missing object" })));
+    bridge.repository.status = async () =>
+      ok({
+        branch: { ahead: 0, behind: 0, detached: false, unborn: false },
+        changes: Array.from({ length: MAX_STATUS_CHANGES + 1 }, (_, index) => ({
+          kind: "untracked",
+          path: `file-${index}`,
+          index: "?",
+          worktree: "?",
+          submodule: "N...",
+        })),
+      });
+    vi.stubGlobal("eda", bridge);
+
+    await useRepositoryStore.getState().open("repo", "identity", true);
+
+    expect(useRepositoryStore.getState().status?.changes).toHaveLength(MAX_STATUS_CHANGES);
+    expect(useRepositoryStore.getState().truncatedChanges).toBe(true);
+    expect(useRepositoryStore.getState().historyError?.message).toBe("Missing object");
+  });
+
   it.each(["available", "missing", "corrupt"] as const)(
     "handles a saved commit that is %s, clearing only a missing selection after recloning",
     async (availability) => {
@@ -134,6 +157,45 @@ describe("repository read store", () => {
         if (availability === "missing")
           expect(setView).toHaveBeenLastCalledWith("repo", { selection: null });
         else expect(setView).not.toHaveBeenCalledWith("repo", { selection: null });
+      } finally {
+        session.mockRestore();
+      }
+    },
+  );
+
+  it.each([0, MAX_STATUS_CHANGES])(
+    "restores a saved working selection only if it is in the bounded status (index %i)",
+    async (index) => {
+      const selection = { kind: "change", area: "unstaged", path: `file-${index}` } as const;
+      const session = vi.spyOn(useSessionStore, "getState").mockReturnValue({
+        ...useSessionStore.getState(),
+        setView: vi.fn(),
+        snapshot: {
+          context: { profileId: "identity", windowId: "primary", generation: 1 },
+          session: { ...emptySession(), views: { repo: { ...emptyView(), selection } } },
+          drafts: {},
+          recovery: null,
+        },
+      });
+      const bridge = api(async () => ok({ commits: [], nextOffset: null }));
+      bridge.repository.status = async () =>
+        ok({
+          branch: { ahead: 0, behind: 0, detached: false, unborn: false },
+          changes: Array.from({ length: MAX_STATUS_CHANGES + 1 }, (_, changeIndex) => ({
+            kind: "ordinary",
+            path: `file-${changeIndex}`,
+            index: ".",
+            worktree: "M",
+            submodule: "N...",
+          })),
+        });
+      vi.stubGlobal("eda", bridge);
+
+      try {
+        await useRepositoryStore.getState().open("repo", "identity", true);
+
+        expect(useRepositoryStore.getState().selection).toEqual(index === 0 ? selection : null);
+        expect(useRepositoryStore.getState().truncatedChanges).toBe(true);
       } finally {
         session.mockRestore();
       }

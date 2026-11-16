@@ -1,7 +1,11 @@
 import { err, ok, type GitErrorData } from "@shared/errors";
 import { errorText } from "@shared/error-codes";
 import { t } from "@shared/i18n";
-import { HISTORY_PAGE_SIZE, type HistoryPage } from "@shared/repository/repository-read";
+import {
+  HISTORY_PAGE_SIZE,
+  type HistoryPage,
+  type RepositoryStatus,
+} from "@shared/repository/repository-read";
 import { create } from "zustand";
 import type { DagBoundary } from "../repository/dag-layout";
 import { categorizeChanges, successorPaths } from "../repository/working-changes";
@@ -56,10 +60,41 @@ const emptyState = {
   stashNotice: null,
 };
 
+function boundedStatus(status: RepositoryStatus) {
+  const changes = status.changes.slice(0, MAX_STATUS_CHANGES);
+
+  return {
+    status: { ...status, changes },
+    truncatedChanges: changes.length < status.changes.length,
+  };
+}
+
+function boundedHistory(page: HistoryPage): HistoryPage {
+  return { ...page, commits: page.commits.slice(0, HISTORY_PAGE_SIZE) };
+}
+
+function statusFailure(error: GitErrorData) {
+  return {
+    phase: error.kind === "not-a-repository" ? ("missing" as const) : ("error" as const),
+    error,
+  };
+}
+
 export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
   const diff = createRepositoryDiff(get, set);
   const loadDiff = diff.load;
   const history = createHistoryPagination(get, set);
+
+  const readFirstPage = (repositoryId: string) =>
+    Promise.all([
+      window.eda.repository.status(repositoryId),
+      window.eda.repository.history({
+        repositoryId,
+        offset: 0,
+        limit: HISTORY_PAGE_SIZE,
+        ...history.query(repositoryId),
+      }),
+    ]);
 
   const load = async (
     repositoryId: string,
@@ -101,34 +136,22 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     if (!available) return;
 
     const request = (async () => {
-      const [statusResult, historyResult] = await Promise.all([
-        window.eda.repository.status(repositoryId),
-        window.eda.repository.history({
-          repositoryId,
-          offset: 0,
-          limit: HISTORY_PAGE_SIZE,
-          ...history.query(repositoryId),
-        }),
-      ]);
+      const [statusResult, historyResult] = await readFirstPage(repositoryId);
 
       if (get().generation !== generation || get().repositoryId !== repositoryId) return;
 
       if (!statusResult.ok) {
-        set({
-          phase: statusResult.error.kind === "not-a-repository" ? "missing" : "error",
-          error: statusResult.error,
-        });
+        set(statusFailure(statusResult.error));
 
         return;
       }
 
+      const bounded = boundedStatus(statusResult.value);
+
       if (!historyResult.ok) {
         set({
           phase: "ready",
-          status: {
-            ...statusResult.value,
-            changes: statusResult.value.changes.slice(0, MAX_STATUS_CHANGES),
-          },
+          ...bounded,
           historyError: historyResult.error,
         });
 
@@ -137,19 +160,11 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
 
       history.replaceFirst(historyResult.value);
 
-      const changes = statusResult.value.changes.slice(0, MAX_STATUS_CHANGES);
-
       set({
         phase: "ready",
-        status: { ...statusResult.value, changes },
-        pages: [
-          {
-            ...historyResult.value,
-            commits: historyResult.value.commits.slice(0, HISTORY_PAGE_SIZE),
-          },
-        ],
+        ...bounded,
+        pages: [boundedHistory(historyResult.value)],
         nextOffset: historyResult.value.nextOffset,
-        truncatedChanges: changes.length < statusResult.value.changes.length,
       });
 
       const session = useSessionStore.getState().snapshot;
@@ -175,7 +190,9 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
         }
       } else if (
         selection?.kind === "change" &&
-        categorizeChanges(changes)[selection.area].some((change) => change.path === selection.path)
+        categorizeChanges(bounded.status.changes)[selection.area].some(
+          (change) => change.path === selection.path,
+        )
       )
         await loadDiff(selection);
     })();
@@ -195,15 +212,7 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
     const { generation } = get();
     const revision = history.invalidate();
 
-    const [statusResult, historyResult] = await Promise.all([
-      window.eda.repository.status(repositoryId),
-      window.eda.repository.history({
-        repositoryId,
-        offset: 0,
-        limit: HISTORY_PAGE_SIZE,
-        ...history.query(repositoryId),
-      }),
-    ]);
+    const [statusResult, historyResult] = await readFirstPage(repositoryId);
 
     if (
       get().generation !== generation ||
@@ -213,15 +222,11 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       return false;
 
     if (!statusResult.ok) {
-      set({
-        phase: statusResult.error.kind === "not-a-repository" ? "missing" : "error",
-        error: statusResult.error,
-      });
+      set(statusFailure(statusResult.error));
 
       return false;
     }
 
-    const changes = statusResult.value.changes.slice(0, MAX_STATUS_CHANGES);
     const replaceHistory = historyResult.ok && history.firstPageChanged(historyResult.value);
 
     if (replaceHistory) {
@@ -232,16 +237,10 @@ export const useRepositoryStore = create<RepositoryReadState>((set, get) => {
       phase: "ready",
       historyLoading: false,
       historyError: historyResult.ok ? null : historyResult.error,
-      status: { ...statusResult.value, changes },
-      truncatedChanges: changes.length < statusResult.value.changes.length,
+      ...boundedStatus(statusResult.value),
       ...(historyResult.ok &&
         replaceHistory && {
-          pages: [
-            {
-              ...historyResult.value,
-              commits: historyResult.value.commits.slice(0, HISTORY_PAGE_SIZE),
-            },
-          ],
+          pages: [boundedHistory(historyResult.value)],
           baseOffset: 0,
           dagBoundary: history.firstBoundary(repositoryId),
           nextOffset: historyResult.value.nextOffset,
