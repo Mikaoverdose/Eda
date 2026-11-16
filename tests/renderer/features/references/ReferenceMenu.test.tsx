@@ -481,6 +481,93 @@ it("cancels branch deletion with Escape without changing any references", async 
   expect(deleteBranch).not.toHaveBeenCalled();
 });
 
+it("keeps focus and blocks dismissal while branch targets are loading", async () => {
+  let finish!: (value: unknown) => void;
+  inspect.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await render();
+  await click("Delete branch...");
+  const dialog = document.querySelector('[role="dialog"][aria-label="Delete branch"]')!;
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  expect(dialog.textContent).toContain("Loading branch targets");
+  expect(button("Cancel").disabled).toBe(true);
+  await act(async () =>
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
+  );
+  expect(close).not.toHaveBeenCalled();
+  await act(async () => finish(ok({ branches: [local, remote], remotes })));
+  expect(button("Delete locally").disabled).toBe(false);
+  await click("Cancel");
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("blocks dismissal and duplicate branch deletion while the write is pending", async () => {
+  let finish!: (value: unknown) => void;
+  deleteBranch.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await render();
+  await click("Delete branch...");
+  await click("Delete locally");
+  await act(async () =>
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
+  );
+  await click("Cancel");
+  await click("Delete locally");
+  expect(close).not.toHaveBeenCalled();
+  expect(deleteBranch).toHaveBeenCalledOnce();
+  await act(async () => finish(ok(undefined)));
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("preserves the menu command generation when opening branch deletion", async () => {
+  await render();
+  await act(async () => {
+    const snapshot = useSessionStore.getState().snapshot!;
+    useSessionStore.setState({
+      snapshot: { ...snapshot, context: { ...snapshot.context, generation: 2 } },
+    });
+  });
+  await click("Delete branch...");
+  expect(inspect).not.toHaveBeenCalled();
+  expect(button("Delete locally")).toBeUndefined();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "profile or repository changed",
+  );
+  expect(deleteBranch).not.toHaveBeenCalled();
+});
+
+it("rejects branch targets loaded after the command context changes", async () => {
+  let finish!: (value: unknown) => void;
+  inspect.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await render();
+  await click("Delete branch...");
+  await act(async () => {
+    useAppStore.setState({ selectedRepositoryId: "other" });
+    finish(ok({ branches: [local, remote], remotes }));
+  });
+  expect(button("Delete locally")).toBeUndefined();
+  expect(button("Delete remotely")).toBeUndefined();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "profile or repository changed",
+  );
+  expect(deleteBranch).not.toHaveBeenCalled();
+  expect(push).not.toHaveBeenCalled();
+});
+
 it("retains tag checkout, verification, and local deletion in the context menu", async () => {
   await act(async () =>
     root.render(

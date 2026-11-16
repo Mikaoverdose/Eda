@@ -187,6 +187,7 @@ export const FEATURE_COMPONENTS = [
   {
     group: "References",
     files: [
+      "features/references/BranchDeletePanel.tsx",
       "features/references/BranchMenu.tsx",
       "features/references/ManageReferencesDialog.tsx",
       "features/references/ReferenceMenu.tsx",
@@ -554,6 +555,7 @@ export const COMPONENT_EXPORTS: Record<string, readonly string[]> = {
   "features/profiles/ProfileGitSettings.tsx": ["ProfileGitSettings", "RepositoryGitSettings"],
   "features/profiles/ProfileRepositoriesSettings.tsx": ["ProfileRepositoriesSettings"],
   "features/profiles/ProfilesSettings.tsx": ["ProfilesSettings"],
+  "features/references/BranchDeletePanel.tsx": ["BranchDeletePanel"],
   "features/references/BranchMenu.tsx": ["BranchMenu"],
   "features/references/ManageReferencesDialog.tsx": ["ManageReferencesDialog"],
   "features/references/ReferenceMenu.tsx": ["ReferenceMenu"],

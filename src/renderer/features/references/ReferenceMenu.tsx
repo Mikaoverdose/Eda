@@ -27,22 +27,19 @@ import {
 } from "../../commands/repository-commands";
 import {
   Button,
-  Checkbox,
   CodeBlock,
   ContextPopover,
   ErrorDialog,
   Field,
   Input,
   MenuItem,
-  Radio,
 } from "../../components/ui/index";
-import { branchDeleteTargets } from "../../repository/branch-delete-targets";
 import { useRepositoryStore } from "../../stores/repository-store";
 import { copyText } from "../../utils/clipboard";
 import { DirectPush } from "../sync/DirectPush";
-import { CredentialFields } from "../sync/TransportFields";
 import { MergeStartDialog } from "../workflows/MergeStartDialog";
 import { RebaseDialog } from "../workflows/RebaseDialog";
+import { BranchDeletePanel } from "./BranchDeletePanel";
 import { TagDeletePanel } from "./TagDeletePanel";
 
 export type ReferenceTarget = (
@@ -56,8 +53,6 @@ export type ReferenceTarget = (
       local?: boolean;
     }
 ) & { x: number; y: number };
-
-type DeleteScope = "local" | "remote" | "both";
 
 const actionTitleKeys = {
   delete: { branch: "referenceMenu.deleteBranchTitle", tag: "referenceMenu.deleteTagTitle" },
@@ -94,44 +89,17 @@ export function ReferenceMenu({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
-  const tagRunning = useRef(false);
+  const deleteRunning = useRef(false);
   const [verification, setVerification] = useState<TagVerification | null>(null);
-  const [targets, setTargets] = useState<ReturnType<typeof branchDeleteTargets> | null>(null);
-
-  const [scope, setScope] = useState<DeleteScope>(
-    target.kind === "branch" && target.ref.remote ? "remote" : "local",
-  );
-
-  const [force, setForce] = useState(false);
-  const [remoteDeleted, setRemoteDeleted] = useState(false);
-  const [needsAuth, setNeedsAuth] = useState(false);
-  const [auth, setAuth] = useState({ username: "", password: "" });
   const review = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (mode === "delete" || mode === "verify") review.current?.focus();
+    if (mode === "verify") review.current?.focus();
   }, [mode]);
 
   const blocked = target.kind === "branch" && !!target.ref.worktreePath && !target.ref.isHead;
-  const includesLocal = scope !== "remote";
-  const includesRemote = scope !== "local";
-
-  const branchChoices = targets
-    ? (
-        [
-          ["local", t("referenceMenu.localOnly"), !!targets.local && !targets.localBlocked],
-          ["remote", t("referenceMenu.remoteOnly"), !!targets.remote && !remoteDeleted],
-          [
-            "both",
-            t("referenceMenu.localAndRemote"),
-            !!targets.local && !targets.localBlocked && !!targets.remote && !remoteDeleted,
-          ],
-        ] as const
-      ).filter(([, , available]) => available)
-    : [];
-
   const close = () => {
-    if (!running.current && !tagRunning.current) onClose();
+    if (!running.current && !deleteRunning.current) onClose();
   };
 
   const assertContext = () => {
@@ -141,7 +109,6 @@ export function ReferenceMenu({
 
   const requireResult = <T,>(result: Result<T>): T => {
     if (!result.ok) {
-      setNeedsAuth(result.error.kind === "auth-failed");
       throw new GitError(result.error);
     }
 
@@ -179,56 +146,6 @@ export function ReferenceMenu({
   const refresh = async () => {
     if (!repositoryCommandReason(context)) await useRepositoryStore.getState().refresh();
   };
-
-  const deleteRef = () =>
-    run(async () => {
-      if (!targets) throw new AppError(ERROR_CODE.BRANCH_TARGETS_NOT_READY);
-
-      if (includesLocal && (!targets.local || targets.localBlocked))
-        throw new AppError(
-          errorText("errors.operationBlocked", {
-            reason: targets.localBlocked ?? t("referenceMenu.noMatchingLocalBranchExists"),
-          }),
-        );
-
-      try {
-        if (includesRemote && !remoteDeleted) {
-          if (!targets.remote) throw new AppError(ERROR_CODE.TRACKED_BRANCH_MISSING);
-          const credentials = needsAuth ? auth : undefined;
-
-          const preview = requireResult(
-            await window.eda.remotes.preparePush({
-              repositoryId,
-              remote: targets.remote.name,
-              branch: targets.remote.branch,
-              destination: targets.remote.branch,
-              mode: "delete",
-              setUpstream: false,
-              ...(credentials ? { credentials } : {}),
-            }),
-          );
-
-          assertContext();
-          requireResult(await window.eda.remotes.push(repositoryId, preview.token, credentials));
-          setRemoteDeleted(true);
-          if (includesLocal) setScope("local");
-        }
-
-        if (includesLocal && targets.local) {
-          assertContext();
-
-          requireResult(
-            await dispatch("deleteBranch", {
-              repositoryId,
-              name: targets.local.name,
-              ...(force ? { force: true } : {}),
-            }),
-          );
-        }
-      } finally {
-        await refresh();
-      }
-    });
 
   if (mode === "push" && target.kind === "tag")
     return (
@@ -448,22 +365,7 @@ export function ReferenceMenu({
           <MenuItem
             disabled={busy || !!unavailable}
             className="text-git-deleted"
-            onClick={() => {
-              setMode("delete");
-
-              if (target.kind === "branch")
-                void run(
-                  async () => {
-                    const state = requireResult(await window.eda.remotes.inspect(repositoryId));
-                    assertContext();
-                    const resolved = branchDeleteTargets(target.ref, state);
-                    setTargets(resolved);
-                    if ((!resolved.local || resolved.localBlocked) && resolved.remote)
-                      setScope("remote");
-                  },
-                  { dismiss: false },
-                );
-            }}
+            onClick={() => setMode("delete")}
           >
             <Trash2 size={13} />
 
@@ -546,132 +448,20 @@ export function ReferenceMenu({
           onChanged={onChanged}
           onClose={onClose}
           onBusyChange={(busy) => {
-            tagRunning.current = busy;
+            deleteRunning.current = busy;
           }}
         />
       )}
 
       {mode === "delete" && target.kind === "branch" && (
-        <div ref={review} tabIndex={-1} className="space-y-3 p-2 text-xs">
-          {target.kind === "branch" && (
-            <>
-              {busy && !targets && <p role="status">{t("referenceMenu.loadingBranchTargets")}</p>}
-
-              {targets && (
-                <>
-                  {branchChoices.length > 0 && (
-                    <fieldset className="space-y-2" disabled={busy}>
-                      <legend className="mb-2 font-medium">
-                        {t("referenceMenu.deleteBranchFrom")}
-                      </legend>
-
-                      {branchChoices.map(([value, label]) => (
-                        <label key={value} className="flex items-center gap-2">
-                          <Radio
-                            name="delete-scope"
-                            value={value}
-                            checked={scope === value}
-                            onChange={() => setScope(value)}
-                          />
-
-                          {label}
-                        </label>
-                      ))}
-                    </fieldset>
-                  )}
-
-                  {targets.local && (
-                    <p className="break-all">
-                      {t("referenceMenu.local", { name: targets.local.name })}
-                    </p>
-                  )}
-
-                  {targets.remote && !remoteDeleted && (
-                    <p className="break-all">
-                      {t("referenceMenu.remote", {
-                        name: targets.remote.name,
-                        branch: targets.remote.branch,
-                      })}
-                    </p>
-                  )}
-
-                  {!targets.remote && <p>{t("referenceMenu.noTrackedRemoteBranchIsConfigured")}</p>}
-                  {targets.localBlocked && <p>{targets.localBlocked}</p>}
-
-                  {includesRemote && (
-                    <p>
-                      {t("referenceMenu.thisRemovesTheBranchFromTheRemoteRepositoryForEveryone")}
-                    </p>
-                  )}
-
-                  {includesLocal && !targets.localBlocked && (
-                    <Checkbox
-                      checked={force}
-                      disabled={busy}
-                      onChange={(event) => setForce(event.target.checked)}
-                    >
-                      {t("referenceMenu.deleteLocalBranchEvenIfUnmerged")}
-                    </Checkbox>
-                  )}
-                </>
-              )}
-            </>
-          )}
-
-          {remoteDeleted && (
-            <p role="status">
-              {t("referenceMenu.remoteBranchDeleted", {
-                value1: includesLocal
-                  ? t("referenceMenu.localDeletionHasNotCompletedRetryToDeleteItLocally")
-                  : "",
-              })}
-            </p>
-          )}
-
-          {needsAuth && includesRemote && !remoteDeleted && (
-            <CredentialFields
-              value={auth}
-              onChange={setAuth}
-              disabled={busy}
-              shortLabels
-              usernameLabel={t("referenceMenu.hTtpsUsername")}
-            />
-          )}
-
-          <div className="flex gap-2">
-            <Button size="sm" autoFocus disabled={busy} onClick={close}>
-              {t("common.cancel")}
-            </Button>
-
-            {branchChoices.some(([value]) => value === scope) && (
-              <Button
-                size="sm"
-                variant="danger"
-                busy={busy}
-                disabled={
-                  !!unavailable ||
-                  (target.kind === "branch" &&
-                    (!targets ||
-                      (includesLocal && (!targets.local || !!targets.localBlocked)) ||
-                      (includesRemote && !targets.remote))) ||
-                  (needsAuth &&
-                    includesRemote &&
-                    !remoteDeleted &&
-                    (!auth.username.trim() || !auth.password))
-                }
-                onClick={() => void deleteRef()}
-              >
-                {t(
-                  scope === "both"
-                    ? "referenceMenu.deleteBoth"
-                    : scope === "local"
-                      ? "referenceMenu.deleteLocal"
-                      : "referenceMenu.deleteRemote",
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
+        <BranchDeletePanel
+          context={context}
+          branch={target.ref}
+          onClose={onClose}
+          onBusyChange={(busy) => {
+            deleteRunning.current = busy;
+          }}
+        />
       )}
 
       {mode === "verify" && (
