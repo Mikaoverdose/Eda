@@ -105,7 +105,9 @@ const launch = async () => {
   await trustFixture(app, root);
   const page = await app.firstWindow();
   page.setDefaultTimeout(30_000);
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]!.setContentSize(1440, 900);
+  });
   page.on("pageerror", (error) => errors.push(error.message));
   return page;
 };
