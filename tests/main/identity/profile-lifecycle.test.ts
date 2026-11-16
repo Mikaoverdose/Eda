@@ -211,6 +211,30 @@ describe("durable profile sessions", () => {
     }
   });
 
+  it("retains a sign-off-only draft across restart and removes it when sign-off is cleared", async () => {
+    const { db, dbPath, work, store } = await setup();
+    const draft = { version: 1, message: "", amend: false, signOff: true } as const;
+
+    store.change(work.id, "primary", { kind: "draft", repositoryId: "work-repo", draft });
+    db.close();
+
+    const reopened = openDatabase(dbPath);
+
+    try {
+      const restored = new ProfileSessionRepository(reopened);
+      expect(restored.read(work.id, "primary").drafts["work-repo"]).toEqual(draft);
+
+      restored.change(work.id, "primary", {
+        kind: "draft",
+        repositoryId: "work-repo",
+        draft: { ...draft, signOff: false },
+      });
+      expect(restored.read(work.id, "primary").drafts).toEqual({});
+    } finally {
+      reopened.close();
+    }
+  });
+
   it.each(["{broken", '{"version":99,"tabs":["private"]}'])(
     "preserves unreadable/newer state until an explicit recovery reset: %s",
     async (raw) => {

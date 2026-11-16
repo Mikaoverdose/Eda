@@ -106,7 +106,7 @@ export class ProfileSessionRepository {
       this.requireRepository(profileId, change.repositoryId);
 
       if (change.kind === "draft") {
-        if (change.draft.message === "" && !change.draft.amend) {
+        if (change.draft.message === "" && !change.draft.amend && !change.draft.signOff) {
           this.db.delete(profileDrafts).where(draftOwner(profileId, change.repositoryId)).run();
           return;
         }
