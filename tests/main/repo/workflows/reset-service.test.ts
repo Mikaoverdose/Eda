@@ -67,6 +67,63 @@ function services() {
   };
 }
 
+it.each(["original", "applied", "undoing"] as const)(
+  "propagates unexpected reset inspection failures in %s state without changing recovery",
+  async (state) => {
+    repo = await createTempRepo();
+    const context = services();
+    const profile = context.identities.create({
+      name: "Eda",
+      gitName: "Eda",
+      gitEmail: "test@eda.invalid",
+      hue: 0,
+      rules: [],
+      signing: { format: "none", signCommits: false },
+    });
+    context.identities.setActiveId(profile.id);
+
+    const repository = await context.repositories.open(repo.path);
+    await repo.writeFile("file.txt", "base\n");
+    await repo.commit("base");
+    const base = (await repo.run(["rev-parse", "HEAD"])).trim();
+    await repo.writeFile("file.txt", "current\n");
+    await repo.commit("current");
+
+    const review = await context.reset.prepare(repository.id, base, "mixed");
+    await context.reset.execute(repository.id, review.token);
+    const record = context.journal.historyActions(repository.path)[0]!;
+    if (state === "original") {
+      record.state = "prepared";
+      delete record.refChange!.reversal;
+      delete record.refChange!.afterHead;
+      delete record.refChange!.afterFingerprint;
+    } else {
+      record.refChange!.reversal!.state = state;
+    }
+    context.journal.save(record);
+
+    const failure = new Error("fixture cannot read repository status");
+    const status = vi.spyOn(repo.git, "status").mockRejectedValue(failure);
+    try {
+      await expect(context.reversal.list(repository.id)).rejects.toBe(failure);
+      if (state === "undoing")
+        await expect(context.reversal.reconcile(repository.id, record.id, "applied")).rejects.toBe(
+          failure,
+        );
+    } finally {
+      status.mockRestore();
+    }
+
+    expect(context.journal.historyActions(repository.path)).toEqual([record]);
+    expect((await repo.run(["rev-parse", "HEAD"])).trim()).toBe(base);
+    expect(await repo.run(["show", ":file.txt"])).toBe("base\n");
+    expect(await readFile(join(repo.path, "file.txt"), "utf8")).toBe("current\n");
+    expect(await context.reversal.list(repository.id)).toEqual([
+      expect.objectContaining({ id: record.id, available: state === "applied" }),
+    ]);
+  },
+);
+
 it("reviews all reset modes and preserves index/content recovery across restart while refusing stale or colliding hard resets", async () => {
   repo = await createTempRepo();
 

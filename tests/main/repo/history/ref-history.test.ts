@@ -14,6 +14,8 @@ import { RepositoryManager } from "@main/repo/lifecycle/repository-manager";
 import { RepositoryWriter } from "@main/repo/working-tree/repository-writer";
 import { WorkflowService } from "@main/repo/workflows/workflow-service";
 import { HistoryReversalService } from "@main/repo/history/history-reversal-service";
+import { errorText } from "@shared/error-codes";
+import { GitError } from "@shared/errors";
 
 let repo: TempRepo;
 let db: Database;
@@ -119,6 +121,43 @@ async function interruptOriginal(operation: string, work: () => Promise<void>) {
     failure.mockRestore();
   }
 }
+
+it.each(["applied", "undoing", "redoing"] as const)(
+  "propagates unexpected reference inspection failures in %s state without changing recovery",
+  async (state) => {
+    const { repository, context } = await setup();
+    await context.writer.createBranch(repository.id, "feature");
+
+    const record = context.journal.refActions(repository.path)[0]!;
+    record.refOperation!.state = state;
+    context.journal.save(record);
+
+    const failure = new GitError({
+      kind: "repository-corrupt",
+      operation: "inspect reference recovery",
+      message: errorText("errors.unexpected"),
+    });
+    const status = vi.spyOn(repo.git, "status").mockRejectedValue(failure);
+
+    try {
+      await expect(context.reversal.list(repository.id)).rejects.toBe(failure);
+      if (state !== "applied")
+        await expect(context.reversal.reconcile(repository.id, record.id, "applied")).rejects.toBe(
+          failure,
+        );
+    } finally {
+      status.mockRestore();
+    }
+
+    expect(context.journal.refActions(repository.path)).toEqual([record]);
+    expect((await repo.run(["rev-parse", "feature"])).trim()).toBe(record.refOperation!.tip);
+    expect(await context.reversal.list(repository.id)).toEqual([
+      expect.objectContaining(
+        state === "applied" ? { available: true } : { available: false, reconciliation: "applied" },
+      ),
+    ]);
+  },
+);
 
 it("writes reference fingerprints compatible with existing recovery journals", async () => {
   const { repository, context } = await setup();
